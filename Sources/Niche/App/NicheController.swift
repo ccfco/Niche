@@ -12,19 +12,35 @@ final class NicheController {
     private let hotZone = HotZoneController()
     private let volumes = VolumeMonitor()
     private lazy var quickLook = QuickLookController(autoHide: autoHide)
+    private let undoManager = FileOpUndoManager()
+    private lazy var ops = FileOperations(undo: undoManager)
+    private lazy var contextMenu = ContextMenuBuilder(
+        ops: ops, autoHide: autoHide,
+        onRequestRename: { [weak self] url in self?.model.beginRename(url) }
+    )
 
     private lazy var actions = PanelActions(
         onOpen: { [weak self] in self?.open($0) },
         onTogglePin: { [weak self] in self?.togglePin() },
         onAddFolder: { [weak self] in self?.addFolder() },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
-        onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) }
+        onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
+        onContextMenu: { [weak self] urls, anchor in self?.makeContextMenu(urls, anchor) },
+        onDropURLs: { [weak self] urls, modifiers in self?.handleDrop(urls, modifiers: modifiers) },
+        onRename: { [weak self] url, newName in self?.rename(url, to: newName) ?? false },
+        onCopy: { [weak self] urls in self?.ops.copyToPasteboard(urls) },
+        onCut: { [weak self] urls in self?.ops.cut(urls) },
+        onCopyPath: { [weak self] urls in self?.ops.copyPaths(urls) },
+        onTrash: { [weak self] urls in self?.ops.trash(urls) },
+        onPaste: { [weak self] in self?.paste() },
+        onUndo: { [weak self] in self?.ops.undoLast() }
     )
     private lazy var transient = NotchExpansion(model: model, actions: actions)
     private lazy var pinned = PinnedPanelController(model: model, actions: actions)
 
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
+    private var renameCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -63,6 +79,14 @@ final class NicheController {
         volumes.onMount = { [weak self] url in
             self?.model.mirrors.forEach { $0.volumeDidMount(url) }
         }
+
+        // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
+        renameCancellable = model.$renamingItemID
+            .removeDuplicates()
+            .sink { [weak self] id in
+                guard let self else { return }
+                if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+            }
     }
 
     private func placeHotZone() {
@@ -143,10 +167,70 @@ final class NicheController {
         return NSRect(x: r.midX - 230, y: r.minY - 340, width: 460, height: 320)
     }
 
-    // MARK: - 文件操作(M1 仅打开;M3 补全)
+    // MARK: - 文件操作(M3)
 
     private func open(_ item: FileItem) {
-        NSWorkspace.shared.open(item.url)
+        ops.open(item.url)
+    }
+
+    /// 重命名提交;返回是否成功(失败 → cell 保持编辑态)。校验空名/同名/非法字符。
+    private func rename(_ url: URL, to newName: String) -> Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.contains("/"), !trimmed.contains(":") else { return false }  // 非法字符
+        guard trimmed != url.lastPathComponent else { return true }                 // 未改名,视为完成
+        do {
+            try ops.rename(url, to: trimmed)
+            return true
+        } catch {
+            Log.files.error("重命名失败:\(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func paste() {
+        guard let dir = model.currentMirror?.currentDirectory else { return }
+        do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+        catch { Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)") }
+    }
+
+    private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {
+        guard let dir = model.currentMirror?.currentDirectory else { return nil }
+        return contextMenu.makeMenu(for: .init(selection: urls, directory: dir, anchorView: anchor))
+    }
+
+    /// 拖入落地:Niche 自己执行 copy/move(spec §4.5 注②)。按目标目录与**每个源**的卷 +
+    /// 修饰键分别决策(混合同卷/跨卷来源要分别处理),并拦截"目录拖进自身子目录"的循环。
+    private func handleDrop(_ urls: [URL], modifiers: NSEvent.ModifierFlags) {
+        guard let dir = model.currentMirror?.currentDirectory else { return }
+        let destStd = dir.standardizedFileURL
+
+        let incoming = urls.filter { src in
+            let srcStd = src.standardizedFileURL
+            // 落点与源同目录:无意义的自我移动,跳过。
+            if src.deletingLastPathComponent().standardizedFileURL == destStd { return false }
+            // 目录拖进自身或其子目录:循环,拒绝。
+            if DirectoryMirror.contains(ancestor: srcStd, descendant: destStd) { return false }
+            return true
+        }
+        guard !incoming.isEmpty else { return }
+
+        // 每个源单独按卷判定 copy/move,避免首项卷判定误伤跨卷项。
+        var toCopy: [URL] = [], toMove: [URL] = []
+        for src in incoming {
+            switch DragSemantics.resolve(sameVolume: DragSemantics.isSameVolume(src, dir), modifiers: modifiers) {
+            case .copy: toCopy.append(src)
+            case .move: toMove.append(src)
+            }
+        }
+        autoHide.begin(.dragging)
+        defer { autoHide.end(.dragging) }
+        do {
+            if !toCopy.isEmpty { try ops.copy(toCopy, to: dir, resolve: ConflictPrompt.ask) }
+            if !toMove.isEmpty { try ops.move(toMove, to: dir, resolve: ConflictPrompt.ask) }
+        } catch {
+            Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - 绑定文件夹管理

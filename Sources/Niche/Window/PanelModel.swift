@@ -16,6 +16,8 @@ final class PanelModel: ObservableObject {
     }
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4
+    /// 正在就地重命名的条目(spec §4.5 就地编辑 UI;§4.6 .renaming 抑制隐藏)。
+    @Published var renamingItemID: FileItem.ID?
 
     /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
     private var currentMirrorCancellable: AnyCancellable?
@@ -71,4 +73,10 @@ final class PanelModel: ObservableObject {
     func move(_ direction: GridSelection.Direction) {
         selection = selection.moved(direction, columns: columns, count: sortedItems.count)
     }
+
+    func beginRename(_ url: URL) { renamingItemID = url }
+    func endRename() { renamingItemID = nil }
+
+    /// 当前选中项的 URL 集合(MVP 单选;多选基础设施留待后续)。
+    var selectionURLs: [URL] { selectedItem.map { [$0.url] } ?? [] }
 }

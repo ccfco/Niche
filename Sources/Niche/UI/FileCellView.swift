@@ -1,28 +1,32 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// 网格单元:图标/缩略图 + 文件名。M1 用系统图标(`NSWorkspace.icon`);M2 接入
-/// ThumbnailCache 后台 ImageIO 解码(spec §4.4:禁止 row 渲染路径同步解码)。
+/// 网格单元:缩略图/系统图标 + 文件名(或就地重命名输入框)。
+/// - 缩略图:后台 ImageIO 解码(非 row 同步路径,spec §4.4);dataless/非图片退系统图标。
+/// - 拖出:`.draggable` 用**真实 file URL**(spec §4.5:不用 NSFilePromiseProvider)。
+/// - 右键:overlay RightClickCatcher 弹自拼 NSMenu。
+/// - 就地重命名:isRenaming 时显示 TextField。
 struct FileCellView: View {
     let item: FileItem
     let isSelected: Bool
+    let isRenaming: Bool
     let edge: EdgeMetrics
+    var onRenameCommit: (String) -> Void = { _ in }
+    var onRenameCancel: () -> Void = {}
+    var makeContextMenu: (NSView) -> NSMenu? = { _ in nil }
 
     @State private var thumbnail: NSImage?
+    @State private var editingName: String = ""
+    @FocusState private var renameFocused: Bool
 
     var body: some View {
         VStack(spacing: edge.innerSpacing) {
             artwork
                 .frame(width: 48, height: 48)
                 .task(id: item.id) {
-                    // 后台 ImageIO 解码(非 row 同步路径);dataless/非图片返回 nil → 用系统图标。
                     thumbnail = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: 96)
                 }
-            Text(item.name)
-                .font(.caption)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            label
         }
         .padding(edge.innerSpacing)
         .background(
@@ -31,14 +35,34 @@ struct FileCellView: View {
         )
         .overlay(alignment: .topTrailing) {
             if item.isDataless {
-                // iCloud 占位:云图标,不触发下载(spec §4.1.2)。
                 Image(systemName: "icloud.and.arrow.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(2)
+                    .font(.caption2).foregroundStyle(.secondary).padding(2)
             }
         }
+        .overlay(RightClickCatcher(makeMenu: makeContextMenu))   // 右键:自拼 NSMenu
         .contentShape(Rectangle())
+        // 拖出:真实 file URL(系统据此判同卷移动/跨卷复制)。
+        .onDrag { NSItemProvider(object: item.url as NSURL) }
+    }
+
+    @ViewBuilder private var label: some View {
+        if isRenaming {
+            TextField("", text: $editingName)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                .focused($renameFocused)
+                .onSubmit { onRenameCommit(editingName) }
+                .onExitCommand { onRenameCancel() }
+                .onAppear { editingName = item.name; renameFocused = true }
+                .frame(maxWidth: .infinity)
+        } else {
+            Text(item.name)
+                .font(.caption)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     @ViewBuilder private var artwork: some View {

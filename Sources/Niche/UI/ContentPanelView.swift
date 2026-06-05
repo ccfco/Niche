@@ -39,7 +39,7 @@ struct ContentPanelView: View {
             EmptyStateView(kind: .volumeUnmounted(name))
                 .onTapGesture { model.currentMirror?.retryIfPossible() }
         case .ready:
-            FileGridView(model: model, edge: edge, onOpen: actions.onOpen)
+            FileGridView(model: model, edge: edge, actions: actions)
         }
     }
 
@@ -62,6 +62,19 @@ struct ContentPanelView: View {
         case .downArrow: model.move(.down); return .handled
         case .leftArrow: model.move(.left); return .handled
         case .rightArrow: model.move(.right); return .handled
+        // 文件操作快捷键(spec §4.5/§4.7)。
+        case KeyEquivalent("c") where cmd && press.modifiers.contains(.option):
+            actions.onCopyPath(model.selectionURLs); return .handled
+        case KeyEquivalent("c") where cmd:
+            actions.onCopy(model.selectionURLs); return .handled
+        case KeyEquivalent("x") where cmd:
+            actions.onCut(model.selectionURLs); return .handled
+        case KeyEquivalent("v") where cmd:
+            actions.onPaste(); return .handled
+        case KeyEquivalent("z") where cmd:
+            actions.onUndo(); return .handled
+        case .delete where cmd, .deleteForward where cmd:
+            actions.onTrash(model.selectionURLs); return .handled
         case .space:
             // Space → Quick Look 当前选中(spec §4.7);传整组以支持预览内翻页。
             if let idx = model.selection.index {

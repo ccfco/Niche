@@ -1,20 +1,18 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// 网格视图(spec §4.4)。M1:只读展示 + 选中态 + 双击打开;键盘导航走 PanelModel。
+/// 网格视图(spec §4.4)。展示 + 选中 + 双击打开/下钻 + 拖出 + 右键 + 就地重命名 + 拖入落地。
 struct FileGridView: View {
     @ObservedObject var model: PanelModel
     let edge: EdgeMetrics
-    /// 双击/Return 打开条目(由上层接系统 API)。
-    var onOpen: (FileItem) -> Void = { _ in }
+    var actions = PanelActions()
 
     var body: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: edge.itemSpacing)],
                       spacing: edge.itemSpacing) {
                 ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
-                    FileCellView(item: item, isSelected: model.selection.index == index, edge: edge)
-                        .onTapGesture(count: 2) { activate(item) }
-                        .onTapGesture { model.selection = GridSelection(index: index) }
+                    cell(index: index, item: item)
                 }
             }
             .padding(edge.panelPadding)
@@ -24,15 +22,65 @@ struct FileGridView: View {
                 EmptyStateView(kind: .empty)
             }
         }
+        // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
+        .onDrop(of: [.fileURL], delegate: FileDropDelegate(onDrop: actions.onDropURLs))
     }
 
-    /// 双击/激活:目录则下钻,文件则交给宿主用系统 API 打开。
+    private func cell(index: Int, item: FileItem) -> some View {
+        FileCellView(
+            item: item,
+            isSelected: model.selection.index == index,
+            isRenaming: model.renamingItemID == item.id,
+            edge: edge,
+            onRenameCommit: { newName in
+                // 失败(空名/非法字符)保持编辑态(Codex review)。
+                if actions.onRename(item.url, newName) { model.endRename() }
+            },
+            onRenameCancel: { model.endRename() },
+            makeContextMenu: { anchor in
+                model.selection = GridSelection(index: index)
+                return actions.onContextMenu([item.url], anchor)
+            }
+        )
+        .onTapGesture(count: 2) { activate(item) }
+        .onTapGesture { model.selection = GridSelection(index: index) }
+    }
+
     private func activate(_ item: FileItem) {
         if item.isDirectory {
             model.currentMirror?.enter(item.url)
             model.selection = GridSelection(index: nil)
         } else {
-            onOpen(item)
+            actions.onOpen(item)
         }
+    }
+}
+
+/// 拖入处理:从 providers 取 file URL,读当前修饰键,交宿主执行(宿主据当前目录算卷/语义)。
+struct FileDropDelegate: DropDelegate {
+    let onDrop: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+        let modifiers = NSEvent.modifierFlags
+
+        // loadObject 回调在任意队列;用串行队列保护汇总数组,避免数据竞争(Codex review)。
+        let lock = DispatchQueue(label: "com.ccfco.Niche.drop")
+        var collected: [URL] = []
+        let group = DispatchGroup()
+        for provider in providers {
+            group.enter()
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                if let url { lock.sync { collected.append(url) } }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            let urls = lock.sync { collected }
+            guard !urls.isEmpty else { return }
+            onDrop(urls, modifiers)
+        }
+        return true
     }
 }
