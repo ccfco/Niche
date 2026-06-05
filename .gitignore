@@ -23,3 +23,4 @@ Cargo.lock
 
 # Obsidian 软链由 ob-init 处理:docs/superpowers 经 ob-init 变为指向 OB 的软链,
 # ob-init 会负责更新本文件以忽略软链(软链不进 commit)。
+docs/superpowers
