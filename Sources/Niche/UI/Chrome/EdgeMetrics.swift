@@ -2,12 +2,12 @@ import CoreGraphics
 
 /// Chrome 单旋钮(spec §4.5 / CLAUDE.md chrome 纪律):**间距/圆角由单一旋钮派生,
 /// 禁止组件硬编码 padding/cornerRadius**。所有间距、圆角从 `base` 等比派生,达成统一
-/// 的 Liquid Glass 节奏。组件只引用 `Edge` 的派生值,不写魔法数。
-struct Edge: Equatable {
+/// 的 Liquid Glass 节奏。组件只引用 `EdgeMetrics` 的派生值,不写魔法数。
+struct EdgeMetrics: Equatable {
     /// 基准单位(pt)。改它,全局间距/圆角等比缩放。
     let base: CGFloat
 
-    static let standard = Edge(base: 8)
+    static let standard = EdgeMetrics(base: 8)
 
     init(base: CGFloat) { self.base = base }
 

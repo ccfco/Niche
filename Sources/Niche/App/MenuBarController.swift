@@ -6,9 +6,11 @@ import AppKit
 final class MenuBarController {
     private let environment: AppEnvironment
     private let statusItem: NSStatusItem
+    private let onToggle: () -> Void
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, onToggle: @escaping () -> Void) {
         self.environment = environment
+        self.onToggle = onToggle
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureButton()
         statusItem.menu = makeMenu()
@@ -34,7 +36,7 @@ final class MenuBarController {
     }
 
     @objc private func togglePanel() {
-        // M1 接入 PanelController 后,这里切换瞬态面板显隐。
+        onToggle()
     }
 
     @objc private func openSettings() {

@@ -5,10 +5,15 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let environment = AppEnvironment()
     private var menuBarController: MenuBarController?
+    private var controller: NicheController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // LSUIElement app 默认就是 accessory;显式声明以防被其它配置改写。
         NSApp.setActivationPolicy(.accessory)
-        menuBarController = MenuBarController(environment: environment)
+        let controller = NicheController(environment: environment)
+        self.controller = controller
+        menuBarController = MenuBarController(environment: environment, onToggle: { [weak controller] in
+            controller?.toggle()
+        })
     }
 }

@@ -3,8 +3,8 @@ import XCTest
 
 final class EdgeTests: XCTestCase {
     func testAllMetricsDeriveFromBaseProportionally() {
-        let a = Edge(base: 8)
-        let b = Edge(base: 16)   // base 翻倍
+        let a = EdgeMetrics(base: 8)
+        let b = EdgeMetrics(base: 16)   // base 翻倍
 
         // 每个派生值都应等比翻倍 —— 证明无组件级硬编码,全由单旋钮派生。
         XCTAssertEqual(b.panelPadding, a.panelPadding * 2, accuracy: 0.001)
@@ -17,6 +17,6 @@ final class EdgeTests: XCTestCase {
     }
 
     func testStandardIsNonZero() {
-        XCTAssertGreaterThan(Edge.standard.base, 0)
+        XCTAssertGreaterThan(EdgeMetrics.standard.base, 0)
     }
 }
