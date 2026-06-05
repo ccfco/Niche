@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Xcode(.xcodeproj 由 xcodegen 生成,不提交)
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Rust(若后续引入)
+target/
+Cargo.lock
+
+# 生成的 UniFFI 绑定(若后续引入)
+**/Generated/
+
+# Obsidian 软链由 ob-init 处理:docs/superpowers 经 ob-init 变为指向 OB 的软链,
+# ob-init 会负责更新本文件以忽略软链(软链不进 commit)。
