@@ -41,13 +41,20 @@ final class PanelModel: ObservableObject {
 
     // MARK: - tab/镜像管理
 
-    /// 用绑定列表重建镜像(增删文件夹后调用)。保持当前 tab 在范围内。
-    func rebuildMirrors(from bindings: [FolderBinding]) {
+    /// 用绑定列表重建镜像(增删/重排文件夹后调用)。
+    /// 按 binding id 保留"当前正在看的文件夹"(`selecting` 显式指定则优先);只有原绑定被删才回退 clamp。
+    /// 这样设置页重排不会让当前 tab 静默跳到另一个文件夹,新增也能精确选中(Codex review)。
+    func rebuildMirrors(from bindings: [FolderBinding], selecting preferredID: FolderBinding.ID? = nil) {
+        let desiredID = preferredID ?? currentMirror?.binding.id
         mirrors = bindings.map { DirectoryMirror(binding: $0, showHidden: showHidden) }
-        currentTab = min(currentTab, max(0, mirrors.count - 1))
+        if let desiredID, let index = mirrors.firstIndex(where: { $0.binding.id == desiredID }) {
+            currentTab = index
+        } else {
+            currentTab = min(currentTab, max(0, mirrors.count - 1))
+        }
         subscribeToCurrent()
         // 不在此 arm:rebuild 可能发生在启动期,arm 会列目录触发 TCC,违反"权限按需触发、
-        // 不启动弹"(spec §4.1.1)。arm 只在 present()/selectTab() 等用户显式动作路径发生。
+        // 不启动弹"(spec §4.1.1)。arm 由调用方(面板可见时)或 selectTab/present 驱动。
     }
 
     /// 切换 tab:arm 目标 mirror(打开 tab = 用户显式动作,可触发 TCC §4.1.1)。

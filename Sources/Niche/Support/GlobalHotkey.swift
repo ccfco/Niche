@@ -16,7 +16,7 @@ final class GlobalHotkey {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: OSType(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
+        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
             guard let userData, let event else { return OSStatus(eventNotHandledErr) }
             let hotkey = Unmanaged<GlobalHotkey>.fromOpaque(userData).takeUnretainedValue()
             var hkID = EventHotKeyID()
@@ -26,10 +26,20 @@ final class GlobalHotkey {
             DispatchQueue.main.async { hotkey.onTrigger?() }
             return noErr
         }, 1, &eventType, selfPtr, &handlerRef)
+        guard installStatus == noErr else {
+            Log.window.error("全局快捷键事件处理器安装失败:\(installStatus)")
+            handlerRef = nil
+            return
+        }
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4E494348) /* 'NICH' */, id: 1)
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID,
-                            GetApplicationEventTarget(), 0, &hotKeyRef)
+        let registerStatus = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
+                                                 GetApplicationEventTarget(), 0, &hotKeyRef)
+        guard registerStatus == noErr else {
+            Log.window.error("全局快捷键注册失败:\(registerStatus)")
+            unregister()   // 回滚已装的 handler,避免半注册状态
+            return
+        }
     }
 
     func unregister() {

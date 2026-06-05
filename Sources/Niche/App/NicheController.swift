@@ -96,11 +96,16 @@ final class NicheController {
                 if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
             }
 
-        // 设置页增删/重排绑定 → 同步重建镜像(保持设置与面板一致)。
+        // 增删/重排绑定(设置页或添加文件夹)→ 统一在此重建镜像(保持设置与面板一致)。
         bindingsCancellable = environment.bindingStore.$bindings
             .dropFirst()
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.rebuildMirrors() }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let select = self.pendingSelectBindingID
+                self.pendingSelectBindingID = nil
+                self.rebuildMirrors(selecting: select)
+            }
     }
 
     private func placeHotZone() {
@@ -255,11 +260,19 @@ final class NicheController {
 
     // MARK: - 绑定文件夹管理
 
-    private func rebuildMirrors() {
-        model.rebuildMirrors(from: environment.bindingStore.bindings)
+    /// 重建镜像(保留/指定当前 tab)。若面板正显示,重新 arm 当前 mirror —— 否则绑定变更后
+    /// 当前 tab 会停在 idle("载入中…")不扫描(Codex review:双重 rebuild 把已 arm 的重置)。
+    private func rebuildMirrors(selecting id: FolderBinding.ID? = nil) {
+        model.rebuildMirrors(from: environment.bindingStore.bindings, selecting: id)
+        if isPanelVisible { model.armCurrent() }
     }
 
-    /// 添加文件夹:NSOpenPanel 选目录 → 生成普通 bookmark → 持久化 → 重建镜像。
+    private var isPanelVisible: Bool {
+        transient.isExpanded || pinned.isVisible
+    }
+
+    /// 添加文件夹:NSOpenPanel 选目录 → 生成普通 bookmark → 持久化。
+    /// 重建由 bindingStore.$bindings 的订阅统一驱动(selecting 新 id),避免双重 rebuild。
     private func addFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -271,13 +284,13 @@ final class NicheController {
 
         let bookmark = DirectoryMirror.makeBookmark(for: url)
         let binding = FolderBinding(bookmarkData: bookmark, path: url.path)
+        pendingSelectBindingID = binding.id   // 让随后的订阅重建选中这个新文件夹
         environment.bindingStore.add(binding)
-        rebuildMirrors()
-        model.selectTab(environment.bindingStore.bindings.count - 1)
     }
 
     private func removeFolder(_ id: FolderBinding.ID) {
         environment.bindingStore.remove(id: id)
-        rebuildMirrors()
     }
+
+    private var pendingSelectBindingID: FolderBinding.ID?
 }

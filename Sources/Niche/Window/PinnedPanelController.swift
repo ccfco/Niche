@@ -13,7 +13,7 @@ final class PinnedPanelController {
     private let actions: PanelActions
     /// 几何记忆(spec §4.6 Resize:记忆尺寸+位置)。
     private let store: BindingStore
-    private var frameObserver: NSObjectProtocol?
+    private var frameObservers: [NSObjectProtocol] = []
 
     init(model: PanelModel, motion: MotionPreferences, actions: PanelActions, store: BindingStore) {
         self.model = model
@@ -35,18 +35,25 @@ final class PinnedPanelController {
         observeFrame(panel)
     }
 
-    /// 记忆尺寸+位置:移动/缩放后存回(spec §4.6 Resize:记忆尺寸+位置)。
+    /// 记忆尺寸+位置:缩放结束(didEndLiveResize)与移动结束(didMove,detach 拖动)都存回。
     private func observeFrame(_ panel: NSWindow) {
-        if frameObserver == nil {
-            let store = self.store
-            frameObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didEndLiveResizeNotification, object: panel, queue: .main
-            ) { note in
-                if let win = note.object as? NSWindow {
-                    MainActor.assumeIsolated { store.savePanelFrame(win.frame) }
-                }
+        guard frameObservers.isEmpty else { return }
+        let store = self.store
+        let save: (Notification) -> Void = { note in
+            if let win = note.object as? NSWindow {
+                MainActor.assumeIsolated { store.savePanelFrame(win.frame) }
             }
         }
+        for name in [NSWindow.didEndLiveResizeNotification, NSWindow.didMoveNotification] {
+            frameObservers.append(
+                NotificationCenter.default.addObserver(forName: name, object: panel, queue: .main, using: save)
+            )
+        }
+    }
+
+    private func teardownFrameObservers() {
+        frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        frameObservers.removeAll()
     }
 
     func hide() {
@@ -55,9 +62,12 @@ final class PinnedPanelController {
     }
 
     func close() {
+        teardownFrameObservers()
         panel?.close()
         panel = nil
     }
+    // 注:不在 deinit 清理(deinit 是 nonisolated,无法调 @MainActor 方法);本控制器随 app
+    // 生命周期存在,observers 由 close() 清理,token 引用的是 panel,panel 释放后回调不再触发。
 
     private func makePanel() -> NichePanel {
         // pinned 是"可激活 always-on-top 浮窗":**不能**带 .nonactivatingPanel
