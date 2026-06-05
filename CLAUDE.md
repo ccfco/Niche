@@ -2,7 +2,14 @@
 
 刘海原生的 macOS 文件快捷访问器。从 MacBook 刘海(无刘海回退屏幕顶部)滑出悬浮窗,镜像常用文件夹,随手取用 / 拖拽 / 预览,用完即走。开源 · SwiftUI · 不沙盒自分发。
 
-设计文档:`docs/superpowers/specs/2026-06-05-niche-design.md`(权威设计稿)。
+设计文档:`docs/superpowers/specs/2026-06-05-niche-design.md`(权威设计稿)。实现计划:`docs/superpowers/plans/2026-06-05-niche-implementation.md`。
+
+## 构建(读代码得不到)
+
+- 工程由 `project.yml` 经 **XcodeGen 生成**,`Niche.xcodeproj` 不进 git。改配置/加依赖改 `project.yml`,改完先 `xcodegen generate` 再 `xcodebuild`。新增/删源文件后必须重跑 `xcodegen generate`(按目录 glob)。
+- 命令:`xcodegen generate && xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' build`(测试同 `test`)。
+- **Swift 语言模式 5.0 + `SWIFT_STRICT_CONCURRENCY=minimal`**(降低大型 AppKit 从 0 构建期并发噪音);`@MainActor` 仍按需显式标注。`deinit` 是 nonisolated,**不能调 `@MainActor` 方法**(observer 清理放 `close()` 等显式路径,不放 deinit)。
+- 命名避坑:自定义类型勿与系统同名 —— `Edge`(撞 SwiftUI)、`SortOrder`(撞 Foundation)已分别命名 `EdgeMetrics`/`FileSortOrder`。
 
 ## Obsidian 知识库
 
@@ -37,6 +44,7 @@
 - **不沙盒**(换取隐藏文件 + 任意路径访问),GitHub Release 自分发,不上 MAS。
 - **不沙盒 → 不用 security-scoped bookmark**(那是沙盒专属机制);持久化用普通 bookmark/存路径。
 - **访问受保护目录**(Desktop/Documents/Downloads/iCloud)走 TCC 授权,**权限必须按需触发**(访问失败时),禁止启动时主动弹——沿用 Clipin。
+- **arm(列目录=触发 TCC)只在用户动作路径**:`DirectoryMirror.arm()` 不能在启动/后台/`rebuildMirrors` 里调(那会启动期弹权限)。`rebuildMirrors` 重建后由 `NicheController` **仅在面板可见时**重新 arm 当前 mirror;否则等 `present()`/`selectTab()` 用户动作触发。
 
 ### 窗口与触发
 - **触发位置**:刘海优先 → 顶/左/右/菜单栏可选 → 全局快捷键兜底;**多屏在鼠标活跃屏触发,无刘海回退顶部中央**。
