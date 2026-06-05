@@ -13,7 +13,7 @@ struct FileGridView: View {
                       spacing: edge.itemSpacing) {
                 ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
                     FileCellView(item: item, isSelected: model.selection.index == index, edge: edge)
-                        .onTapGesture(count: 2) { onOpen(item) }
+                        .onTapGesture(count: 2) { activate(item) }
                         .onTapGesture { model.selection = GridSelection(index: index) }
                 }
             }
@@ -23,6 +23,16 @@ struct FileGridView: View {
             if model.sortedItems.isEmpty {
                 EmptyStateView(kind: .empty)
             }
+        }
+    }
+
+    /// 双击/激活:目录则下钻,文件则交给宿主用系统 API 打开。
+    private func activate(_ item: FileItem) {
+        if item.isDirectory {
+            model.currentMirror?.enter(item.url)
+            model.selection = GridSelection(index: nil)
+        } else {
+            onOpen(item)
         }
     }
 }

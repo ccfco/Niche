@@ -9,15 +9,11 @@ import SwiftUI
 final class PinnedPanelController {
     private(set) var panel: NichePanel?
     private let model: PanelModel
-    private let onTogglePin: () -> Void
-    private let onOpen: (FileItem) -> Void
+    private let actions: PanelActions
 
-    init(model: PanelModel,
-         onOpen: @escaping (FileItem) -> Void,
-         onTogglePin: @escaping () -> Void) {
+    init(model: PanelModel, actions: PanelActions) {
         self.model = model
-        self.onOpen = onOpen
-        self.onTogglePin = onTogglePin
+        self.actions = actions
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -60,7 +56,7 @@ final class PinnedPanelController {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
 
-        let root = ContentPanelView(model: model, onOpen: onOpen, onTogglePin: onTogglePin)
+        let root = ContentPanelView(model: model, actions: actions)
         panel.contentView = NSHostingView(rootView: root)
         return panel
     }

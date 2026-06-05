@@ -10,17 +10,13 @@ import DynamicNotchKit
 @MainActor
 final class NotchExpansion {
     private let model: PanelModel
-    private let onOpen: (FileItem) -> Void
-    private let onTogglePin: () -> Void
+    private let actions: PanelActions
     private var notch: DynamicNotch<AnyView, EmptyView, EmptyView>?
     private(set) var isExpanded = false
 
-    init(model: PanelModel,
-         onOpen: @escaping (FileItem) -> Void,
-         onTogglePin: @escaping () -> Void) {
+    init(model: PanelModel, actions: PanelActions) {
         self.model = model
-        self.onOpen = onOpen
-        self.onTogglePin = onTogglePin
+        self.actions = actions
     }
 
     /// 底层 NSPanel(DNK 暴露 windowController 供改底层窗口);用于挂失焦监听与几何读取。
@@ -29,16 +25,13 @@ final class NotchExpansion {
     private func makeNotchIfNeeded() -> DynamicNotch<AnyView, EmptyView, EmptyView> {
         if let notch { return notch }
         let model = self.model
-        let onOpen = self.onOpen
-        let onTogglePin = self.onTogglePin
+        let actions = self.actions
         // hoverBehavior=.keepVisible:鼠标在面板上时不自动收(收回交给 AutoHideCoordinator)。
         let created = DynamicNotch<AnyView, EmptyView, EmptyView>(
             hoverBehavior: .keepVisible,
             style: .notch(topCornerRadius: 12, bottomCornerRadius: 20)
         ) {
-            AnyView(
-                ContentPanelView(model: model, onOpen: onOpen, onTogglePin: onTogglePin)
-            )
+            AnyView(ContentPanelView(model: model, actions: actions))
         }
         notch = created
         return created
