@@ -6,6 +6,7 @@ import SwiftUI
 /// ⌘↓ 进子目录 / ⌘↑ 回上级。竞品几乎纯鼠标,这是差异化优势。
 struct ContentPanelView: View {
     @ObservedObject var model: PanelModel
+    @ObservedObject var motion: MotionPreferences
     private let edge = EdgeMetrics.standard
     @FocusState private var focused: Bool
 
@@ -22,6 +23,10 @@ struct ContentPanelView: View {
             BottomBarView(model: model, edge: edge, onTogglePin: actions.onTogglePin)
         }
         .frame(minWidth: 360, minHeight: 240)
+        .glassPanelBackground(cornerRadius: edge.panelCornerRadius)
+        .environmentObject(motion)
+        // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。
+        .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -87,6 +92,11 @@ struct ContentPanelView: View {
                 else { actions.onOpen(item) }
             }
             return .handled
+        // 未 pin 时:⌘W / Esc 收回(spec §4.6)。
+        case .escape:
+            actions.onClose(); return .handled
+        case KeyEquivalent("w") where cmd:
+            actions.onClose(); return .handled
         default:
             return .ignored
         }

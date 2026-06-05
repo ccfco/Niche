@@ -9,26 +9,48 @@ import SwiftUI
 final class PinnedPanelController {
     private(set) var panel: NichePanel?
     private let model: PanelModel
+    private let motion: MotionPreferences
     private let actions: PanelActions
+    /// 几何记忆(spec §4.6 Resize:记忆尺寸+位置)。
+    private let store: BindingStore
+    private var frameObserver: NSObjectProtocol?
 
-    init(model: PanelModel, actions: PanelActions) {
+    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions, store: BindingStore) {
         self.model = model
+        self.motion = motion
         self.actions = actions
+        self.store = store
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    /// 在指定 frame 显示常驻浮窗(通常用瞬态面板当前 frame,实现"原地变常驻")。
+    /// 在指定 frame 显示常驻浮窗(优先用记忆的尺寸/位置;否则用传入 frame 实现"原地变常驻")。
     func show(at frame: NSRect) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
         panel.mode = .pinned
-        panel.setFrame(frame, display: true)
+        panel.setFrame(store.loadPanelFrame() ?? frame, display: true)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        observeFrame(panel)
+    }
+
+    /// 记忆尺寸+位置:移动/缩放后存回(spec §4.6 Resize:记忆尺寸+位置)。
+    private func observeFrame(_ panel: NSWindow) {
+        if frameObserver == nil {
+            let store = self.store
+            frameObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didEndLiveResizeNotification, object: panel, queue: .main
+            ) { note in
+                if let win = note.object as? NSWindow {
+                    MainActor.assumeIsolated { store.savePanelFrame(win.frame) }
+                }
+            }
+        }
     }
 
     func hide() {
+        if let panel { store.savePanelFrame(panel.frame) }   // 收起前存回几何
         panel?.orderOut(nil)
     }
 
@@ -56,7 +78,7 @@ final class PinnedPanelController {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
 
-        let root = ContentPanelView(model: model, actions: actions)
+        let root = ContentPanelView(model: model, motion: motion, actions: actions)
         panel.contentView = NSHostingView(rootView: root)
         return panel
     }

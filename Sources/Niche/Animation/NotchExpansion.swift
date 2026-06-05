@@ -10,12 +10,14 @@ import DynamicNotchKit
 @MainActor
 final class NotchExpansion {
     private let model: PanelModel
+    private let motion: MotionPreferences
     private let actions: PanelActions
     private var notch: DynamicNotch<AnyView, EmptyView, EmptyView>?
     private(set) var isExpanded = false
 
-    init(model: PanelModel, actions: PanelActions) {
+    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
         self.model = model
+        self.motion = motion
         self.actions = actions
     }
 
@@ -25,13 +27,14 @@ final class NotchExpansion {
     private func makeNotchIfNeeded() -> DynamicNotch<AnyView, EmptyView, EmptyView> {
         if let notch { return notch }
         let model = self.model
+        let motion = self.motion
         let actions = self.actions
         // hoverBehavior=.keepVisible:鼠标在面板上时不自动收(收回交给 AutoHideCoordinator)。
         let created = DynamicNotch<AnyView, EmptyView, EmptyView>(
             hoverBehavior: .keepVisible,
             style: .notch(topCornerRadius: 12, bottomCornerRadius: 20)
         ) {
-            AnyView(ContentPanelView(model: model, actions: actions))
+            AnyView(ContentPanelView(model: model, motion: motion, actions: actions))
         }
         notch = created
         return created

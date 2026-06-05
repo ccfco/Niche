@@ -25,4 +25,6 @@ struct PanelActions {
     var onTrash: (_ urls: [URL]) -> Void = { _ in }
     var onPaste: () -> Void = {}
     var onUndo: () -> Void = {}
+    /// ⌘W / Esc 收回(未 pin)。
+    var onClose: () -> Void = {}
 }

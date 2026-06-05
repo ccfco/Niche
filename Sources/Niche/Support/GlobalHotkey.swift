@@ -1,0 +1,41 @@
+import AppKit
+import Carbon.HIToolbox
+
+/// 全局快捷键兜底呼出(spec §4.2:全局快捷键兜底)。用 Carbon RegisterEventHotKey —— 这是
+/// 注册系统级热键的标准且无需辅助功能授权的途径(NSEvent 全局监听需 AX 授权,更重)。
+final class GlobalHotkey {
+    private var hotKeyRef: EventHotKeyRef?
+    private var handlerRef: EventHandlerRef?
+    var onTrigger: (() -> Void)?
+
+    /// 默认 ⌥⌘Space。keyCode 49 = Space。
+    func register(keyCode: UInt32 = 49,
+                  modifiers: UInt32 = UInt32(optionKey | cmdKey)) {
+        unregister()
+
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
+                                      eventKind: OSType(kEventHotKeyPressed))
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
+            guard let userData, let event else { return OSStatus(eventNotHandledErr) }
+            let hotkey = Unmanaged<GlobalHotkey>.fromOpaque(userData).takeUnretainedValue()
+            var hkID = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject),
+                              EventParamType(typeEventHotKeyID), nil,
+                              MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+            DispatchQueue.main.async { hotkey.onTrigger?() }
+            return noErr
+        }, 1, &eventType, selfPtr, &handlerRef)
+
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4E494348) /* 'NICH' */, id: 1)
+        RegisterEventHotKey(keyCode, modifiers, hotKeyID,
+                            GetApplicationEventTarget(), 0, &hotKeyRef)
+    }
+
+    func unregister() {
+        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef); self.hotKeyRef = nil }
+        if let handlerRef { RemoveEventHandler(handlerRef); self.handlerRef = nil }
+    }
+
+    deinit { unregister() }
+}

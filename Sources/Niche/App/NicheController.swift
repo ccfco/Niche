@@ -8,9 +8,11 @@ final class NicheController {
     private let environment: AppEnvironment
     private let screens = ScreenObserver()
     private let model = PanelModel()
+    private let motion = MotionPreferences()
     private let autoHide = AutoHideCoordinator()
     private let hotZone = HotZoneController()
     private let volumes = VolumeMonitor()
+    private let hotkey = GlobalHotkey()
     private lazy var quickLook = QuickLookController(autoHide: autoHide)
     private let undoManager = FileOpUndoManager()
     private lazy var ops = FileOperations(undo: undoManager)
@@ -33,20 +35,26 @@ final class NicheController {
         onCopyPath: { [weak self] urls in self?.ops.copyPaths(urls) },
         onTrash: { [weak self] urls in self?.ops.trash(urls) },
         onPaste: { [weak self] in self?.paste() },
-        onUndo: { [weak self] in self?.ops.undoLast() }
+        onUndo: { [weak self] in self?.ops.undoLast() },
+        onClose: { [weak self] in self?.closeFromKeyboard() }
     )
-    private lazy var transient = NotchExpansion(model: model, actions: actions)
-    private lazy var pinned = PinnedPanelController(model: model, actions: actions)
+    private lazy var transient = NotchExpansion(model: model, motion: motion, actions: actions)
+    private lazy var pinned = PinnedPanelController(
+        model: model, motion: motion, actions: actions, store: environment.bindingStore
+    )
 
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
+    private var bindingsCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
         wire()
         placeHotZone()
         rebuildMirrors()
+        hotkey.onTrigger = { [weak self] in self?.toggle() }
+        hotkey.register()   // 默认 ⌥⌘Space 兜底呼出
     }
 
     deinit {
@@ -87,6 +95,12 @@ final class NicheController {
                 guard let self else { return }
                 if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
             }
+
+        // 设置页增删/重排绑定 → 同步重建镜像(保持设置与面板一致)。
+        bindingsCancellable = environment.bindingStore.$bindings
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.rebuildMirrors() }
     }
 
     private func placeHotZone() {
@@ -159,6 +173,12 @@ final class NicheController {
         model.windowMode = .transient
         pinned.hide()
         present(draggingFile: false)
+    }
+
+    /// ⌘W / Esc:未 pin 收回瞬态;已 pin 则隐藏常驻浮窗(spec §4.6)。
+    private func closeFromKeyboard() {
+        if model.windowMode == .pinned { pinned.hide() }
+        else { Task { await hideTransient() } }
     }
 
     private func defaultPinnedFrame() -> NSRect {

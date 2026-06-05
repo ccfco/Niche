@@ -11,7 +11,7 @@ final class PanelModel: ObservableObject {
     @Published var currentTab: Int = 0
     @Published var selection = GridSelection(index: nil)
     @Published var sortOrder = FileSortOrder.default
-    @Published var showHidden = false {
+    @Published var showHidden: Bool = UserDefaults.standard.bool(forKey: "niche.showHidden") {
         didSet { mirrors.forEach { $0.showHidden = showHidden } }
     }
     @Published var windowMode: WindowMode = .transient
