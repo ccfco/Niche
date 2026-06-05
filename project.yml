@@ -1,0 +1,68 @@
+name: Niche
+options:
+  bundleIdPrefix: com.ccfco
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # 本地开发用 ad-hoc 签名;不沙盒,GitHub Release 自分发时再换正式签名/公证
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+packages:
+  DynamicNotchKit:
+    url: https://github.com/MrKai77/DynamicNotchKit
+    from: "1.1.0"
+
+targets:
+  Niche:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Niche
+    dependencies:
+      - package: DynamicNotchKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.Niche
+        PRODUCT_NAME: Niche
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/Niche/Info.plist
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+
+  NicheTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/NicheTests
+    dependencies:
+      - target: Niche
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.NicheTests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Niche:
+    build:
+      targets:
+        Niche: all
+        NicheTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - NicheTests

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Niche</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<!-- menu bar accessory:不进 Dock、无主窗口(沿用 Clipin) -->
+	<key>LSUIElement</key>
+	<true/>
+	<!-- TCC 受保护目录授权文案:权限按需触发(访问失败时),不在启动时主动弹 -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Niche 需要访问"桌面"以镜像你绑定的文件夹,方便从刘海快速取用。</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Niche 需要访问"文稿"以镜像你绑定的文件夹,方便从刘海快速取用。</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Niche 需要访问"下载"以镜像你绑定的文件夹,方便从刘海快速取用。</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Niche. Open source under MIT.</string>
+</dict>
+</plist>
