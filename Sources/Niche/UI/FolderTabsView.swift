@@ -40,6 +40,10 @@ struct FolderTabsView: View {
                     onRemoveFolder(model.mirrors[index].binding.id)
                 }
             }
+            // 无障碍:作为可切换标签项暴露,带当前选中态(否则 VoiceOver 只当静态文本)。
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
     }
 
     private var addButton: some View {
@@ -48,5 +52,6 @@ struct FolderTabsView: View {
         }
         .buttonStyle(.borderless)
         .help("添加文件夹")
+        .accessibilityLabel("添加文件夹")
     }
 }
