@@ -8,9 +8,12 @@ final class GlobalHotkey {
     private var handlerRef: EventHandlerRef?
     var onTrigger: (() -> Void)?
 
-    /// 默认 ⌥⌘Space。keyCode 49 = Space。
+    /// 默认 ⌃⌥⌘Space。keyCode 49 = Space。
+    /// **不能用 ⌥⌘Space**:那是系统 symbolic hotkey 65「Show Finder search window」(默认启用),
+    /// 系统级 symbolic hotkey 优先于 RegisterEventHotKey,会把热键抢走、面板出不来(实测确认)。
+    /// 也避开 ⌃⌘Space(emoji 选择器)。热键是兜底,主触发是刘海热区。
     func register(keyCode: UInt32 = 49,
-                  modifiers: UInt32 = UInt32(optionKey | cmdKey)) {
+                  modifiers: UInt32 = UInt32(controlKey | optionKey | cmdKey)) {
         unregister()
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
