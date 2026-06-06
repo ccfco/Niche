@@ -14,6 +14,8 @@ struct FileCellView: View {
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
     var makeContextMenu: (NSView) -> NSMenu? = { _ in nil }
+    /// VoiceOver 默认激活(打开文件 / 进文件夹);与双击同义。
+    var onActivate: () -> Void = {}
 
     @State private var thumbnail: NSImage?
     @State private var isHovered = false
@@ -56,6 +58,8 @@ struct FileCellView: View {
                 .accessibilityLabel(item.name)
                 .accessibilityValue(accessibilityValue)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+                // onTapGesture 不会自动成为无障碍 action,显式补默认激活(打开/下钻)。
+                .accessibilityAction { onActivate() }
         }
     }
 

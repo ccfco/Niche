@@ -71,7 +71,8 @@ struct FileGridView: View {
             makeContextMenu: { anchor in
                 model.selection = GridSelection(index: index)
                 return actions.onContextMenu([item.url], anchor)
-            }
+            },
+            onActivate: { activate(item) }
         )
         .onTapGesture(count: 2) { activate(item) }
         .onTapGesture { model.selection = GridSelection(index: index) }

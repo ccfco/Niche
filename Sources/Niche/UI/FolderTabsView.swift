@@ -41,9 +41,12 @@ struct FolderTabsView: View {
                 }
             }
             // 无障碍:作为可切换标签项暴露,带当前选中态(否则 VoiceOver 只当静态文本)。
+            // 必须显式加 accessibilityAction:onTapGesture 不会自动成为无障碍 action,
+            // 否则 VoiceOver 激活该 tab 不会切换(Apple 规则,实测桥接缺口)。
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(title)
             .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { model.selectTab(index) }
     }
 
     private var addButton: some View {
