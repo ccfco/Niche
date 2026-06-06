@@ -16,9 +16,7 @@ struct FileCellView: View {
     var makeContextMenu: (NSView) -> NSMenu? = { _ in nil }
 
     @State private var thumbnail: NSImage?
-    @State private var editingName: String = ""
     @State private var isHovered = false
-    @FocusState private var renameFocused: Bool
 
     var body: some View {
         let cell = VStack(spacing: edge.innerSpacing) {
@@ -77,13 +75,8 @@ struct FileCellView: View {
 
     @ViewBuilder private var label: some View {
         if isRenaming {
-            TextField("", text: $editingName)
-                .textFieldStyle(.roundedBorder)
-                .font(.caption)
-                .focused($renameFocused)
-                .onSubmit { onRenameCommit(editingName) }
-                .onExitCommand { onRenameCancel() }
-                .onAppear { editingName = item.name; renameFocused = true }
+            // Finder 语义:聚焦即选中文件名主干(不含扩展名),Enter 提交 / Esc 取消(见 RenameTextField)。
+            RenameTextField(initialName: item.name, onCommit: onRenameCommit, onCancel: onRenameCancel)
                 .frame(maxWidth: .infinity)
         } else {
             Text(item.name)
