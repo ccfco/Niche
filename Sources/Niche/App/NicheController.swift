@@ -116,9 +116,12 @@ final class NicheController {
     // MARK: - 呈现/收回(瞬态)
 
     func toggle() {
-        if model.windowMode == .pinned, pinned.isVisible {
-            pinned.hide()
-        } else if transient.isExpanded {
+        // 已 Pin:全局快捷键切换常驻浮窗显/隐,不跌进瞬态分支(否则会把用户拽出 Pin 态)。
+        if model.windowMode == .pinned {
+            pinned.isVisible ? pinned.hide() : pinned.show(at: defaultPinnedFrame())
+            return
+        }
+        if transient.isExpanded {
             Task { await hideTransient() }
         } else {
             present(draggingFile: false)
@@ -126,6 +129,8 @@ final class NicheController {
     }
 
     private func present(draggingFile: Bool) {
+        // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
+        guard model.windowMode != .pinned else { return }
         guard let screen = screens.activeScreen else { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 /// 网格视图(spec §4.4)。展示 + 选中 + 双击打开/下钻 + 拖出 + 右键 + 就地重命名 + 拖入落地。
 struct FileGridView: View {
     @ObservedObject var model: PanelModel
+    @EnvironmentObject private var motion: MotionPreferences
     let edge: EdgeMetrics
     var actions = PanelActions()
 
@@ -28,8 +29,11 @@ struct FileGridView: View {
                 // 键盘移动选中 → 滚动跟随,保持选中项可见(spec §4.7 手感)。
                 .onChange(of: model.selection.index) { _, index in
                     guard let index else { return }
-                    withAnimation(.easeOut(duration: 0.18)) {
+                    // Reduce Motion:滚动瞬时到位,不做动画(spec §4.3 非可选)。
+                    if motion.reduceMotion {
                         proxy.scrollTo(index, anchor: .center)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo(index, anchor: .center) }
                     }
                 }
             }
