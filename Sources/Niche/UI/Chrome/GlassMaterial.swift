@@ -17,8 +17,10 @@ struct GlassBackground: View {
                 shape.strokeBorder(Color.primary.opacity(0.6), lineWidth: 1)
             }
         } else {
+            // .clear:Liquid Glass 高通透变体,折射壁纸更明显(对比 .regular 的磨砂)。
+            // 无障碍「降低透明度」已有上面的不透明降级兜底,故这里可放心给通透质感。
             Color.clear
-                .glassEffect(.regular, in: shape)
+                .glassEffect(.clear, in: shape)
                 .overlay(shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
         }
     }
