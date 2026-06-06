@@ -38,6 +38,7 @@ struct BottomBarView: View {
         .menuStyle(.button)
         .buttonStyle(.glass)
         .fixedSize()
+        .accessibilityLabel("排序方式")
     }
 
     private var hiddenToggle: some View {
@@ -48,6 +49,8 @@ struct BottomBarView: View {
         }
         .buttonStyle(.glass)
         .help("显示隐藏文件")
+        .accessibilityLabel("显示隐藏文件")
+        .accessibilityValue(model.showHidden ? "开" : "关")
     }
 
     // Pin 激活态用 .glassProminent(材质升级)传达"已钉住",而非靠颜色 —— 贴 Liquid Glass 语言。
@@ -56,10 +59,12 @@ struct BottomBarView: View {
             Button(action: onTogglePin) { Image(systemName: "pin.fill") }
                 .buttonStyle(.glassProminent)
                 .help("取消钉住")
+                .accessibilityLabel("取消钉住")
         } else {
             Button(action: onTogglePin) { Image(systemName: "pin") }
                 .buttonStyle(.glass)
                 .help("钉住(常驻浮窗)")
+                .accessibilityLabel("钉住为常驻浮窗")
         }
     }
 }

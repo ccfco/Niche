@@ -21,7 +21,7 @@ struct FileCellView: View {
     @FocusState private var renameFocused: Bool
 
     var body: some View {
-        VStack(spacing: edge.innerSpacing) {
+        let cell = VStack(spacing: edge.innerSpacing) {
             artwork
                 .frame(width: 48, height: 48)
                 .task(id: item.id) {
@@ -47,6 +47,25 @@ struct FileCellView: View {
         .contentShape(Rectangle())
         // 拖出:真实 file URL(系统据此判同卷移动/跨卷复制)。
         .onDrag { NSItemProvider(object: item.url as NSURL) }
+
+        // 无障碍:展示态把整格聚合为单一元素(VoiceOver 读"文件名,文件夹/文件,已选中");
+        // 重命名态保留 children 可达,否则输入框对 VoiceOver 不可编辑。
+        if isRenaming {
+            cell
+        } else {
+            cell
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(item.name)
+                .accessibilityValue(accessibilityValue)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+    }
+
+    /// VoiceOver 读出的状态值:类型 +(iCloud 未下载时)占位提示。
+    private var accessibilityValue: String {
+        var parts = [item.isDirectory ? "文件夹" : "文件"]
+        if item.isDataless { parts.append("未下载") }
+        return parts.joined(separator: ",")
     }
 
     /// 单元底色:选中(强调色)> hover(淡灰提示)> 无。
