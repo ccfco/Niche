@@ -40,8 +40,12 @@ final class NotchExpansion {
         return created
     }
 
-    func expand(on screen: NSScreen) async {
+    /// 展开瞬态面板。
+    /// - Parameter draggingFile: 由拖拽接管路径触发(用户手上拎着文件靠近刘海)。
+    ///   此时换更利落的展开曲线(见 `openingAnimation` 注释),让落点尽快稳定。
+    func expand(on screen: NSScreen, draggingFile: Bool) async {
         let notch = makeNotchIfNeeded()
+        notch.transitionConfiguration = transitionConfiguration(draggingFile: draggingFile)
         await notch.expand(on: screen)
         isExpanded = true
     }
@@ -50,5 +54,17 @@ final class NotchExpansion {
         guard let notch else { return }
         await notch.hide()
         isExpanded = false
+    }
+
+    /// 派生展开/收回动画(spec §4.3)。
+    /// - Reduce Motion:去掉一切 spring 过冲,降级为纯 easeOut 淡入/淡出(非可选)。
+    /// - 拖拽接管:默认 `.bouncy` 的回弹会让落点框漂移,换 `.snappy` 利落到位。
+    /// - 普通呼出:`openingAnimation = nil` → 回落到 DNK 默认 `.bouncy`,保留"长出来"手感。
+    private func transitionConfiguration(draggingFile: Bool) -> DynamicNotchTransitionConfiguration {
+        if motion.reduceMotion {
+            return .init(openingAnimation: .easeOut(duration: 0.2),
+                         closingAnimation: .easeOut(duration: 0.18))
+        }
+        return .init(openingAnimation: draggingFile ? .snappy(duration: 0.25) : nil)
     }
 }

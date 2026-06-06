@@ -130,7 +130,7 @@ final class NicheController {
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
         Task {
-            await transient.expand(on: screen)
+            await transient.expand(on: screen, draggingFile: draggingFile)
             observeTransientFocus()
         }
     }

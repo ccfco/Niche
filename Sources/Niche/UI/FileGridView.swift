@@ -7,15 +7,32 @@ struct FileGridView: View {
     let edge: EdgeMetrics
     var actions = PanelActions()
 
+    /// 单元目标宽度(与列数计算一致;键盘 ↑↓ 跨行需知道真实列数)。
+    private let cellWidth: CGFloat = 84
+
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: edge.itemSpacing)],
-                      spacing: edge.itemSpacing) {
-                ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
-                    cell(index: index, item: item)
+        GeometryReader { geo in
+            let columns = columnCount(for: geo.size.width)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVGrid(columns: gridItems(columns), spacing: edge.itemSpacing) {
+                        ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
+                            cell(index: index, item: item)
+                                .id(index)
+                        }
+                    }
+                    .padding(edge.panelPadding)
+                }
+                // 列数变化(resize)→ 回填 model,使键盘跨行移动与真实布局一致。
+                .onChange(of: columns, initial: true) { _, new in model.columns = new }
+                // 键盘移动选中 → 滚动跟随,保持选中项可见(spec §4.7 手感)。
+                .onChange(of: model.selection.index) { _, index in
+                    guard let index else { return }
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        proxy.scrollTo(index, anchor: .center)
+                    }
                 }
             }
-            .padding(edge.panelPadding)
         }
         .overlay {
             if model.sortedItems.isEmpty {
@@ -24,6 +41,16 @@ struct FileGridView: View {
         }
         // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
         .onDrop(of: [.fileURL], delegate: FileDropDelegate(onDrop: actions.onDropURLs))
+    }
+
+    private func columnCount(for width: CGFloat) -> Int {
+        let usable = width - edge.panelPadding * 2
+        let unit = cellWidth + edge.itemSpacing
+        return max(1, Int((usable + edge.itemSpacing) / unit))
+    }
+
+    private func gridItems(_ count: Int) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: edge.itemSpacing), count: count)
     }
 
     private func cell(index: Int, item: FileItem) -> some View {

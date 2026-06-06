@@ -35,6 +35,15 @@ struct ContentPanelView: View {
     }
 
     @ViewBuilder private var content: some View {
+        // 首次运行/未绑定任何文件夹:引导添加,而非误显"载入中"。
+        if model.mirrors.isEmpty {
+            EmptyStateView(kind: .noFolders, onAuthorize: actions.onAddFolder)
+        } else {
+            mirrorContent
+        }
+    }
+
+    @ViewBuilder private var mirrorContent: some View {
         switch model.currentState {
         case .idle, .loading:
             EmptyStateView(kind: .loading)

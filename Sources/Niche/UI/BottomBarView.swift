@@ -34,7 +34,9 @@ struct BottomBarView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
-        .menuStyle(.borderlessButton)
+        // 菜单渲染为按钮,套玻璃材质,与底栏其余按钮统一(chrome 纪律:各按钮自承材质)。
+        .menuStyle(.button)
+        .buttonStyle(.glass)
         .fixedSize()
     }
 
@@ -44,13 +46,20 @@ struct BottomBarView: View {
         } label: {
             Image(systemName: model.showHidden ? "eye" : "eye.slash")
         }
+        .buttonStyle(.glass)
         .help("显示隐藏文件")
     }
 
-    private var pinButton: some View {
-        Button(action: onTogglePin) {
-            Image(systemName: model.windowMode == .pinned ? "pin.fill" : "pin")
+    // Pin 激活态用 .glassProminent(材质升级)传达"已钉住",而非靠颜色 —— 贴 Liquid Glass 语言。
+    @ViewBuilder private var pinButton: some View {
+        if model.windowMode == .pinned {
+            Button(action: onTogglePin) { Image(systemName: "pin.fill") }
+                .buttonStyle(.glassProminent)
+                .help("取消钉住")
+        } else {
+            Button(action: onTogglePin) { Image(systemName: "pin") }
+                .buttonStyle(.glass)
+                .help("钉住(常驻浮窗)")
         }
-        .help(model.windowMode == .pinned ? "取消钉住" : "钉住(常驻浮窗)")
     }
 }

@@ -17,6 +17,7 @@ struct FileCellView: View {
 
     @State private var thumbnail: NSImage?
     @State private var editingName: String = ""
+    @State private var isHovered = false
     @FocusState private var renameFocused: Bool
 
     var body: some View {
@@ -31,8 +32,11 @@ struct FileCellView: View {
         .padding(edge.innerSpacing)
         .background(
             RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.25) : Color.clear)
+                .fill(cellFill)
         )
+        // hover 高亮:鼠标移入给一层比选中态更淡的底,提示可点(选中态优先)。
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
             if item.isDataless {
                 Image(systemName: "icloud.and.arrow.down")
@@ -43,6 +47,13 @@ struct FileCellView: View {
         .contentShape(Rectangle())
         // 拖出:真实 file URL(系统据此判同卷移动/跨卷复制)。
         .onDrag { NSItemProvider(object: item.url as NSURL) }
+    }
+
+    /// 单元底色:选中(强调色)> hover(淡灰提示)> 无。
+    private var cellFill: Color {
+        if isSelected { return Color.accentColor.opacity(0.25) }
+        if isHovered { return Color.primary.opacity(0.08) }
+        return Color.clear
     }
 
     @ViewBuilder private var label: some View {
