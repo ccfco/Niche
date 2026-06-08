@@ -21,6 +21,10 @@ struct FileItem: Identifiable, Equatable {
 
     var id: URL { url }
 
+    /// 「种类」排序键(与 FileSortOrder.kind 分支同源:用 contentType identifier)。
+    /// Table 表头排序只用它来生成 KeyPathComparator,真实顺序仍由 FileSortOrder.comparator 决定。
+    var kindSortKey: String { contentType?.identifier ?? "" }
+
     /// 资源键集合 —— 一次性批量取,喂给 `load(url:)`。
     static let resourceKeys: Set<URLResourceKey> = [
         .nameKey,

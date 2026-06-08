@@ -10,7 +10,10 @@ final class PanelModel: ObservableObject {
     @Published private(set) var mirrors: [DirectoryMirror] = []
     @Published var currentTab: Int = 0
     @Published var selection = GridSelection(index: nil)
-    @Published var sortOrder = FileSortOrder.default
+    /// 排序态持久化(底栏菜单 / Table 表头共写此真相源,重启保留)。
+    @Published var sortOrder = FileSortOrder.load() {
+        didSet { sortOrder.save() }
+    }
     @Published var showHidden: Bool = UserDefaults.standard.bool(forKey: "niche.showHidden") {
         didSet { mirrors.forEach { $0.showHidden = showHidden } }
     }
