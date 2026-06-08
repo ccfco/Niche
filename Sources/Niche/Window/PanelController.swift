@@ -21,6 +21,10 @@ final class PanelController {
     var onMouseExitedTransient: (() -> Void)?
 
     private var mouseMonitors: [Any] = []
+    /// 面板键盘权威:本地 keyDown monitor(先于响应链收到事件)。面板可见即装,收回即卸。
+    /// 取代旧的 SwiftUI 面板级 `.onKeyPress` —— 后者在「父视图聚焦 vs Table 抢焦点」两态行为不一致
+    /// (列表 ↑↓ 跳行 #1、空格被 Table 吞 #2/#22)。monitor 与 SwiftUI 焦点无关,行为确定。
+    private var keyMonitor: Any?
     private var leaveWorkItem: DispatchWorkItem?
     /// 瞬态 keep-alive 区域基准(面板 frame ∪ 此矩形);防 hover-收-再 hover 闪烁。
     /// 贴刘海时=刘海矩形(连成走廊);脱离刘海(unpin)时=面板自身。
@@ -33,6 +37,13 @@ final class PanelController {
         self.model = model
         self.motion = motion
         self.actions = actions
+    }
+
+    /// 兜底:controller 释放时若 monitor 仍在,移除避免泄漏(直接访问存储属性 + nonisolated
+    /// removeMonitor,不触碰 @MainActor 方法 —— 守 CLAUDE.md deinit 红线)。
+    deinit {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        mouseMonitors.forEach { NSEvent.removeMonitor($0) }
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -70,6 +81,7 @@ final class PanelController {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
+        startKeyMonitor()
         panel.mode = .transient
         let target = standardFrame(below: resolution, itemCount: itemCount)
         anchorRect = resolution.rect
@@ -95,6 +107,7 @@ final class PanelController {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
+        startKeyMonitor()
         panel.mode = .pinned
         panel.alphaValue = 1
         panel.makeKeyAndOrderFront(nil)
@@ -104,6 +117,7 @@ final class PanelController {
     /// 收起(两模式通用):淡出 + orderOut,停鼠标离开监听。
     func hide() {
         stopMouseLeaveMonitor()
+        stopKeyMonitor()
         guard let panel, panel.isVisible, !isHiding else { return }
         isHiding = true
         let gen = showGeneration
@@ -203,6 +217,96 @@ final class PanelController {
         mouseMonitors.removeAll()
         leaveWorkItem?.cancel()
         leaveWorkItem = nil
+    }
+
+    // MARK: - 键盘权威(本地 keyDown monitor)
+
+    private func startKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handlePanelKey(event)
+        }
+    }
+
+    private func stopKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+    }
+
+    /// 列表方向键:Table 已是第一响应者 → 放行给原生 NSTableView(原生 ∓1 + 自动滚动 + 回写
+    /// 选中 binding);否则(@FocusState 未生效:首现/QL 返回/pin 切换)兜底走 model.move(cols=1)
+    /// 并吃掉事件 —— 消除「按键无响应」死区(Codex review:列表方向键不应依赖焦点成功)。
+    private func listArrow(_ direction: GridSelection.Direction, _ event: NSEvent) -> NSEvent? {
+        if panel?.firstResponder is NSTableView { return event }
+        model.move(direction)
+        return nil
+    }
+
+    /// 返回 nil 吃掉事件,返回 event 放行给响应链(交原生控件,如 Table 原生方向键导航)。
+    private func handlePanelKey(_ event: NSEvent) -> NSEvent? {
+        guard let panel, panel.isVisible, panel.isKeyWindow else { return event }
+        // 重命名进行中:字段编辑器(NSText)是第一响应者 → 放行所有键给输入框(含空格/方向键/Esc)。
+        // Esc 由 RenameTextField 的 cancelOperation 吃掉,不冒泡到这里关面板(#20)。
+        if panel.firstResponder is NSText { return event }
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let cmd = flags.contains(.command)
+        let option = flags.contains(.option)
+        let isList = model.viewMode == .list
+
+        switch event.keyCode {
+        case 126: // ↑
+            if cmd { model.currentMirror?.goUp(); model.selection = GridSelection(index: nil); return nil }
+            if isList { return listArrow(.up, event) }
+            model.move(.up); return nil
+        case 125: // ↓
+            if cmd {
+                if let item = model.selectedItem, item.isDirectory {
+                    model.currentMirror?.enter(item.url); model.selection = GridSelection(index: nil)
+                }
+                return nil
+            }
+            if isList { return listArrow(.down, event) }
+            model.move(.down); return nil
+        case 123: // ←
+            if isList { return event }   // 列表无横向语义,交 Table(默认无操作)
+            model.move(.left); return nil
+        case 124: // →
+            if isList { return event }
+            model.move(.right); return nil
+        case 49: // 空格 → Quick Look
+            if let idx = model.selection.index {
+                actions.onQuickLook(model.sortedItems.map(\.url), idx)
+            }
+            return nil
+        case 36, 76: // Return / Enter → 打开 / 下钻
+            if let item = model.selectedItem {
+                if item.isDirectory { model.currentMirror?.enter(item.url); model.selection = GridSelection(index: nil) }
+                else { actions.onOpen(item) }
+            }
+            return nil
+        case 53: // Esc → 收回(未 pin)/ 隐藏常驻
+            actions.onClose(); return nil
+        case 51, 117: // Delete / Forward Delete
+            if cmd { actions.onTrash(model.selectionURLs); return nil }
+            return event
+        default:
+            break
+        }
+
+        // ⌘ 字母快捷键(spec §4.5/§4.7)。
+        if cmd, let ch = event.charactersIgnoringModifiers?.lowercased() {
+            switch ch {
+            case "c" where option: actions.onCopyPath(model.selectionURLs); return nil
+            case "c": actions.onCopy(model.selectionURLs); return nil
+            case "x": actions.onCut(model.selectionURLs); return nil
+            case "v": actions.onPaste(); return nil
+            case "z": actions.onUndo(); return nil
+            case "w": actions.onClose(); return nil
+            default: break
+            }
+        }
+        return event
     }
 
     /// 鼠标在"面板 ∪ anchorRect"走廊内 → 取消待收;离开 → 起 0.35s 延时收回(被抑制由宿主拦)。

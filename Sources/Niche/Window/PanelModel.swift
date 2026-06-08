@@ -82,7 +82,10 @@ final class PanelModel: ObservableObject {
     }
 
     func move(_ direction: GridSelection.Direction) {
-        selection = selection.moved(direction, columns: columns, count: sortedItems.count)
+        // 列表模式是一维(每行一项),有效列数恒为 1 —— 不能复用上次图标模式残留的 `columns`,
+        // 否则 ↑↓ 会按图标列数跳多行(#1)。图标模式用真实网格列数。
+        let cols = viewMode == .list ? 1 : columns
+        selection = selection.moved(direction, columns: cols, count: sortedItems.count)
     }
 
     func beginRename(_ url: URL) { renamingItemID = url }

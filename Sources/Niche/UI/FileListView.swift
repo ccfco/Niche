@@ -7,6 +7,9 @@ struct FileListView: View {
     @ObservedObject var model: PanelModel
     let edge: EdgeMetrics
     var actions = PanelActions()
+    /// 让 Table 成为第一响应者:PanelController 的 keyDown monitor 把列表方向键**放行**给响应链,
+    /// 由原生 NSTableView 做 ∓1 导航 + 自动滚动到可见 + 回写选中 binding(#1)。
+    @FocusState private var tableFocused: Bool
 
     var body: some View {
         Table(model.sortedItems, selection: selectionBinding) {
@@ -23,6 +26,8 @@ struct FileListView: View {
         // 关隔行背景:访达列表是纯白行 + 极细分隔;隔行底色会把行界读成"更粗更深的分割线"。
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .scrollContentBackground(.hidden)   // 让窗面玻璃透出,Table 不盖一层不透明底
+        .focused($tableFocused)
+        .onAppear { tableFocused = true }
     }
 
     // 选中态在 model.selection(index)与 Table(by id)之间双向映射。

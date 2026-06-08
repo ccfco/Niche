@@ -8,7 +8,6 @@ struct ContentPanelView: View {
     @ObservedObject var model: PanelModel
     @ObservedObject var motion: MotionPreferences
     private let edge = EdgeMetrics.standard
-    @FocusState private var focused: Bool
 
     /// 宿主注入的动作集合(解耦 UI 与 AppKit 控制器)。
     var actions = PanelActions()
@@ -31,11 +30,8 @@ struct ContentPanelView: View {
         .environmentObject(motion)
         // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。
         .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)
-        .focusable()
-        .focusEffectDisabled()
-        .focused($focused)
-        .onAppear { focused = true }
-        .onKeyPress(phases: .down) { press in handleKey(press) }
+        // 键盘导航统一由 PanelController 的 keyDown monitor 处理(面板键盘权威),
+        // 不再用面板级 .onKeyPress —— 那会与 Table 抢焦点产生二义性(#1/#2/#22)。
     }
 
     @ViewBuilder private var content: some View {
@@ -77,57 +73,4 @@ struct ContentPanelView: View {
         }
     }
 
-    // MARK: - 键盘导航
-
-    private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        let cmd = press.modifiers.contains(.command)
-        switch press.key {
-        case .upArrow where cmd:
-            model.currentMirror?.goUp()
-            model.selection = GridSelection(index: nil)
-            return .handled
-        case .downArrow where cmd:
-            if let item = model.selectedItem, item.isDirectory {
-                model.currentMirror?.enter(item.url)
-                model.selection = GridSelection(index: nil)
-            }
-            return .handled
-        case .upArrow: model.move(.up); return .handled
-        case .downArrow: model.move(.down); return .handled
-        case .leftArrow: model.move(.left); return .handled
-        case .rightArrow: model.move(.right); return .handled
-        // 文件操作快捷键(spec §4.5/§4.7)。
-        case KeyEquivalent("c") where cmd && press.modifiers.contains(.option):
-            actions.onCopyPath(model.selectionURLs); return .handled
-        case KeyEquivalent("c") where cmd:
-            actions.onCopy(model.selectionURLs); return .handled
-        case KeyEquivalent("x") where cmd:
-            actions.onCut(model.selectionURLs); return .handled
-        case KeyEquivalent("v") where cmd:
-            actions.onPaste(); return .handled
-        case KeyEquivalent("z") where cmd:
-            actions.onUndo(); return .handled
-        case .delete where cmd, .deleteForward where cmd:
-            actions.onTrash(model.selectionURLs); return .handled
-        case .space:
-            // Space → Quick Look 当前选中(spec §4.7);传整组以支持预览内翻页。
-            if let idx = model.selection.index {
-                actions.onQuickLook(model.sortedItems.map(\.url), idx)
-            }
-            return .handled
-        case .return:
-            if let item = model.selectedItem {
-                if item.isDirectory { model.currentMirror?.enter(item.url); model.selection = GridSelection(index: nil) }
-                else { actions.onOpen(item) }
-            }
-            return .handled
-        // 未 pin 时:⌘W / Esc 收回(spec §4.6)。
-        case .escape:
-            actions.onClose(); return .handled
-        case KeyEquivalent("w") where cmd:
-            actions.onClose(); return .handled
-        default:
-            return .ignored
-        }
-    }
 }
