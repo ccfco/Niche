@@ -69,6 +69,7 @@ struct FileGridView: View {
             item: item,
             isSelected: model.selectedIDs.contains(item.id),
             isRenaming: model.renamingItemID == item.id,
+            isDownloading: model.downloadingIDs.contains(item.id),
             edge: edge,
             onRenameCommit: { newName in
                 // 失败(空名/非法字符)保持编辑态(Codex review)。

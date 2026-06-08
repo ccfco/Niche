@@ -224,7 +224,33 @@ final class NicheController {
     // MARK: - 文件操作(M3)
 
     private func open(_ item: FileItem) {
-        ops.open(item.url)
+        // dataless(iCloud 未下载)文件:先按需下载再交系统,期间 cell 显 spinner——不把未下载
+        // URL 直接丢 NSWorkspace(否则可能打开占位/失败,spec §4.1.2,#13)。
+        guard item.isDataless else { ops.open(item.url); return }
+        // 去重:同一文件正在下载则忽略重复双击(否则起多个 Task,先结束者会提前清掉 spinner)。
+        guard !model.downloadingIDs.contains(item.id) else { return }
+        model.beginDownload(item.id)
+        Task {
+            defer { model.endDownload(item.id) }
+            do {
+                try await ICloudStatus.ensureDownloaded(item.url)
+                ops.open(item.url)
+            } catch {
+                // 不静默吞错(CLAUDE.md):下载失败正面暴露给用户,而非只记日志后无声消失。
+                Log.files.error("按需下载失败,未打开:\(error.localizedDescription, privacy: .public)")
+                presentDownloadFailure(name: item.name, error: error)
+            }
+        }
+    }
+
+    /// 按需下载失败 → 可见提示(用户双击的动作失败必须让其知道,不靠隐形日志)。
+    private func presentDownloadFailure(name: String, error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "无法下载「\(name)」"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "好")
+        alert.runModal()
     }
 
     /// 重命名提交;返回是否成功(失败 → cell 保持编辑态)。校验空名/同名/非法字符。

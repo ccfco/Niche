@@ -76,7 +76,9 @@ struct FileListView: View {
                 // 列表用尾部省略(中间省略在窄列表里读着怪)+ 全名 tooltip(#17)。
                 Text(item.name).lineLimit(1).truncationMode(.tail).help(item.name)
             }
-            if item.isDataless {
+            if model.downloadingIDs.contains(item.id) {
+                ProgressView().controlSize(.small)   // dataless 按需下载中(#13)
+            } else if item.isDataless {
                 Image(systemName: "icloud.and.arrow.down").font(.caption2).foregroundStyle(.secondary)
             }
         }

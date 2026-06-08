@@ -10,6 +10,8 @@ struct FileCellView: View {
     let item: FileItem
     let isSelected: Bool
     let isRenaming: Bool
+    /// dataless 按需下载中:显 spinner 替代 iCloud 角标(#13)。
+    var isDownloading: Bool = false
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
@@ -45,7 +47,9 @@ struct FileCellView: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
-            if item.isDataless {
+            if isDownloading {
+                ProgressView().controlSize(.small).padding(2)
+            } else if item.isDataless {
                 Image(systemName: "icloud.and.arrow.down")
                     .font(.caption2).foregroundStyle(.secondary).padding(2)
             }

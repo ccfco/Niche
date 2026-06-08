@@ -30,6 +30,11 @@ final class PanelModel: ObservableObject {
     }
     /// 正在就地重命名的条目(spec §4.5 就地编辑 UI;§4.6 .renaming 抑制隐藏)。
     @Published var renamingItemID: FileItem.ID?
+    /// 正在按需下载(dataless 双击打开)的条目:cell 显 spinner,不把未下载 URL 直接丢系统(#13)。
+    @Published private(set) var downloadingIDs: Set<FileItem.ID> = []
+
+    func beginDownload(_ id: FileItem.ID) { downloadingIDs.insert(id) }
+    func endDownload(_ id: FileItem.ID) { downloadingIDs.remove(id) }
 
     /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
     private var currentMirrorCancellable: AnyCancellable?
