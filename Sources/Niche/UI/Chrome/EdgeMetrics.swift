@@ -26,4 +26,7 @@ struct EdgeMetrics: Equatable {
     var itemCornerRadius: CGFloat { base * 1.25 }
     /// 控件(按钮/胶囊)圆角。
     var controlCornerRadius: CGFloat { base }
+
+    /// 网格单元目标宽度。网格列数计算与面板标准宽度共用同一来源(禁两处魔法数 84)。
+    var cellWidth: CGFloat { base * 10.5 }   // 8 * 10.5 = 84
 }

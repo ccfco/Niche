@@ -9,7 +9,6 @@ import Combine
 final class BindingStore: ObservableObject {
     private enum Key {
         static let bindings = "niche.bindings"
-        static let panelFrame = "niche.panelFrame"
     }
 
     @Published private(set) var bindings: [FolderBinding]
@@ -52,16 +51,5 @@ final class BindingStore: ObservableObject {
         guard let index = bindings.firstIndex(where: { $0.id == binding.id }) else { return }
         bindings[index] = binding
         persist()
-    }
-
-    // MARK: - 窗口几何记忆(M4 使用)
-
-    func savePanelFrame(_ frame: CGRect) {
-        defaults.set(NSStringFromRect(frame), forKey: Key.panelFrame)
-    }
-
-    func loadPanelFrame() -> CGRect? {
-        guard let raw = defaults.string(forKey: Key.panelFrame) else { return nil }
-        return NSRectFromString(raw)
     }
 }

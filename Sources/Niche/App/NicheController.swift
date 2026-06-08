@@ -41,7 +41,7 @@ final class NicheController {
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
     private lazy var panelController = PanelController(
-        model: model, motion: motion, actions: actions, store: environment.bindingStore
+        model: model, motion: motion, actions: actions
     )
 
     private var resignObserver: NSObjectProtocol?
@@ -65,8 +65,8 @@ final class NicheController {
     // MARK: - 接线
 
     private func wire() {
-        hotZone.onTrigger = { [weak self] draggingFile in
-            self?.present(draggingFile: draggingFile)
+        hotZone.onTrigger = { [weak self] _ in
+            self?.present()
         }
         // 热区跟随鼠标换屏:给定屏 → 该屏刘海/回退几何的命中矩形。
         hotZone.resolveRect = { [weak self] screen in
@@ -123,17 +123,17 @@ final class NicheController {
     func toggle() {
         // 已 Pin:全局快捷键切换常驻浮窗显/隐,不跌进瞬态分支(否则会把用户拽出 Pin 态)。
         if model.windowMode == .pinned {
-            panelController.isVisible ? panelController.hidePinned() : panelController.showPinned()
+            panelController.isVisible ? panelController.hide() : panelController.revealPinned()
             return
         }
         if panelController.isTransientShown {
             hideTransient()
         } else {
-            present(draggingFile: false)
+            present()
         }
     }
 
-    private func present(draggingFile: Bool) {
+    private func present() {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
         guard model.windowMode != .pinned else { return }
         // 幂等:面板已展开时重复呼出(hover 进面板再回刘海会再次跨界触发)应是 no-op,
@@ -142,7 +142,7 @@ final class NicheController {
         guard let screen = screens.activeScreen else { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
-        panelController.presentTransient(below: screens.resolution(for: screen), draggingFile: draggingFile)
+        panelController.presentTransient(below: screens.resolution(for: screen))
         observeTransientFocus()
     }
 
@@ -179,19 +179,18 @@ final class NicheController {
     private func pin() {
         model.windowMode = .pinned
         teardownTransientFocusObserver()   // 常驻不靠 resignKey 收
-        panelController.pin()
+        panelController.setPinned(true)    // 就地切模式,frame 不动
     }
 
     private func unpin() {
         model.windowMode = .transient
-        panelController.unpin()
-        present(draggingFile: false)   // 原地回到刘海下方的瞬态形态
+        panelController.setPinned(false)   // 就地回瞬态,恢复"移开即收";frame 不动
+        observeTransientFocus()
     }
 
     /// ⌘W / Esc:未 pin 收回瞬态;已 pin 则隐藏常驻浮窗(spec §4.6)。
     private func closeFromKeyboard() {
-        if model.windowMode == .pinned { panelController.hidePinned() }
-        else { hideTransient() }
+        hideTransient()
     }
 
     // MARK: - 文件操作(M3)

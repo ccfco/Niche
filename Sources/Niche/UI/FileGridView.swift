@@ -8,9 +8,6 @@ struct FileGridView: View {
     let edge: EdgeMetrics
     var actions = PanelActions()
 
-    /// 单元目标宽度(与列数计算一致;键盘 ↑↓ 跨行需知道真实列数)。
-    private let cellWidth: CGFloat = 84
-
     var body: some View {
         GeometryReader { geo in
             let columns = columnCount(for: geo.size.width)
@@ -49,7 +46,7 @@ struct FileGridView: View {
 
     private func columnCount(for width: CGFloat) -> Int {
         let usable = width - edge.panelPadding * 2
-        let unit = cellWidth + edge.itemSpacing
+        let unit = edge.cellWidth + edge.itemSpacing
         return max(1, Int((usable + edge.itemSpacing) / unit))
     }
 

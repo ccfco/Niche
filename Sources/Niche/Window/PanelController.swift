@@ -1,69 +1,70 @@
 import AppKit
 import SwiftUI
 
-/// 统一面板宿主:瞬态(hover 用完即走)与常驻(Pin)共用**同一个** `NichePanel` + 同一套玻璃外壳。
+/// 统一面板宿主:瞬态(hover 用完即走)与常驻(Pin)是**同一个** `NichePanel` 的两种行为,
+/// 不是两套窗口、也不是两套代码 —— Pin 只翻 `WindowMode`(焦点/监听策略),**frame 一字节不动**。
 ///
-/// Pin 不是换窗口,而是同一窗口切 `WindowMode` —— 原地留下、变可激活/可拖动,**不销毁、不瞬移**。
-/// 这替代了旧的两套割裂窗口:NotchExpansion(DNK 的 .notch 黑底刘海板,吞掉液态玻璃)+
-/// PinnedPanelController(另一个 titled 玻璃浮窗,外观/动画/位置全不同)。两套窗口对象天然割裂,
-/// 无法"统一一套";改由本控制器一个窗口、一套外壳承载两种模式。
+/// 替代了旧的 NotchExpansion(DNK 黑底刘海板,吞玻璃)+ PinnedPanelController(另一个 titled 窗)。
 ///
-/// - 瞬态:从刘海/回退区正下方"长出来"(frame 动画,玻璃全程在);nonactivating 不抢前台;
-///   鼠标离开面板↔刘海走廊即收(收回的抑制判定交给宿主的 AutoHideCoordinator)。
-/// - 常驻:同一窗口变 floating、可激活、可拖动/缩放;记忆尺寸+位置。
+/// - 尺寸:单一**标准尺寸**(宽恰容 5 列单元格,派生自网格;两模式共用,Pin 不改、不可 resize)。
+/// - 瞬态:从刘海下方"长出来"(frame 动画)+ 鼠标离开"面板↔刘海"走廊即收。
+/// - 常驻:就地变 floating、可激活、可拖动(detach);不长出、不改尺寸。
 @MainActor
 final class PanelController {
     private(set) var panel: NichePanel?
     private let model: PanelModel
     private let motion: MotionPreferences
     private let actions: PanelActions
-    private let store: BindingStore
+    private let edge = EdgeMetrics.standard
 
     /// 瞬态下鼠标离开"面板↔刘海"走廊(宿主据此过 AutoHideCoordinator 抑制判定后收回)。
     var onMouseExitedTransient: (() -> Void)?
 
-    private var frameObservers: [NSObjectProtocol] = []
     private var mouseMonitors: [Any] = []
     private var leaveWorkItem: DispatchWorkItem?
-    /// 瞬态 keep-alive 区域(面板 frame ∪ 刘海锚区);鼠标在内不收,防 hover-收-再 hover 闪烁。
+    /// 瞬态 keep-alive 区域基准(面板 frame ∪ 此矩形);防 hover-收-再 hover 闪烁。
+    /// 贴刘海时=刘海矩形(连成走廊);脱离刘海(unpin)时=面板自身。
     private var anchorRect: CGRect = .zero
-    /// 淡出竞态守卫:每次 present 自增;hide 的淡出完成回调若被新 present 抢占(代次不符)则放弃 orderOut。
+    /// 淡出竞态守卫:每次显示自增;hide 淡出回调若被新一次显示抢占(代次不符)则放弃 orderOut。
     private var showGeneration = 0
     private var isHiding = false
 
-    /// 瞬态默认尺寸(常驻另用记忆几何)。
-    private let transientSize = CGSize(width: 480, height: 360)
-
-    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions, store: BindingStore) {
+    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
         self.model = model
         self.motion = motion
         self.actions = actions
-        self.store = store
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
     var mode: WindowMode { panel?.mode ?? .transient }
     var isTransientShown: Bool { isVisible && mode == .transient }
 
-    // MARK: - 瞬态
+    /// 标准尺寸:宽 = 5 列单元格精确和(永不裁切半格,派生自 EdgeMetrics);高取略扁的格式比例。
+    /// 两模式共用、Pin 不改。
+    private var standardSize: CGSize {
+        let columns: CGFloat = 5
+        let width = columns * edge.cellWidth + (columns - 1) * edge.itemSpacing + edge.panelPadding * 2
+        return CGSize(width: width, height: (width * 0.8).rounded())
+    }
 
-    /// 从刘海/回退区下方"长出来"。nonactivating(取键焦点做导航但不激活 app),装鼠标离开监听。
-    func presentTransient(below resolution: NotchGeometry.Resolution, draggingFile: Bool) {
+    // MARK: - 显示 / 收起
+
+    /// 呼出瞬态:从刘海/回退区下方"长出来"(nonactivating 取键焦点做导航但不抢前台)+ 起鼠标离开监听。
+    func presentTransient(below resolution: NotchGeometry.Resolution) {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
         panel.mode = .transient
-        let target = transientFrame(below: resolution)
+        let target = standardFrame(below: resolution)
         anchorRect = resolution.rect
-        // 起始:刘海宽的小条,顶边贴刘海底 → 向下+两侧长到全尺寸。
+        // 起始:刘海宽的小条,顶边贴刘海底 → 向下+两侧长到标准尺寸。
         let start = NSRect(x: target.midX - resolution.rect.width / 2,
                            y: target.maxY - 6, width: resolution.rect.width, height: 6)
         panel.setFrame(start, display: false)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
-        panel.makeKey()   // nonactivatingPanel:成为 key 承载键盘导航,但不把 app 拉前台
-
-        let dur = motion.reduceMotion ? 0.16 : (draggingFile ? 0.24 : 0.3)
+        panel.makeKey()
+        let dur = motion.reduceMotion ? 0.16 : 0.3
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = dur
             ctx.timingFunction = CAMediaTimingFunction(name: motion.reduceMotion ? .easeOut : .easeInEaseOut)
@@ -73,7 +74,18 @@ final class PanelController {
         startMouseLeaveMonitor()
     }
 
-    /// 收起当前面板(瞬态淡出 + orderOut)。停鼠标离开监听。
+    /// 复现常驻(全局快捷键再次呼出已 pin 的窗):就地 orderFront + 激活,不长出、不改尺寸/位置。
+    func revealPinned() {
+        let panel = ensurePanel()
+        showGeneration += 1
+        isHiding = false
+        panel.mode = .pinned
+        panel.alphaValue = 1
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 收起(两模式通用):淡出 + orderOut,停鼠标离开监听。
     func hide() {
         stopMouseLeaveMonitor()
         guard let panel, panel.isVisible, !isHiding else { return }
@@ -84,102 +96,55 @@ final class PanelController {
             ctx.duration = dur
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            guard let self, gen == self.showGeneration else { return }   // 被新 present 抢占 → 不收
+            guard let self, gen == self.showGeneration else { return }   // 被新一次显示抢占 → 不收
             panel.orderOut(nil)
             panel.alphaValue = 1
             self.isHiding = false
         })
     }
 
-    // MARK: - Pin(瞬态 → 常驻,原地)
+    // MARK: - 就地 Pin / Unpin(只翻行为,绝不改 frame)
 
-    /// 同一窗口原地变常驻:停鼠标离开监听、切 .pinned、记忆 frame(有则恢复,无则保留当前=原地)、
-    /// 激活取键焦点、挂 frame 记忆观察。**不新建窗口、不瞬移**。
-    func pin() {
+    /// Pin:停鼠标离开监听、变 .pinned(floating + 可激活 + 可拖动)、激活取键焦点。
+    /// Unpin:变回 .transient、keep-alive 区改为面板自身、恢复鼠标离开监听。**两条路径都不动 frame**。
+    func setPinned(_ pinned: Bool) {
         guard let panel else { return }
-        stopMouseLeaveMonitor()
-        panel.mode = .pinned   // 原地留下:保留当前 frame,不恢复 saved(避免跳帧),saved 仅供 showPinned 复现
-        panel.alphaValue = 1
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        observeFrame(panel)
+        panel.mode = pinned ? .pinned : .transient
+        if pinned {
+            stopMouseLeaveMonitor()
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            anchorRect = panel.frame   // 脱离刘海:走廊塌缩为面板自身,离开面板即收
+            startMouseLeaveMonitor()
+        }
     }
 
-    /// 常驻 → 瞬态:存回几何、解除 frame 观察、切回 .transient 并收起(宿主随后重新 presentTransient)。
-    func unpin() {
-        guard let panel else { return }
-        store.savePanelFrame(panel.frame)
-        teardownFrameObservers()
-        panel.mode = .transient
-        panel.orderOut(nil)
-    }
+    // MARK: - 几何 / 窗口
 
-    /// 常驻态显隐切换(全局快捷键)。
-    func hidePinned() {
-        guard let panel else { return }
-        stopMouseLeaveMonitor()       // 不变量:任何隐藏路径都清 transient 监听(此处通常已停,防御)
-        teardownFrameObservers()
-        store.savePanelFrame(panel.frame)
-        panel.orderOut(nil)
-    }
-
-    func showPinned() {
-        let panel = ensurePanel()
-        panel.mode = .pinned
-        if let saved = store.loadPanelFrame() { panel.setFrame(saved, display: true) }
-        panel.alphaValue = 1
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        observeFrame(panel)
-    }
-
-    // MARK: - 几何
-
-    /// 瞬态全宽 frame:刘海/回退区正下方居中,顶边贴刘海底(向下展开)。
-    private func transientFrame(below resolution: NotchGeometry.Resolution) -> NSRect {
+    /// 标准 frame:刘海/回退区正下方居中,顶边贴刘海底(向下展开)。
+    private func standardFrame(below resolution: NotchGeometry.Resolution) -> NSRect {
         let anchor = resolution.rect
-        return NSRect(x: anchor.midX - transientSize.width / 2,
-                      y: anchor.minY - transientSize.height,   // anchor.minY = 刘海底 = 面板顶
-                      width: transientSize.width, height: transientSize.height)
+        let size = standardSize
+        return NSRect(x: anchor.midX - size.width / 2,
+                      y: anchor.minY - size.height,   // anchor.minY = 刘海底 = 面板顶
+                      width: size.width, height: size.height)
     }
 
     private func ensurePanel() -> NichePanel {
         if let panel { return panel }
         let p = NichePanel(
-            contentRect: NSRect(origin: .zero, size: transientSize),
-            styleMask: [.borderless, .resizable, .fullSizeContentView, .nonactivatingPanel],
+            contentRect: NSRect(origin: .zero, size: standardSize),
+            styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],   // 固定尺寸:不带 .resizable
             backing: .buffered, defer: false
         )
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        let root = ContentPanelView(model: model, motion: motion, actions: actions)
-        p.contentView = NSHostingView(rootView: root)
+        p.contentView = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
         p.mode = .transient
         panel = p
         return p
-    }
-
-    // MARK: - 常驻几何记忆(缩放/移动结束存回)
-
-    private func observeFrame(_ panel: NSWindow) {
-        guard frameObservers.isEmpty else { return }
-        let store = self.store
-        let save: (Notification) -> Void = { note in
-            if let win = note.object as? NSWindow {
-                MainActor.assumeIsolated { store.savePanelFrame(win.frame) }
-            }
-        }
-        for name in [NSWindow.didEndLiveResizeNotification, NSWindow.didMoveNotification] {
-            frameObservers.append(
-                NotificationCenter.default.addObserver(forName: name, object: panel, queue: .main, using: save)
-            )
-        }
-    }
-
-    private func teardownFrameObservers() {
-        frameObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        frameObservers.removeAll()
     }
 
     // MARK: - 瞬态鼠标离开监听
@@ -203,7 +168,7 @@ final class PanelController {
         leaveWorkItem = nil
     }
 
-    /// 鼠标在"面板 ∪ 刘海"走廊内 → 取消待收;离开 → 起 0.35s 延时收回(被抑制由宿主拦)。
+    /// 鼠标在"面板 ∪ anchorRect"走廊内 → 取消待收;离开 → 起 0.35s 延时收回(被抑制由宿主拦)。
     private func evaluateLeave() {
         guard let panel, panel.mode == .transient, panel.isVisible else { return }
         let region = panel.frame.union(anchorRect).insetBy(dx: -8, dy: -8)
@@ -221,8 +186,8 @@ final class PanelController {
     }
 }
 
-/// 受 WindowMode 状态机驱动的 NSPanel:`canBecomeKey/Main`、层级、可拖动随模式变化(spec §4.6)。
-/// 瞬态与常驻共用此一个窗口(见 PanelController)。
+/// 受 WindowMode 状态机驱动的 NSPanel:styleMask(.nonactivatingPanel)、层级、可拖动随模式变化。
+/// 瞬态与常驻共用此**一个**窗口(见 PanelController)。
 final class NichePanel: NSPanel {
     var mode: WindowMode = .transient {
         didSet { applyMode() }
@@ -232,12 +197,9 @@ final class NichePanel: NSPanel {
     override var canBecomeMain: Bool { mode.canBecomeMain }
 
     private func applyMode() {
-        // styleMask 随 mode 切:瞬态用 .nonactivatingPanel(成 key 承载键盘导航却不抢前台);
-        // 常驻移除它,成为正常可激活窗口(否则与 canBecomeMain=true 冲突,makeKey 可能被静默拒)。
-        switch mode {
-        case .transient: styleMask.insert(.nonactivatingPanel)
-        case .pinned:     styleMask.remove(.nonactivatingPanel)
-        }
+        // styleMask 恒定带 .nonactivatingPanel(init 设),不随 mode 切 —— 避免反复改 styleMask
+        // 抖掉 firstResponder/键盘焦点。两模式都靠 canBecomeKey=true 成 key 收键盘;常驻另调
+        // NSApp.activate 激活 app。nonactivating 只挡 main(附件 app 不需要 main),不挡 key。
         level = mode.level
         collectionBehavior = mode.collectionBehavior
         isMovableByWindowBackground = (mode == .pinned)   // 常驻:拖背景移动(detach);瞬态:不可拖
