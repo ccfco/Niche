@@ -20,12 +20,24 @@ struct EdgeMetrics: Equatable {
     /// 区块/底栏与内容的分隔间距。
     var sectionSpacing: CGFloat { base * 2 }
 
-    /// 面板整体圆角(与刘海 continuous squircle 衔接)。
-    var panelCornerRadius: CGFloat { base * 2.5 }
+    /// 面板外壳圆角(= NSGlassEffectView.cornerRadius = 窗面玻璃 shell)。
+    /// base*3=24:贴近系统浮层(Control Center 16),且与底栏按钮 cornerControl(16)
+    /// 同心 —— shell(24) = control(16) + gap(8)。借鉴 Clipin cornerShell。
+    var panelCornerRadius: CGFloat { base * 3 }
     /// 条目/卡片圆角。
     var itemCornerRadius: CGFloat { base * 1.25 }
     /// 控件(按钮/胶囊)圆角。
     var controlCornerRadius: CGFloat { base }
+
+    // MARK: 底栏玻璃按钮(同心圆体系,借鉴 Clipin)
+    // 同心仅在「内层比外层正好内缩一个 gap」时成立:shell(24)−gap(8)=control(16)。
+    // 故底栏按钮须用 base*2 圆角、并距面板边 gap(=itemSpacing 8),才与窗角同心。
+
+    /// 底栏玻璃按钮圆角。base*2=16,与外壳 24 同心(24−8)。
+    var footerControlCornerRadius: CGFloat { base * 2 }
+    /// 按钮 hover 高亮相对玻璃边的内缩量 —— 高亮比按钮小一圈、露一圈玻璃 rim。
+    /// 纯渲染细节,远小于最小网格单位,刻意不挂 base。
+    var footerHoverRimInset: CGFloat { 2 }
 
     /// 网格单元目标宽度。网格列数计算与面板标准宽度共用同一来源(禁两处魔法数 84)。
     var cellWidth: CGFloat { base * 10.5 }   // 8 * 10.5 = 84

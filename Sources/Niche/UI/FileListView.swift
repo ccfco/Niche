@@ -20,8 +20,9 @@ struct FileListView: View {
             }
             .width(min: 72, ideal: 96, max: 140)
         }
-        .tableStyle(.inset)
-        .scrollContentBackground(.hidden)   // 让面板材质透出来,Table 不盖一层不透明底
+        // 关隔行背景:访达列表是纯白行 + 极细分隔;隔行底色会把行界读成"更粗更深的分割线"。
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
+        .scrollContentBackground(.hidden)   // 让窗面玻璃透出,Table 不盖一层不透明底
     }
 
     // 选中态在 model.selection(index)与 Table(by id)之间双向映射。

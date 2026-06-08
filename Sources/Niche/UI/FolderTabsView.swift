@@ -53,7 +53,7 @@ struct FolderTabsView: View {
         Button(action: onAddFolder) {
             Image(systemName: "plus")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(NicheFooterGlassButtonStyle(compact: true))   // 与视图切换/底栏同一玻璃语言
         .help("添加文件夹")
         .accessibilityLabel("添加文件夹")
     }

@@ -64,14 +64,17 @@ struct ContentPanelView: View {
         }
     }
 
-    /// 视图切换分段控件(原生 segmented,像访达右上的视图模式按钮)。
+    /// 视图切换 = 两颗玻璃切换按钮(列表/图标),与底栏按钮同一玻璃语言(取代刺眼的蓝色原生 segmented)。
+    /// 当前模式按钮常驻高亮(isActive),不靠蓝色填充。
     private var viewSwitcher: some View {
-        Picker("视图", selection: $model.viewMode) {
-            Image(systemName: "list.bullet").tag(FileViewMode.list)
-            Image(systemName: "square.grid.2x2").tag(FileViewMode.icon)
+        HStack(spacing: edge.innerSpacing) {
+            Button { model.viewMode = .list } label: { Image(systemName: "list.bullet") }
+                .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .list, compact: true))
+                .accessibilityLabel("列表视图")
+            Button { model.viewMode = .icon } label: { Image(systemName: "square.grid.2x2") }
+                .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .icon, compact: true))
+                .accessibilityLabel("图标视图")
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
     }
 
     // MARK: - 键盘导航

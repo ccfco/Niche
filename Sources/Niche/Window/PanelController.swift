@@ -150,23 +150,34 @@ final class PanelController {
 
     private func ensurePanel() -> NichePanel {
         if let panel { return panel }
+        // .titled(而非 borderless)是 Clipin 干净边缘的前提:borderless 窗本身是直角矩形,
+        // 玻璃在内圆到 24,四角"圆角外、窗框内"的小三角会露系统阴影 = 尖角灰线。.titled 窗有
+        // 系统 frame view,可被 KVC cornerRadius 圆角,与玻璃严丝合缝 → 无三角、无灰线。
         let p = NichePanel(
             contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)),
-            styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],   // 自适应高度:不带 .resizable
+            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],   // 自适应高度:不带 .resizable
             backing: .buffered, defer: false
         )
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        // 跟随系统外观(不强制暗色):浅色环境像访达一样浅。
-        let host = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
-        host.wantsLayer = true
-        p.contentView = host
-        // 圆角化 contentView 图层:系统投影沿圆角画锐利干净阴影,根治"边缘发糊发灰"
-        // (透明窗的投影按内容 alpha 形状生成,半透材质会糊成一圈灰雾)。
-        host.layer?.cornerRadius = EdgeMetrics.standard.panelCornerRadius
-        host.layer?.cornerCurve = .continuous
-        host.layer?.masksToBounds = true
+        p.title = ""
+        p.titleVisibility = .hidden
+        p.titlebarAppearsTransparent = true
+        [.closeButton, .miniaturizeButton, .zoomButton].forEach { p.standardWindowButton($0)?.isHidden = true }
+        p.minSize = NSSize(width: 1, height: 1)   // 允许"从刘海长出"动画起始的窄条
+
+        // 窗面 = macOS 26 原生整窗 Liquid Glass(NSGlassEffectView,Spotlight/访达同款)。
+        // 几何绑定 contentView:自带干净圆角裁切 + 锐利系统阴影 —— 根治旧 NSVisualEffectView +
+        // masksToBounds 的"边缘发糊发灰"。借鉴姊妹项目 Clipin 已在真机验证的配方。
+        let glass = NSGlassEffectView()
+        glass.cornerRadius = edge.panelCornerRadius   // 外壳同心圆基准(= 底栏按钮 16 + gap 8)
+        let host = NicheGlassHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
+        glass.contentView = host
+        p.contentView = glass
+        // .titled 窗始终有系统 frame:用 cornerRadius KVC 把 frame 圆角对齐 shell 24,否则四角
+        // 露 frame 发丝弧/尖角灰线(Clipin 同款,private _cornerRadius,不手动 masksToBounds)。
+        p.setValue(edge.panelCornerRadius, forKey: "cornerRadius")
         p.invalidateShadow()
         p.mode = .transient
         panel = p
@@ -230,5 +241,24 @@ final class NichePanel: NSPanel {
         collectionBehavior = mode.collectionBehavior
         isMovableByWindowBackground = (mode == .pinned)   // 常驻:拖背景移动(detach);瞬态:不可拖
         hidesOnDeactivate = false   // 隐藏策略统一交给 AutoHideCoordinator,不靠系统 deactivate
+    }
+}
+
+/// NSGlassEffectView 内的 SwiftUI 宿主:窗面玻璃/圆角/裁切/阴影全交给 AppKit(NSGlassEffectView +
+/// 窗口),内容层只需归零 safe area、清空图层、**不 mask** —— 在内容层再画边/裁切会和玻璃叠出
+/// 发丝线(借鉴 Clipin ClipinPanelHostingView)。无 borderless 标题栏,故 safe area 本就该为 0。
+final class NicheGlassHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+    override var safeAreaInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
+        layer?.masksToBounds = false
     }
 }

@@ -14,8 +14,10 @@ struct BottomBarView: View {
             Spacer()
             pinButton
         }
-        .padding(.horizontal, edge.panelPadding)
-        .padding(.vertical, edge.innerSpacing)
+        // 横/底边距 = gap(itemSpacing 8):按钮外缘距面板边 8,使按钮圆角(16)与外壳(24)同心。
+        .padding(.horizontal, edge.itemSpacing)
+        .padding(.bottom, edge.itemSpacing)
+        .padding(.top, edge.innerSpacing)
     }
 
     private var sortMenu: some View {
@@ -34,9 +36,9 @@ struct BottomBarView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
-        // 菜单渲染为按钮,套玻璃材质,与底栏其余按钮统一(chrome 纪律:各按钮自承材质)。
+        // 菜单渲染为按钮,套同心圆玻璃样式,与底栏其余按钮统一(chrome 纪律:各按钮自承材质)。
         .menuStyle(.button)
-        .buttonStyle(.glass)
+        .buttonStyle(NicheFooterGlassButtonStyle())
         .fixedSize()
         .accessibilityLabel("排序方式")
     }
@@ -47,24 +49,20 @@ struct BottomBarView: View {
         } label: {
             Image(systemName: model.showHidden ? "eye" : "eye.slash")
         }
-        .buttonStyle(.glass)
+        .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.showHidden))
         .help("显示隐藏文件")
         .accessibilityLabel("显示隐藏文件")
         .accessibilityValue(model.showHidden ? "开" : "关")
     }
 
-    // Pin 激活态用 .glassProminent(材质升级)传达"已钉住",而非靠颜色 —— 贴 Liquid Glass 语言。
+    // Pin 激活态用 isActive 常驻高亮(同心玻璃内的填充)传达"已钉住",而非换不透明材质或颜色。
     @ViewBuilder private var pinButton: some View {
-        if model.windowMode == .pinned {
-            Button(action: onTogglePin) { Image(systemName: "pin.fill") }
-                .buttonStyle(.glassProminent)
-                .help("取消钉住")
-                .accessibilityLabel("取消钉住")
-        } else {
-            Button(action: onTogglePin) { Image(systemName: "pin") }
-                .buttonStyle(.glass)
-                .help("钉住(常驻浮窗)")
-                .accessibilityLabel("钉住为常驻浮窗")
+        let pinned = model.windowMode == .pinned
+        Button(action: onTogglePin) {
+            Image(systemName: pinned ? "pin.fill" : "pin")
         }
+        .buttonStyle(NicheFooterGlassButtonStyle(isActive: pinned))
+        .help(pinned ? "取消钉住" : "钉住(常驻浮窗)")
+        .accessibilityLabel(pinned ? "取消钉住" : "钉住为常驻浮窗")
     }
 }
