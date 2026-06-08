@@ -20,19 +20,12 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_STRICT_CONCURRENCY: minimal
 
-packages:
-  DynamicNotchKit:
-    url: https://github.com/MrKai77/DynamicNotchKit
-    from: "1.1.0"
-
 targets:
   Niche:
     type: application
     platform: macOS
     sources:
       - path: Sources/Niche
-    dependencies:
-      - package: DynamicNotchKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.Niche

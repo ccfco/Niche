@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-/// 顶层编排:把触发热区、瞬态(DNK)/常驻(PinnedPanel)两个呈现宿主、焦点抑制模型、
+/// 顶层编排:把触发热区、统一面板宿主(瞬态↔常驻同一窗口)、焦点抑制模型、
 /// 镜像数据源、Quick Look 接成一个可切换的窗口状态机(spec §4.6)。
 @MainActor
 final class NicheController {
@@ -40,8 +40,7 @@ final class NicheController {
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
-    private lazy var transient = NotchExpansion(model: model, motion: motion, actions: actions)
-    private lazy var pinned = PinnedPanelController(
+    private lazy var panelController = PanelController(
         model: model, motion: motion, actions: actions, store: environment.bindingStore
     )
 
@@ -75,12 +74,16 @@ final class NicheController {
             return NotchGeometry.hotZoneRect(from: self.screens.resolution(for: screen))
         }
         autoHide.onShouldHide = { [weak self] in
-            Task { await self?.hideTransient() }
+            self?.hideTransient()
         }
-        // ownedWindows:瞬态面板本体 + Quick Look 预览面板(失焦判定排除"焦点转到自己派生窗口")。
+        // 瞬态鼠标离开"面板↔刘海"走廊 → 过抑制判定后收回(移开即收的主路径)。
+        panelController.onMouseExitedTransient = { [weak self] in
+            self?.autoHide.handleMouseLeave()
+        }
+        // ownedWindows:面板本体 + Quick Look 预览面板(失焦判定排除"焦点转到自己派生窗口")。
         // 右键菜单/重命名 popup 在 M3 并入。
         autoHide.ownedWindows = { [weak self] in
-            [self?.transient.panel, self?.quickLook.previewPanel].compactMap { $0 }
+            [self?.panelController.panel, self?.quickLook.previewPanel].compactMap { $0 }
         }
         screenCancellable = screens.$generation
             .dropFirst()
@@ -120,11 +123,11 @@ final class NicheController {
     func toggle() {
         // 已 Pin:全局快捷键切换常驻浮窗显/隐,不跌进瞬态分支(否则会把用户拽出 Pin 态)。
         if model.windowMode == .pinned {
-            pinned.isVisible ? pinned.hide() : pinned.show(at: defaultPinnedFrame())
+            panelController.isVisible ? panelController.hidePinned() : panelController.showPinned()
             return
         }
-        if transient.isExpanded {
-            Task { await hideTransient() }
+        if panelController.isTransientShown {
+            hideTransient()
         } else {
             present(draggingFile: false)
         }
@@ -133,26 +136,24 @@ final class NicheController {
     private func present(draggingFile: Bool) {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
         guard model.windowMode != .pinned else { return }
-        // 幂等:面板已展开时重复呼出(hover 进面板再回 32pt 顶条会再次跨界触发)应是 no-op,
+        // 幂等:面板已展开时重复呼出(hover 进面板再回刘海会再次跨界触发)应是 no-op,
         // 否则会重跑展开动画并重新 armCurrent() 触发 TCC 探针。
-        guard !transient.isExpanded else { return }
+        guard !panelController.isTransientShown else { return }
         guard let screen = screens.activeScreen else { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
-        Task {
-            await transient.expand(on: screen, draggingFile: draggingFile)
-            observeTransientFocus()
-        }
+        panelController.presentTransient(below: screens.resolution(for: screen), draggingFile: draggingFile)
+        observeTransientFocus()
     }
 
-    private func hideTransient() async {
-        await transient.hide()
+    private func hideTransient() {
+        panelController.hide()
         teardownTransientFocusObserver()
     }
 
     private func observeTransientFocus() {
         teardownTransientFocusObserver()
-        guard let panel = transient.panel else { return }
+        guard let panel = panelController.panel else { return }
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
         ) { [weak self] _ in
@@ -169,37 +170,28 @@ final class NicheController {
         }
     }
 
-    // MARK: - Pin 切换(瞬态 ↔ 常驻)
+    // MARK: - Pin 切换(瞬态 ↔ 常驻,同一窗口原地切模式)
 
     private func togglePin() {
         model.windowMode == .pinned ? unpin() : pin()
     }
 
     private func pin() {
-        let frame = transient.panel?.frame ?? defaultPinnedFrame()
         model.windowMode = .pinned
-        Task {
-            await hideTransient()
-            pinned.show(at: frame)
-        }
+        teardownTransientFocusObserver()   // 常驻不靠 resignKey 收
+        panelController.pin()
     }
 
     private func unpin() {
         model.windowMode = .transient
-        pinned.hide()
-        present(draggingFile: false)
+        panelController.unpin()
+        present(draggingFile: false)   // 原地回到刘海下方的瞬态形态
     }
 
     /// ⌘W / Esc:未 pin 收回瞬态;已 pin 则隐藏常驻浮窗(spec §4.6)。
     private func closeFromKeyboard() {
-        if model.windowMode == .pinned { pinned.hide() }
-        else { Task { await hideTransient() } }
-    }
-
-    private func defaultPinnedFrame() -> NSRect {
-        guard let screen = screens.activeScreen else { return NSRect(x: 200, y: 200, width: 460, height: 320) }
-        let r = screens.resolution(for: screen).rect
-        return NSRect(x: r.midX - 230, y: r.minY - 340, width: 460, height: 320)
+        if model.windowMode == .pinned { panelController.hidePinned() }
+        else { hideTransient() }
     }
 
     // MARK: - 文件操作(M3)
@@ -278,7 +270,7 @@ final class NicheController {
     }
 
     private var isPanelVisible: Bool {
-        transient.isExpanded || pinned.isVisible
+        panelController.isVisible
     }
 
     /// 添加文件夹:NSOpenPanel 选目录 → 生成普通 bookmark → 持久化。

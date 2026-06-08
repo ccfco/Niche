@@ -57,4 +57,14 @@ final class AutoHideCoordinator {
         }
         onShouldHide?()
     }
+
+    /// 收到"瞬态面板鼠标离开":有抑制源(Quick Look / 菜单 / 拖拽 / 重命名)则记待隐藏,
+    /// 待抑制解除再补;否则立即收回。与 resignKey 同走抑制判定,是"移开即收"的主路径。
+    func handleMouseLeave() {
+        if isSuppressed {
+            pendingHide = true
+            return
+        }
+        onShouldHide?()
+    }
 }
