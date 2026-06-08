@@ -23,7 +23,7 @@ struct ContentPanelView: View {
             BottomBarView(model: model, edge: edge, onTogglePin: actions.onTogglePin)
         }
         .frame(minWidth: 360, minHeight: 240)
-        .glassPanelBackground(cornerRadius: edge.panelCornerRadius)
+        .panelBackground(cornerRadius: edge.panelCornerRadius)
         .environmentObject(motion)
         // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。
         .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)

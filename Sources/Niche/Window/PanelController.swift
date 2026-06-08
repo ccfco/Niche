@@ -42,7 +42,7 @@ final class PanelController {
     /// 标准尺寸:宽 = 5 列单元格精确和(永不裁切半格,派生自 EdgeMetrics);高取略扁的格式比例。
     /// 两模式共用、Pin 不改。
     private var standardSize: CGSize {
-        let columns: CGFloat = 5
+        let columns: CGFloat = 6
         let width = columns * edge.cellWidth + (columns - 1) * edge.itemSpacing + edge.panelPadding * 2
         return CGSize(width: width, height: (width * 0.8).rounded())
     }

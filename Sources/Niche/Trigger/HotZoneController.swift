@@ -65,7 +65,10 @@ final class HotZoneController {
         let mouse = NSEvent.mouseLocation
         syncScreenIfNeeded(mouse: mouse)
         guard hotZoneRect != .zero else { return }
-        let inside = hotZoneRect.contains(mouse)
+        // 含上边界:CGRect.contains 排除 maxY,鼠标顶到屏幕最顶(y=maxY=屏高)恰落在被排除的
+        // 上边界 → 贴边呼不出。热区贴屏顶,必须显式含 max 边。
+        let inside = mouse.x >= hotZoneRect.minX && mouse.x <= hotZoneRect.maxX
+                  && mouse.y >= hotZoneRect.minY && mouse.y <= hotZoneRect.maxY
         guard inside != insideHotZone else { return }
         insideHotZone = inside
         if inside {
