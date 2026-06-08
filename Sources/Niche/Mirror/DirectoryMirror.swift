@@ -35,6 +35,27 @@ final class DirectoryMirror: ObservableObject {
     /// 是否可回上级(未在根目录)。
     var canGoUp: Bool { currentDirectory.standardizedFileURL != rootURL.standardizedFileURL }
 
+    /// 面包屑:从绑定根到当前目录的可点路径(根用绑定显示名;下钻段用各级目录名)。
+    /// 纯鼠标据此逐级回跳(#7/#8);在根时只有一项(根本身)。
+    var breadcrumb: [(name: String, url: URL)] {
+        let rootStd = rootURL.standardizedFileURL
+        let curStd = currentDirectory.standardizedFileURL
+        var result: [(name: String, url: URL)] = [(binding.displayName, rootStd)]
+        // 下钻深度用「解析符号链接后」的组件算(与 contains 同源,home 等符号链接根也不塌);
+        // 但展示/跳转 url 用未解析当前路径的尾部组件 —— 名称友好,且与 canGoUp/currentDirectory
+        // 的表示一致(若 url 改解析形,点根段后 canGoUp 比未解析 rootURL 会误判 true)。
+        let depth = curStd.resolvingSymlinksInPath().pathComponents.count
+                  - rootStd.resolvingSymlinksInPath().pathComponents.count
+        let curComps = curStd.pathComponents
+        guard depth > 0, curComps.count >= depth else { return result }
+        var url = rootStd
+        for comp in curComps.suffix(depth) {
+            url.appendPathComponent(comp)
+            result.append((comp, url))
+        }
+        return result
+    }
+
     var showHidden: Bool {
         didSet { if showHidden != oldValue, case .ready = state { refresh() } }
     }

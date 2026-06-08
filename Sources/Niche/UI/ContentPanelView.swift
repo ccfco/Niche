@@ -21,6 +21,7 @@ struct ContentPanelView: View {
                     .fixedSize()
                     .padding(.trailing, edge.panelPadding)
             }
+            breadcrumb
             content
             BottomBarView(model: model, edge: edge, onTogglePin: actions.onTogglePin)
         }
@@ -32,6 +33,18 @@ struct ContentPanelView: View {
         .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)
         // 键盘导航统一由 PanelController 的 keyDown monitor 处理(面板键盘权威),
         // 不再用面板级 .onKeyPress —— 那会与 Table 抢焦点产生二义性(#1/#2/#22)。
+    }
+
+    /// 下钻路径栏:仅在 canGoUp(已下钻)显示;纯鼠标据此逐级回跳(#7/#8)。
+    @ViewBuilder private var breadcrumb: some View {
+        if let mirror = model.currentMirror, mirror.canGoUp {
+            BreadcrumbBar(
+                components: mirror.breadcrumb,
+                edge: edge,
+                onUp: { model.currentMirror?.goUp(); model.clearSelection() },
+                onSelect: { url in model.currentMirror?.enter(url); model.clearSelection() }
+            )
+        }
     }
 
     @ViewBuilder private var content: some View {
