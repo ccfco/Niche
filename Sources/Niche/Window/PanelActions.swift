@@ -14,6 +14,8 @@ struct PanelActions {
 
     /// 右键:为给定条目构建自拼 NSMenu(anchor 用于分享 picker 定位);返回 nil 不弹。
     var onContextMenu: (_ urls: [URL], _ anchor: NSView) -> NSMenu? = { _, _ in nil }
+    /// 空白处右键:背景菜单(新建文件夹 / 粘贴);返回 nil 不弹。
+    var onContextMenuBackground: (_ anchor: NSView) -> NSMenu? = { _ in nil }
     /// 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
     var onDropURLs: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags) -> Void = { _, _ in }
     /// 就地重命名提交;返回是否成功(失败 → cell 保持编辑态)。

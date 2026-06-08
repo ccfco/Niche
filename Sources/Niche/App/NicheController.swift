@@ -28,6 +28,7 @@ final class NicheController {
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
         onContextMenu: { [weak self] urls, anchor in self?.makeContextMenu(urls, anchor) },
+        onContextMenuBackground: { [weak self] anchor in self?.makeBackgroundMenu(anchor) },
         onDropURLs: { [weak self] urls, modifiers in self?.handleDrop(urls, modifiers: modifiers) },
         onRename: { [weak self] url, newName in self?.rename(url, to: newName) ?? false },
         onCopy: { [weak self] urls in self?.ops.copyToPasteboard(urls) },
@@ -247,6 +248,12 @@ final class NicheController {
     private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {
         guard let dir = model.currentMirror?.currentDirectory else { return nil }
         return contextMenu.makeMenu(for: .init(selection: urls, directory: dir, anchorView: anchor))
+    }
+
+    /// 空白处右键:背景菜单(新建文件夹 / 粘贴),落点 = 当前目录。
+    private func makeBackgroundMenu(_ anchor: NSView) -> NSMenu? {
+        guard let dir = model.currentMirror?.currentDirectory else { return nil }
+        return contextMenu.makeBackgroundMenu(directory: dir, anchorView: anchor)
     }
 
     /// 拖入落地:Niche 自己执行 copy/move(spec §4.5 注②)。按目标目录与**每个源**的卷 +

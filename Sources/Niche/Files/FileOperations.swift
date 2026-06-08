@@ -101,6 +101,11 @@ final class FileOperations {
         pendingCut = (urls, pb.changeCount)
     }
 
+    /// 剪贴板当前是否有可粘贴的文件 URL(用于背景菜单「粘贴」项的启用判定)。
+    var canPaste: Bool {
+        NSPasteboard.general.canReadObject(forClasses: [NSURL.self], options: nil)
+    }
+
     /// 粘贴(⌘V):剪贴板内容粘到目标目录。若来自本 app 的剪切(changeCount 未变)→ move,否则 copy。
     func paste(into directory: URL, resolve: (String) -> ConflictResolution) throws {
         let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self]) as? [URL] ?? []

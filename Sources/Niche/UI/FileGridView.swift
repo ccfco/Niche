@@ -40,6 +40,9 @@ struct FileGridView: View {
                 EmptyStateView(kind: .empty)
             }
         }
+        // 空白处右键 → 背景菜单(新建文件夹/粘贴)。置于内容之下:cell 自带 RightClickCatcher 在上层
+        // 优先认领落到条目上的右键,gap/空白处的右键穿透到此(catcher 只认右键,不挡左键/拖入)。
+        .background(RightClickCatcher(makeMenu: { actions.onContextMenuBackground($0) }))
         // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
         .onDrop(of: [.fileURL], delegate: FileDropDelegate(onDrop: actions.onDropURLs))
     }

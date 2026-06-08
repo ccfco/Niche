@@ -38,6 +38,21 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         return menu
     }
 
+    /// 背景(空白处)菜单:新建文件夹 / 粘贴(无剪贴板文件时禁用)。复用同一 delegate 驱动抑制。
+    /// directory = 当前目录(新建/粘贴落点);selection 空。
+    func makeBackgroundMenu(directory: URL, anchorView: NSView) -> NSMenu {
+        self.context = Context(selection: [], directory: directory, anchorView: anchorView)
+        let menu = NSMenu()
+        menu.autoenablesItems = false   // 自行控制「粘贴」启用态(否则只要 target 响应就恒启用)
+        add(menu, "新建文件夹", #selector(doNewFolder))
+        let paste = NSMenuItem(title: "粘贴", action: #selector(doPaste), keyEquivalent: "")
+        paste.target = self
+        paste.isEnabled = ops.canPaste
+        menu.addItem(paste)
+        menu.delegate = self
+        return menu
+    }
+
     // MARK: - NSMenuDelegate(驱动抑制隐藏)
 
     func menuWillOpen(_ menu: NSMenu) { autoHide.begin(.contextMenu) }
@@ -168,6 +183,25 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     }
 
     @objc private func doTrash() { if let urls = context?.selection { ops.trash(urls) } }
+
+    // MARK: - 背景菜单动作(新建文件夹 / 粘贴,落点 = 当前目录)
+
+    /// 新建文件夹后进入就地重命名(Finder 语义:新建即选中命名),复用 onRequestRename。
+    @objc private func doNewFolder() {
+        guard let dir = context?.directory else { return }
+        do {
+            let url = try ops.newFolder(in: dir)
+            onRequestRename(url)
+        } catch {
+            Log.files.error("新建文件夹失败:\(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    @objc private func doPaste() {
+        guard let dir = context?.directory else { return }
+        do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+        catch { Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)") }
+    }
 }
 
 /// 同名冲突的 NSAlert 提示(replace/keepBoth/skip),供 FileOperations 的 resolver 调用。
