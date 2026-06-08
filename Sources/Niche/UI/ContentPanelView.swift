@@ -15,8 +15,13 @@ struct ContentPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            FolderTabsView(model: model, edge: edge,
-                           onAddFolder: actions.onAddFolder, onRemoveFolder: actions.onRemoveFolder)
+            HStack(spacing: edge.itemSpacing) {
+                FolderTabsView(model: model, edge: edge,
+                               onAddFolder: actions.onAddFolder, onRemoveFolder: actions.onRemoveFolder)
+                viewSwitcher
+                    .fixedSize()
+                    .padding(.trailing, edge.panelPadding)
+            }
             Divider()
             content
             Divider()
@@ -53,8 +58,21 @@ struct ContentPanelView: View {
             EmptyStateView(kind: .volumeUnmounted(name))
                 .onTapGesture { model.currentMirror?.retryIfPossible() }
         case .ready:
-            FileGridView(model: model, edge: edge, actions: actions)
+            switch model.viewMode {
+            case .list: FileListView(model: model, edge: edge, actions: actions)
+            case .icon: FileGridView(model: model, edge: edge, actions: actions)
+            }
         }
+    }
+
+    /// 视图切换分段控件(原生 segmented,像访达右上的视图模式按钮)。
+    private var viewSwitcher: some View {
+        Picker("视图", selection: $model.viewMode) {
+            Image(systemName: "list.bullet").tag(FileViewMode.list)
+            Image(systemName: "square.grid.2x2").tag(FileViewMode.icon)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     // MARK: - 键盘导航

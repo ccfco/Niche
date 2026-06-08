@@ -16,6 +16,10 @@ final class PanelModel: ObservableObject {
     }
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4
+    /// 视图模式(列表/图标),持久化。列表=原生 Table(像访达);图标=网格。
+    @Published var viewMode: FileViewMode = FileViewMode.load() {
+        didSet { viewMode.save() }
+    }
     /// 正在就地重命名的条目(spec §4.5 就地编辑 UI;§4.6 .renaming 抑制隐藏)。
     @Published var renamingItemID: FileItem.ID?
 

@@ -46,13 +46,21 @@ final class PanelController {
         CGFloat(columns) * edge.cellWidth + CGFloat(columns - 1) * edge.itemSpacing + edge.panelPadding * 2
     }
 
-    /// 高度按条目数自适应:有几行文件就多高(消灭空白),夹在 2~5 行之间,超出滚动。
-    /// rowHeight/chrome 为实测估值(cell≈icon48+label2行+padding;chrome=tabs+toolbar+分隔+网格上下padding)。
+    /// 高度按条目数 + 视图模式自适应:有几行就多高(消灭空白),超出上限滚动。
+    /// 列表行矮(~26)、行数=条目数;图标行高(~98)、行数=ceil(条目/列)。chrome 含 tab/工具栏/分隔(列表多表头)。
     private func panelHeight(itemCount: Int) -> CGFloat {
-        let rowHeight: CGFloat = 98                     // cell:图标48 + 2行文件名 + padding ≈ 90,加行距 8
-        let chrome: CGFloat = 96                        // 顶 tab + 底 toolbar + 两道分隔 + 网格上下 padding
-        let rows = max(2, min(5, Int(ceil(Double(max(itemCount, 1)) / Double(columns)))))
-        return (chrome + CGFloat(rows) * rowHeight).rounded()
+        let count = max(itemCount, 1)
+        if model.viewMode == .list {
+            let rowHeight: CGFloat = 26
+            let chrome: CGFloat = 112        // tab + 表头 + 底栏 + 分隔 + padding
+            let rows = max(4, min(12, count))
+            return (chrome + CGFloat(rows) * rowHeight).rounded()
+        } else {
+            let rowHeight: CGFloat = 98
+            let chrome: CGFloat = 96
+            let rows = max(2, min(5, Int(ceil(Double(count) / Double(columns)))))
+            return (chrome + CGFloat(rows) * rowHeight).rounded()
+        }
     }
 
     // MARK: - 显示 / 收起
@@ -150,8 +158,7 @@ final class PanelController {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        // 强制暗色外观:面板要与黑色刘海连续(像从刘海拉出的暗色玻璃抽屉),不随系统亮/暗变浅灰。
-        p.appearance = NSAppearance(named: .darkAqua)
+        // 跟随系统外观(不强制暗色):浅色环境像访达一样浅。
         p.contentView = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
         p.mode = .transient
         panel = p
