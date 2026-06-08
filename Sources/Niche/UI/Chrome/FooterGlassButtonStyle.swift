@@ -34,7 +34,9 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
             let inset = edge.footerHoverRimInset
             let hPad = compact ? edge.itemSpacing * 1.25 : edge.sectionSpacing   // 10 / 16
             let vPad = compact ? edge.itemSpacing * 0.75 : edge.itemSpacing       //  6 /  8
-            let highlight: Double = pressed ? 0.16 : (isActive ? 0.12 : (isHovered ? 0.09 : 0))
+            // 三态强度收口到 GlassTokens(chrome 纪律:禁组件硬编码高亮 opacity,#16)。
+            let highlight: Double = pressed ? GlassTokens.pressed
+                : (isActive ? GlassTokens.active : (isHovered ? GlassTokens.hover : GlassTokens.idle))
             return configuration.label
                 .font(.system(size: 13, weight: .medium))
                 .frame(minWidth: 16)

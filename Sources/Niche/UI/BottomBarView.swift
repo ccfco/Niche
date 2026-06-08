@@ -47,7 +47,8 @@ struct BottomBarView: View {
         Button {
             model.showHidden.toggle()
         } label: {
-            Image(systemName: model.showHidden ? "eye" : "eye.slash")
+            // 图标恒定 eye,靠 isActive 高亮表达开关(与 pin 一致),不换图标(#18)。
+            Image(systemName: "eye")
         }
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.showHidden))
         .help("显示隐藏文件")

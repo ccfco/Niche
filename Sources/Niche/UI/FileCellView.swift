@@ -81,10 +81,10 @@ struct FileCellView: View {
         return parts.joined(separator: ",")
     }
 
-    /// 单元底色:选中(强调色)> hover(淡灰提示)> 无。
+    /// 单元底色:选中(强调色)> hover(淡灰提示)> 无。强度收口到 GlassTokens(#16)。
     private var cellFill: Color {
-        if isSelected { return Color.accentColor.opacity(0.25) }
-        if isHovered { return Color.primary.opacity(0.08) }
+        if isSelected { return Color.accentColor.opacity(GlassTokens.selectionFill) }
+        if isHovered { return Color.primary.opacity(GlassTokens.hoverFill) }
         return Color.clear
     }
 

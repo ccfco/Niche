@@ -24,29 +24,19 @@ struct FolderTabsView: View {
 
     private func tab(index: Int, title: String) -> some View {
         let isCurrent = index == model.currentTab
-        return Text(title)
-            .font(.callout)
-            .lineLimit(1)
-            .padding(.horizontal, edge.itemSpacing)
-            .padding(.vertical, edge.innerSpacing)
-            .background(
-                RoundedRectangle(cornerRadius: edge.controlCornerRadius, style: .continuous)
-                    .fill(isCurrent ? Color.accentColor.opacity(0.22) : Color.clear)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { model.selectTab(index) }
-            .contextMenu {
-                Button("移除此文件夹", role: .destructive) {
-                    onRemoveFolder(model.mirrors[index].binding.id)
-                }
+        // 与 +/视图切换/底栏统一玻璃语言:当前 tab 用 isActive 常驻高亮,去掉裸 accent 方块(#15)。
+        return Button { model.selectTab(index) } label: {
+            Text(title).lineLimit(1)
+        }
+        .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
+        .contextMenu {
+            Button("移除此文件夹", role: .destructive) {
+                onRemoveFolder(model.mirrors[index].binding.id)
             }
-            // 无障碍:作为可切换标签项暴露,带当前选中态(否则 VoiceOver 只当静态文本)。
-            // 必须显式加 accessibilityAction:onTapGesture 不会自动成为无障碍 action,
-            // 否则 VoiceOver 激活该 tab 不会切换(Apple 规则,实测桥接缺口)。
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
-            .accessibilityAction { model.selectTab(index) }
+        }
+        // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
     private var addButton: some View {
