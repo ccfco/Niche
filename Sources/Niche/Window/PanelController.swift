@@ -159,7 +159,15 @@ final class PanelController {
         p.backgroundColor = .clear
         p.hasShadow = true
         // 跟随系统外观(不强制暗色):浅色环境像访达一样浅。
-        p.contentView = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
+        let host = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
+        host.wantsLayer = true
+        p.contentView = host
+        // 圆角化 contentView 图层:系统投影沿圆角画锐利干净阴影,根治"边缘发糊发灰"
+        // (透明窗的投影按内容 alpha 形状生成,半透材质会糊成一圈灰雾)。
+        host.layer?.cornerRadius = EdgeMetrics.standard.panelCornerRadius
+        host.layer?.cornerCurve = .continuous
+        host.layer?.masksToBounds = true
+        p.invalidateShadow()
         p.mode = .transient
         panel = p
         return p
