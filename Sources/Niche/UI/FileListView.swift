@@ -33,6 +33,11 @@ struct FileListView: View {
         .scrollContentBackground(.hidden)   // 让窗面玻璃透出,Table 不盖一层不透明底
         .focused($tableFocused)
         .onAppear { tableFocused = true }
+        // 拖入落地 + 实时角标(与图标模式等价):落点 = 当前目录。
+        .onDrop(of: [.fileURL], delegate: FileDropDelegate(
+            onDrop: actions.onDropURLs,
+            targetDirectory: { model.currentMirror?.currentDirectory }
+        ))
     }
 
     /// 表头排序桥接:get 把真相源 FileSortOrder 映射为 Table 排序描述子(驱动表头箭头);

@@ -47,8 +47,11 @@ struct FileGridView: View {
         // 空白处右键 → 背景菜单(新建文件夹/粘贴)。置于内容之下:cell 自带 RightClickCatcher 在上层
         // 优先认领落到条目上的右键,gap/空白处的右键穿透到此(catcher 只认右键,不挡左键/拖入)。
         .background(RightClickCatcher(makeMenu: { actions.onContextMenuBackground($0) }))
-        // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
-        .onDrop(of: [.fileURL], delegate: FileDropDelegate(onDrop: actions.onDropURLs))
+        // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②);实时角标见 dropUpdated。
+        .onDrop(of: [.fileURL], delegate: FileDropDelegate(
+            onDrop: actions.onDropURLs,
+            targetDirectory: { model.currentMirror?.currentDirectory }
+        ))
     }
 
     private func columnCount(for width: CGFloat) -> Int {
@@ -104,8 +107,32 @@ struct FileGridView: View {
 }
 
 /// 拖入处理:从 providers 取 file URL,读当前修饰键,交宿主执行(宿主据当前目录算卷/语义)。
+/// dropUpdated 实时返回 copy/move 角标(#9):拖拽期间 file URL 通常可从拖拽专用剪贴板同步读到 →
+/// 据「同卷/跨卷 + 修饰键」算操作,与访达一致;读不到(如 file promise)按 copy;目标不可写 forbidden。
 struct FileDropDelegate: DropDelegate {
     let onDrop: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags) -> Void
+    /// 落点目录(算同卷/跨卷与可写判定)。
+    var targetDirectory: () -> URL? = { nil }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    /// 实时角标:⌥ 复制 / ⌘ 移动(修饰键优先);无修饰按同卷 move、跨卷 copy;目标不可写 forbidden。
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard let dir = targetDirectory() else {
+            return DropProposal(operation: .copy)   // 无落点信息:保守 copy(不静默移动)
+        }
+        // dropUpdated 随鼠标高频触发:按「拖拽剪贴板 changeCount + 目标目录」缓存卷判定 + 可写性,
+        // 整段拖拽期间命中即 O(1),避免每次都 readObjects + 逐源查卷 + access(Codex review)。
+        let (writable, sameVolume) = DropPreflightCache.shared.resolve(dir: dir)
+        // 目标不可写 → 禁止落入(与访达只读目录的禁止角标一致;写保护执行层 ensureWritable 仍兜底)。
+        guard writable else { return DropProposal(operation: .forbidden) }
+        switch DragSemantics.resolve(sameVolume: sameVolume, modifiers: NSEvent.modifierFlags) {
+        case .copy: return DropProposal(operation: .copy)
+        case .move: return DropProposal(operation: .move)
+        }
+    }
 
     func performDrop(info: DropInfo) -> Bool {
         let providers = info.itemProviders(for: [.fileURL])
@@ -129,5 +156,40 @@ struct FileDropDelegate: DropDelegate {
             onDrop(urls, modifiers)
         }
         return true
+    }
+}
+
+/// 拖入角标预判缓存:dropUpdated 随鼠标高频触发,而拖拽来源(剪贴板)与目标目录在整段拖拽里
+/// 通常不变。按「拖拽剪贴板 changeCount + 目标目录路径」缓存(可写性, 同卷判定),命中即免去重复
+/// readObjects + 逐源 resourceValues + access(Codex review)。拖拽串行且事件在主线程,单例够用。
+private final class DropPreflightCache {
+    static let shared = DropPreflightCache()
+
+    private var changeCount = Int.min
+    private var dirPath = ""
+    private var cached: (writable: Bool, sameVolume: Bool?) = (true, nil)
+
+    func resolve(dir: URL) -> (writable: Bool, sameVolume: Bool?) {
+        let pb = NSPasteboard(name: .drag)
+        let cc = pb.changeCount
+        if cc == changeCount, dir.path == dirPath { return cached }
+
+        let writable = FileManager.default.isWritableFile(atPath: dir.path)
+        let sources = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
+        let sameVolume = aggregateSameVolume(sources: sources, dir: dir)
+
+        changeCount = cc
+        dirPath = dir.path
+        cached = (writable, sameVolume)
+        return cached
+    }
+
+    /// 混合来源保守判定:任一跨卷 → false(整体 copy);全同卷 → true(move);含未知/空 → nil(copy)。
+    private func aggregateSameVolume(sources: [URL], dir: URL) -> Bool? {
+        guard !sources.isEmpty else { return nil }
+        let results = sources.map { DragSemantics.isSameVolume($0, dir) }
+        if results.contains(false) { return false }
+        if results.allSatisfy({ $0 == true }) { return true }
+        return nil
     }
 }
