@@ -49,10 +49,12 @@
 ### 窗口与触发
 - **触发位置**:刘海优先 → 顶/左/右/菜单栏可选 → 全局快捷键兜底;**多屏在鼠标活跃屏触发,无刘海回退顶部中央**。
 - **Pin 是两种窗口模式的切换**(瞬态 NSPanel ↔ 常驻可拖动 always-on-top 浮窗),**必须从一开始做成可切换状态机**,不能先写死 launcher 再改。
+- **面板键盘走 `PanelController` 的 AppKit 本地 `keyDown` monitor 单一权威**,禁止在 SwiftUI 视图加 `.onKeyPress`/`.focusable`(随焦点漂移失效,与 monitor 抢键)。重命名态(`firstResponder is NSText`)**必须整体放行**给字段编辑器,否则 monitor 会吞掉输入框的 Esc/空格/方向键(Esc 关面板而非取消重命名);列表方向键交原生 `NSTableView`,但 `listArrow` 须兜底 `model.moveCursor`(@FocusState 首现/QL 返回时未生效)。
 
 ### Chrome / UI
 - **间距/圆角由单一旋钮派生**,禁止组件硬编码 padding/cornerRadius;**禁卡片套卡片**,底栏各按钮自承材质——沿用 Clipin chrome 纪律,达成 Liquid Glass 原生质感。
 - **缩略图禁止在 row 渲染路径同步解码**,必须后台 ImageIO 解码 + 缓存上限。
+- **列表(原生 `Table`)与图标(`LazyVGrid`)两模式行为必须等价**:选中(`Set<id>`+光标+锚点单一真相)/ 排序(`FileSortOrder` 单一真相,表头与底栏菜单共写)/ 右键(同款 `RightClickCatcher`→`ContextMenuBuilder`)/ 拖入拖出 / 键盘——给一模式加能力时另一模式同步,缺一即违反「原生正确性 > 功能数量」。
 
 ## 设计原则(同 Clipin)
 
