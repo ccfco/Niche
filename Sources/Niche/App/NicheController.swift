@@ -53,7 +53,7 @@ final class NicheController {
     init(environment: AppEnvironment) {
         self.environment = environment
         wire()
-        placeHotZone()
+        hotZone.refreshPlacement()
         rebuildMirrors()
         hotkey.onTrigger = { [weak self] in self?.toggle() }
         hotkey.register()   // 默认 ⌥⌘Space 兜底呼出
@@ -69,6 +69,11 @@ final class NicheController {
         hotZone.onTrigger = { [weak self] draggingFile in
             self?.present(draggingFile: draggingFile)
         }
+        // 热区跟随鼠标换屏:给定屏 → 该屏刘海/回退几何的命中矩形。
+        hotZone.resolveRect = { [weak self] screen in
+            guard let self else { return nil }
+            return NotchGeometry.hotZoneRect(from: self.screens.resolution(for: screen))
+        }
         autoHide.onShouldHide = { [weak self] in
             Task { await self?.hideTransient() }
         }
@@ -80,7 +85,7 @@ final class NicheController {
         screenCancellable = screens.$generation
             .dropFirst()
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.placeHotZone() }
+            .sink { [weak self] _ in self?.hotZone.refreshPlacement() }
 
         // 卷卸载/挂载转发给各 mirror(spec §4.1.1:卷消失 → 空态;回来 → 用户回该 tab 自动重连)。
         volumes.onUnmount = { [weak self] url in
@@ -108,11 +113,6 @@ final class NicheController {
                 self.pendingSelectBindingID = nil
                 self.rebuildMirrors(selecting: select)
             }
-    }
-
-    private func placeHotZone() {
-        guard let screen = screens.activeScreen else { return }
-        hotZone.place(on: screens.resolution(for: screen))
     }
 
     // MARK: - 呈现/收回(瞬态)
