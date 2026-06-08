@@ -39,23 +39,31 @@ final class PanelController {
     var mode: WindowMode { panel?.mode ?? .transient }
     var isTransientShown: Bool { isVisible && mode == .transient }
 
-    /// 标准尺寸:宽 = 5 列单元格精确和(永不裁切半格,派生自 EdgeMetrics);高取略扁的格式比例。
-    /// 两模式共用、Pin 不改。
-    private var standardSize: CGSize {
-        let columns: CGFloat = 6
-        let width = columns * edge.cellWidth + (columns - 1) * edge.itemSpacing + edge.panelPadding * 2
-        return CGSize(width: width, height: (width * 0.8).rounded())
+    /// 固定列数:宽度 = 6 列单元格精确和(永不裁切半格,派生自 EdgeMetrics)。两模式共用、Pin 不改。
+    private let columns = 6
+
+    private var panelWidth: CGFloat {
+        CGFloat(columns) * edge.cellWidth + CGFloat(columns - 1) * edge.itemSpacing + edge.panelPadding * 2
+    }
+
+    /// 高度按条目数自适应:有几行文件就多高(消灭空白),夹在 2~5 行之间,超出滚动。
+    /// rowHeight/chrome 为实测估值(cell≈icon48+label2行+padding;chrome=tabs+toolbar+分隔+网格上下padding)。
+    private func panelHeight(itemCount: Int) -> CGFloat {
+        let rowHeight: CGFloat = 98                     // cell:图标48 + 2行文件名 + padding ≈ 90,加行距 8
+        let chrome: CGFloat = 96                        // 顶 tab + 底 toolbar + 两道分隔 + 网格上下 padding
+        let rows = max(2, min(5, Int(ceil(Double(max(itemCount, 1)) / Double(columns)))))
+        return (chrome + CGFloat(rows) * rowHeight).rounded()
     }
 
     // MARK: - 显示 / 收起
 
     /// 呼出瞬态:从刘海/回退区下方"长出来"(nonactivating 取键焦点做导航但不抢前台)+ 起鼠标离开监听。
-    func presentTransient(below resolution: NotchGeometry.Resolution) {
+    func presentTransient(below resolution: NotchGeometry.Resolution, itemCount: Int) {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
         panel.mode = .transient
-        let target = standardFrame(below: resolution)
+        let target = standardFrame(below: resolution, itemCount: itemCount)
         anchorRect = resolution.rect
         // 起始:刘海宽的小条,顶边贴刘海底 → 向下+两侧长到标准尺寸。
         let start = NSRect(x: target.midX - resolution.rect.width / 2,
@@ -122,25 +130,28 @@ final class PanelController {
 
     // MARK: - 几何 / 窗口
 
-    /// 标准 frame:刘海/回退区正下方居中,顶边贴刘海底(向下展开)。
-    private func standardFrame(below resolution: NotchGeometry.Resolution) -> NSRect {
+    /// 标准 frame:刘海/回退区正下方居中,顶边贴刘海底(向下展开)。高度按条目数自适应。
+    private func standardFrame(below resolution: NotchGeometry.Resolution, itemCount: Int) -> NSRect {
         let anchor = resolution.rect
-        let size = standardSize
-        return NSRect(x: anchor.midX - size.width / 2,
-                      y: anchor.minY - size.height,   // anchor.minY = 刘海底 = 面板顶
-                      width: size.width, height: size.height)
+        let w = panelWidth
+        let h = panelHeight(itemCount: itemCount)
+        return NSRect(x: anchor.midX - w / 2,
+                      y: anchor.minY - h,   // anchor.minY = 刘海底 = 面板顶
+                      width: w, height: h)
     }
 
     private func ensurePanel() -> NichePanel {
         if let panel { return panel }
         let p = NichePanel(
-            contentRect: NSRect(origin: .zero, size: standardSize),
-            styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],   // 固定尺寸:不带 .resizable
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)),
+            styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],   // 自适应高度:不带 .resizable
             backing: .buffered, defer: false
         )
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
+        // 强制暗色外观:面板要与黑色刘海连续(像从刘海拉出的暗色玻璃抽屉),不随系统亮/暗变浅灰。
+        p.appearance = NSAppearance(named: .darkAqua)
         p.contentView = NSHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
         p.mode = .transient
         panel = p

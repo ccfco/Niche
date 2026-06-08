@@ -10,14 +10,33 @@ struct PanelSurface: View {
     @EnvironmentObject private var motion: MotionPreferences
     let cornerRadius: CGFloat
 
+    /// 抽屉形:顶角小、底角大 —— 像从刘海下方"拉出"的抽屉,而非凭空浮的圆角矩形。
+    private var shape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: cornerRadius * 0.5,
+            bottomLeadingRadius: cornerRadius,
+            bottomTrailingRadius: cornerRadius,
+            topTrailingRadius: cornerRadius * 0.5,
+            style: .continuous
+        )
+    }
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if motion.prefersOpaque {
             shape.fill(Color(nsColor: .windowBackgroundColor))
                 .overlay(shape.strokeBorder(Color.primary.opacity(0.6), lineWidth: 1))
         } else {
-            shape.fill(.regularMaterial)
-                .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+            // 暗色玻璃:ultraThin 背景模糊(折射壁纸)+ 暗色 tint(与黑色刘海连续、压住背景花纹)+
+            // 顶缘高光描边(玻璃受光边,macOS 26 标志)。在 .darkAqua 外观下渲染,稳定不随焦点变。
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(Color.black.opacity(0.30)))
+                .overlay(
+                    shape.strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.30), .white.opacity(0.06)],
+                            startPoint: .top, endPoint: .bottom),
+                        lineWidth: 0.8)
+                )
         }
     }
 }

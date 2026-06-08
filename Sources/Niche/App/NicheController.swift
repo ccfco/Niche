@@ -142,7 +142,7 @@ final class NicheController {
         guard let screen = screens.activeScreen else { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
-        panelController.presentTransient(below: screens.resolution(for: screen))
+        panelController.presentTransient(below: screens.resolution(for: screen), itemCount: model.sortedItems.count)
         observeTransientFocus()
     }
 
