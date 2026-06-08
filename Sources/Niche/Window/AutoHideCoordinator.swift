@@ -11,7 +11,8 @@ final class AutoHideCoordinator {
     enum Suppressor: Hashable {
         case quickLook    // Quick Look 活跃
         case contextMenu  // 自拼右键菜单展开中(menuWillOpen/menuDidClose 驱动)
-        case dragging     // 拖拽进行中(dragging session 起止驱动)
+        case dragging     // 拖入(面板是 drop 目标)进行中
+        case draggingOut  // 拖出(面板是 drag 源)进行中
         case renaming     // 就地重命名编辑中
     }
 
