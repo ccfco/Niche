@@ -48,6 +48,8 @@ final class NicheController {
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
+    private var selectionCancellable: AnyCancellable?
+    private var quickLookContentCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -97,6 +99,28 @@ final class NicheController {
         volumes.onMount = { [weak self] url in
             self?.model.mirrors.forEach { $0.volumeDidMount(url) }
         }
+
+        // Quick Look:浮于面板之上(取宿主当前层级 +1)+ 跟随选中双向同步(spec §4.5/§4.6)。
+        quickLook.hostWindowLevel = { [weak self] in self?.panelController.panel?.level }
+        // QL 内 ←→ 翻页 → 回写面板选中(关闭后选中停在最后预览项)。相等守卫防与下面的转发回环。
+        quickLook.onIndexChange = { [weak self] index in
+            guard let self, self.model.selection.index != index else { return }
+            self.model.selection = GridSelection(index: index)
+        }
+        // 面板选中变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
+        selectionCancellable = model.$selection
+            .sink { [weak self] selection in
+                guard let self, let index = selection.index else { return }
+                self.quickLook.syncCurrentIndex(index)
+            }
+        // 内容(排序/目录下钻/FSEvents)变化 → QL active 时刷新预览列表并定位。objectWillChange 在变更
+        // 前触发,故 receive(on:) 推迟到下一 runloop 让 sortedItems 反映新态;updateItems 内 urls 未变跳过。
+        quickLookContentCancellable = model.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                guard let self, self.quickLook.isActive else { return }
+                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: self.model.selection.index ?? 0)
+            }
 
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
         renameCancellable = model.$renamingItemID

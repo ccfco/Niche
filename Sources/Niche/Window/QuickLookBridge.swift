@@ -12,15 +12,39 @@ final class QuickLookController: NSObject {
     private var urls: [URL] = []
     private var index = 0
     private var closeObserver: NSObjectProtocol?
+    /// 监听 QL 内 ←→ 翻页(currentPreviewItemIndex 变化)是否已注册,避免重复 add/remove KVO。
+    private var observingIndex = false
+    /// 被 KVO 观察的 QL 面板弱引用:供 deinit 移除 observer,避免在 nonisolated deinit 里调
+    /// @MainActor 的 QLPreviewPanel.shared()(消除隔离告警 + 守 deinit 红线)。
+    private weak var observedPanel: QLPreviewPanel?
+
+    /// 宿主面板当前层级提供者(由 NicheController 注入):QL present 时抬到「宿主 +1」浮于面板之上。
+    /// 返回 nil(宿主面板不存在)则不抬层级,保留 QL 系统默认 —— 不臆造一个可能盖住菜单/通知的高层。
+    var hostWindowLevel: (() -> NSWindow.Level?)?
+    /// QL 内翻页 → 回写面板选中(NicheController 据此把选中停在最后预览项)。
+    var onIndexChange: ((Int) -> Void)?
 
     init(autoHide: AutoHideCoordinator) {
         self.autoHide = autoHide
         super.init()
     }
 
+    /// 兜底:控制器释放前若仍在 observing,移除 KVO / 通知 observer(Apple KVO 要求释放前显式移除)。
+    /// deinit 是 nonisolated —— 只做 observer 移除,不调 @MainActor 方法(守 CLAUDE.md deinit 红线)。
+    deinit {
+        if observingIndex { observedPanel?.removeObserver(self, forKeyPath: "currentPreviewItemIndex") }
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+    }
+
     /// 当前预览面板窗口(供 AutoHideCoordinator.ownedWindows 排除"焦点转到预览窗口")。
     var previewPanel: NSWindow? {
         QLPreviewPanel.sharedPreviewPanelExists() ? QLPreviewPanel.shared() : nil
+    }
+
+    /// QL 当前是否由本控制器驱动且可见(用于选中跟随 / 内容刷新的前置判定)。
+    var isActive: Bool {
+        guard QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared() else { return false }
+        return panel.isVisible && panel.dataSource === self
     }
 
     /// 预览一组 URL(通常是当前可见排序后的条目),定位到 index。
@@ -50,6 +74,12 @@ final class QuickLookController: NSObject {
         panel.currentPreviewItemIndex = index
         panel.makeKeyAndOrderFront(nil)
         panel.reloadData()
+        // 抬到宿主面板之上:本面板处于异常高层(瞬态 .statusBar),QL 默认层级低会被压住,
+        // 出现"预览在面板后面看不见"。设为宿主当前层级 +1(瞬态/常驻都覆盖);宿主缺失不抬。
+        if let provider = hostWindowLevel, let hostLevel = provider() {
+            panel.level = NSWindow.Level(rawValue: hostLevel.rawValue + 1)
+        }
+        beginObservingIndex(panel)
 
         // QLPreviewPanel 无 didClose 回调;观察其 NSWindow.willClose 释放抑制。
         // 先移除可能残留的旧 observer(连续预览时避免覆盖泄漏)。
@@ -64,8 +94,65 @@ final class QuickLookController: NSObject {
         }
     }
 
+    // MARK: - 选中跟随(面板 ↔ QL 双向,各带相等守卫防回环)
+
+    /// 面板选中变化 → QL 跳到该项(仅 active 且 index 有效且与当前不同)。
+    func syncCurrentIndex(_ newIndex: Int) {
+        guard isActive, urls.indices.contains(newIndex), let panel = QLPreviewPanel.shared() else { return }
+        guard panel.currentPreviewItemIndex != newIndex else { return }
+        index = newIndex
+        panel.currentPreviewItemIndex = newIndex
+    }
+
+    /// 内容(排序/目录)变化 → 刷新 QL 列表并定位(urls 未变则跳过,避免无谓 reload 抖动)。
+    func updateItems(_ newURLs: [URL], current: Int) {
+        guard isActive, urls != newURLs, let panel = QLPreviewPanel.shared() else { return }
+        urls = newURLs
+        panel.reloadData()
+        if urls.indices.contains(current) {
+            index = current
+            panel.currentPreviewItemIndex = current
+        }
+    }
+
+    /// KVO 监听 QL 内 ←→ 翻页:Apple 私有属性未必 @objc dynamic(Swift keyPath observe 不保证
+    /// 触发),用 ObjC 字符串 KVO 更稳。值变化 → onIndexChange 回写面板选中。
+    private func beginObservingIndex(_ panel: QLPreviewPanel) {
+        guard !observingIndex else { return }
+        panel.addObserver(self, forKeyPath: "currentPreviewItemIndex", options: [.new], context: nil)
+        observedPanel = panel
+        observingIndex = true
+    }
+
+    private func endObservingIndex() {
+        guard observingIndex else { return }
+        observingIndex = false
+        observedPanel?.removeObserver(self, forKeyPath: "currentPreviewItemIndex")
+        observedPanel = nil
+    }
+
+    override nonisolated func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                           change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        guard keyPath == "currentPreviewItemIndex",
+              let newIndex = change?[.newKey] as? Int else { return }
+        // QL KVO 回调线程无文档保证:主线程直接 assumeIsolated,否则跳主线程(Codex review,
+        // 避免非主线程回调时 assumeIsolated runtime fatal)。
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { self.handleIndexChange(newIndex) }
+        } else {
+            Task { @MainActor [weak self] in self?.handleIndexChange(newIndex) }
+        }
+    }
+
+    private func handleIndexChange(_ newIndex: Int) {
+        guard index != newIndex else { return }
+        index = newIndex
+        onIndexChange?(newIndex)
+    }
+
     private func handleClose() {
         autoHide.end(.quickLook)
+        endObservingIndex()
         if let closeObserver {
             NotificationCenter.default.removeObserver(closeObserver)
             self.closeObserver = nil
