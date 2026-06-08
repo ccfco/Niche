@@ -121,10 +121,10 @@ final class DirectoryMirror: ObservableObject {
 
         // arm 顺序 = 先建流再快照(§4.1.1),处理"建流到快照之间"的事件。
         startStream()
-        captureAndPublish()
+        guard captureAndPublish() else { return }   // 失败保留 captureAndPublish 设的错误态,不覆盖成 ready
         startICloudIfNeeded()
         armed = true
-        state = .ready
+        // state 已由 captureAndPublish 设为 .ready,不再无条件覆盖
     }
 
     // MARK: - FSEvents
@@ -162,7 +162,8 @@ final class DirectoryMirror: ObservableObject {
     // MARK: - 快照
 
     /// 重扫目录、与旧快照 diff、发布。任何变化都走这条路径(镜像靠比对而非增量信任)。
-    private func captureAndPublish() {
+    @discardableResult
+    private func captureAndPublish() -> Bool {
         guard let fresh = try? DirectorySnapshot.capture(directory: resolvedURL, showHidden: showHidden) else {
             // 列目录失败:可能授权被撤销或卷消失。
             if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
@@ -170,11 +171,12 @@ final class DirectoryMirror: ObservableObject {
             } else {
                 state = .permissionDenied
             }
-            return
+            return false
         }
         snapshot = fresh
         publishItems()
         if case .ready = state {} else { state = .ready }
+        return true
     }
 
     func refresh() { captureAndPublish() }
