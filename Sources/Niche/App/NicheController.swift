@@ -133,6 +133,9 @@ final class NicheController {
     private func present(draggingFile: Bool) {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
         guard model.windowMode != .pinned else { return }
+        // 幂等:面板已展开时重复呼出(hover 进面板再回 32pt 顶条会再次跨界触发)应是 no-op,
+        // 否则会重跑展开动画并重新 armCurrent() 触发 TCC 探针。
+        guard !transient.isExpanded else { return }
         guard let screen = screens.activeScreen else { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
