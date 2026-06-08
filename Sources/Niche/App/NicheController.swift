@@ -103,15 +103,18 @@ final class NicheController {
 
         // Quick Look:浮于面板之上(取宿主当前层级 +1)+ 跟随选中双向同步(spec §4.5/§4.6)。
         quickLook.hostWindowLevel = { [weak self] in self?.panelController.panel?.level }
-        // QL 内 ←→ 翻页 → 回写面板选中(关闭后选中停在最后预览项)。相等守卫防与下面的转发回环。
+        // QL 内 ←→ 翻页 → 把光标(单选)移到该项(关闭后选中停在最后预览项)。相等守卫防与转发回环。
+        // 有意设计:空格预览「全部条目从光标起」,翻页 = 在全集里导航 = 单选移动(与方向键一致,
+        // Task D 验收「开预览后 ↑↓ 换文件」),故翻页坍缩多选为单选,不是 bug(Codex review)。
         quickLook.onIndexChange = { [weak self] index in
-            guard let self, self.model.selection.index != index else { return }
-            self.model.selection = GridSelection(index: index)
+            guard let self, self.model.cursorIndex != index,
+                  self.model.sortedItems.indices.contains(index) else { return }
+            self.model.selectSingle(self.model.sortedItems[index].id)
         }
-        // 面板选中变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
-        selectionCancellable = model.$selection
-            .sink { [weak self] selection in
-                guard let self, let index = selection.index else { return }
+        // 光标变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
+        selectionCancellable = model.$cursorID
+            .sink { [weak self] _ in
+                guard let self, let index = self.model.cursorIndex else { return }
                 self.quickLook.syncCurrentIndex(index)
             }
         // 内容(排序/目录下钻/FSEvents)变化 → QL active 时刷新预览列表并定位。objectWillChange 在变更
@@ -120,7 +123,7 @@ final class NicheController {
             .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self, self.quickLook.isActive else { return }
-                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: self.model.selection.index ?? 0)
+                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: self.model.cursorIndex ?? 0)
             }
 
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。

@@ -236,9 +236,9 @@ final class PanelController {
     /// 列表方向键:Table 已是第一响应者 → 放行给原生 NSTableView(原生 ∓1 + 自动滚动 + 回写
     /// 选中 binding);否则(@FocusState 未生效:首现/QL 返回/pin 切换)兜底走 model.move(cols=1)
     /// 并吃掉事件 —— 消除「按键无响应」死区(Codex review:列表方向键不应依赖焦点成功)。
-    private func listArrow(_ direction: GridSelection.Direction, _ event: NSEvent) -> NSEvent? {
-        if panel?.firstResponder is NSTableView { return event }
-        model.move(direction)
+    private func listArrow(_ direction: GridSelection.Direction, extend: Bool, _ event: NSEvent) -> NSEvent? {
+        if panel?.firstResponder is NSTableView { return event }   // 原生 Table:含 ⇧+方向键区间
+        model.moveCursor(direction, extend: extend)
         return nil
     }
 
@@ -252,36 +252,37 @@ final class PanelController {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let cmd = flags.contains(.command)
         let option = flags.contains(.option)
+        let shift = flags.contains(.shift)
         let isList = model.viewMode == .list
 
         switch event.keyCode {
         case 126: // ↑
-            if cmd { model.currentMirror?.goUp(); model.selection = GridSelection(index: nil); return nil }
-            if isList { return listArrow(.up, event) }
-            model.move(.up); return nil
+            if cmd { model.currentMirror?.goUp(); model.clearSelection(); return nil }
+            if isList { return listArrow(.up, extend: shift, event) }
+            model.moveCursor(.up, extend: shift); return nil
         case 125: // ↓
             if cmd {
-                if let item = model.selectedItem, item.isDirectory {
-                    model.currentMirror?.enter(item.url); model.selection = GridSelection(index: nil)
+                if let item = model.cursorItem, item.isDirectory {
+                    model.currentMirror?.enter(item.url); model.clearSelection()
                 }
                 return nil
             }
-            if isList { return listArrow(.down, event) }
-            model.move(.down); return nil
+            if isList { return listArrow(.down, extend: shift, event) }
+            model.moveCursor(.down, extend: shift); return nil
         case 123: // ←
             if isList { return event }   // 列表无横向语义,交 Table(默认无操作)
-            model.move(.left); return nil
+            model.moveCursor(.left, extend: shift); return nil
         case 124: // →
             if isList { return event }
-            model.move(.right); return nil
-        case 49: // 空格 → Quick Look
-            if let idx = model.selection.index {
+            model.moveCursor(.right, extend: shift); return nil
+        case 49: // 空格 → Quick Look(从光标项起,可在全部条目间翻页)
+            if let idx = model.cursorIndex {
                 actions.onQuickLook(model.sortedItems.map(\.url), idx)
             }
             return nil
-        case 36, 76: // Return / Enter → 打开 / 下钻
-            if let item = model.selectedItem {
-                if item.isDirectory { model.currentMirror?.enter(item.url); model.selection = GridSelection(index: nil) }
+        case 36, 76: // Return / Enter → 打开 / 下钻(光标项)
+            if let item = model.cursorItem {
+                if item.isDirectory { model.currentMirror?.enter(item.url); model.clearSelection() }
                 else { actions.onOpen(item) }
             }
             return nil
@@ -297,6 +298,7 @@ final class PanelController {
         // ⌘ 字母快捷键(spec §4.5/§4.7)。
         if cmd, let ch = event.charactersIgnoringModifiers?.lowercased() {
             switch ch {
+            case "a": model.selectAll(); return nil
             case "c" where option: actions.onCopyPath(model.selectionURLs); return nil
             case "c": actions.onCopy(model.selectionURLs); return nil
             case "x": actions.onCut(model.selectionURLs); return nil

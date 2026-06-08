@@ -9,7 +9,12 @@ import Combine
 final class PanelModel: ObservableObject {
     @Published private(set) var mirrors: [DirectoryMirror] = []
     @Published var currentTab: Int = 0
-    @Published var selection = GridSelection(index: nil)
+    /// 选中条目 id 集合(多选,#5)。UI 据此画选中态;ops/拖出/QuickLook 用 selectionURLs。
+    @Published private(set) var selectedIDs: Set<FileItem.ID> = []
+    /// 键盘光标 / Quick Look 预览目标 / 激活(回车·双击)目标。单选时 = 该项;多选时 = 最近一次落点。
+    @Published private(set) var cursorID: FileItem.ID?
+    /// ⇧ 区间选择的锚点(单选/⌘点重置;⇧ 从锚点拉到光标)。
+    private var anchorID: FileItem.ID?
     /// 排序态持久化(底栏菜单 / Table 表头共写此真相源,重启保留)。
     @Published var sortOrder = FileSortOrder.load() {
         didSet { sortOrder.save() }
@@ -41,9 +46,21 @@ final class PanelModel: ObservableObject {
         (currentMirror?.items ?? []).sorted(by: sortOrder.comparator())
     }
 
-    var selectedItem: FileItem? {
-        guard let idx = selection.index, sortedItems.indices.contains(idx) else { return nil }
-        return sortedItems[idx]
+    /// 光标项(键盘焦点 / 预览 / 激活目标)。
+    var cursorItem: FileItem? {
+        guard let id = cursorID else { return nil }
+        return sortedItems.first { $0.id == id }
+    }
+
+    /// 光标在当前排序后条目中的下标(供 Quick Look 定位 / 自动滚动)。
+    var cursorIndex: Int? {
+        guard let id = cursorID else { return nil }
+        return sortedItems.firstIndex { $0.id == id }
+    }
+
+    /// 选中项(按当前排序顺序)。
+    var selectedItems: [FileItem] {
+        sortedItems.filter { selectedIDs.contains($0.id) }
     }
 
     // MARK: - tab/镜像管理
@@ -68,7 +85,7 @@ final class PanelModel: ObservableObject {
     func selectTab(_ index: Int) {
         guard mirrors.indices.contains(index) else { return }
         currentTab = index
-        selection = GridSelection(index: nil)
+        clearSelection()
         subscribeToCurrent()
         armCurrent()
     }
@@ -84,16 +101,84 @@ final class PanelModel: ObservableObject {
         currentMirror?.arm()
     }
 
-    func move(_ direction: GridSelection.Direction) {
-        // 列表模式是一维(每行一项),有效列数恒为 1 —— 不能复用上次图标模式残留的 `columns`,
-        // 否则 ↑↓ 会按图标列数跳多行(#1)。图标模式用真实网格列数。
+    // MARK: - 选中(多选,#5/#6)
+
+    /// 单选(普通点击 / 无修饰方向键):只选该项,重置光标与锚点。
+    func selectSingle(_ id: FileItem.ID) {
+        selectedIDs = [id]
+        cursorID = id
+        anchorID = id
+    }
+
+    /// 切换(⌘ 点击):离散增删该项,光标与锚点移到该项。
+    func toggle(_ id: FileItem.ID) {
+        if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) }
+        cursorID = id
+        anchorID = id
+    }
+
+    /// 区间(⇧ 点击 / ⇧ 方向键):从锚点到该项(按当前排序顺序)整段选中,光标移到该项,锚点不动。
+    func selectRange(to id: FileItem.ID) {
+        let order = sortedItems.map(\.id)
+        let anchor = anchorID ?? cursorID ?? id
+        guard let a = order.firstIndex(of: anchor), let b = order.firstIndex(of: id) else {
+            selectSingle(id); return
+        }
+        let range = a <= b ? a...b : b...a
+        selectedIDs = Set(order[range])
+        cursorID = id
+        anchorID = anchor
+    }
+
+    /// 全选(⌘A):选当前目录全部可见条目。
+    func selectAll() {
+        let order = sortedItems.map(\.id)
+        selectedIDs = Set(order)
+        cursorID = order.last
+        anchorID = order.first
+    }
+
+    /// 清空选中(点空白 / 切 tab / 下钻)。
+    func clearSelection() {
+        selectedIDs = []
+        cursorID = nil
+        anchorID = nil
+    }
+
+    /// 列表原生 Table 的 Set selection 回写:镜像到模型 + 据增量推断光标。
+    func syncListSelection(_ ids: Set<FileItem.ID>) {
+        let added = ids.subtracting(selectedIDs)
+        let baseIdx = cursorIndex ?? 0   // 旧光标下标(更新 selectedIDs 前算)
+        selectedIDs = ids
+        if !added.isEmpty {
+            // Set 无序:在新增项里按 sortedItems 顺序取「距旧光标最远」者作为新光标(= ⇧ 扩展的 lead
+            // 端 / ⌘ 点的唯一新增项),避免 Set.first 不确定导致 Quick Look 定位漂移(Codex review)。
+            let order = sortedItems.map(\.id)
+            cursorID = added
+                .compactMap { id in order.firstIndex(of: id).map { (id: id, dist: abs($0 - baseIdx)) } }
+                .max { $0.dist < $1.dist }?.id
+        } else if cursorID == nil || !ids.contains(cursorID!) {
+            cursorID = sortedItems.first { ids.contains($0.id) }?.id
+        }
+        anchorID = cursorID
+    }
+
+    /// 方向键移动光标。extend=⇧(从锚点拉区间);否则单选移动。
+    /// 列表模式有效列数恒为 1(一维),图标模式用真实网格列数(避免列表 ↑↓ 按图标列跳多行 #1)。
+    func moveCursor(_ direction: GridSelection.Direction, extend: Bool) {
+        let order = sortedItems
+        guard !order.isEmpty else { clearSelection(); return }
         let cols = viewMode == .list ? 1 : columns
-        selection = selection.moved(direction, columns: cols, count: sortedItems.count)
+        let current = cursorIndex
+        let moved = GridSelection(index: current).moved(direction, columns: cols, count: order.count)
+        guard let newIndex = moved.index, order.indices.contains(newIndex) else { return }
+        let newID = order[newIndex].id
+        if extend { selectRange(to: newID) } else { selectSingle(newID) }
     }
 
     func beginRename(_ url: URL) { renamingItemID = url }
     func endRename() { renamingItemID = nil }
 
-    /// 当前选中项的 URL 集合(MVP 单选;多选基础设施留待后续)。
-    var selectionURLs: [URL] { selectedItem.map { [$0.url] } ?? [] }
+    /// 选中项 URL 集合(多选;按当前排序顺序)。拷贝 / 拖出 / 废纸篓 / 右键作用于此。
+    var selectionURLs: [URL] { selectedItems.map(\.url) }
 }

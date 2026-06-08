@@ -11,21 +11,24 @@ import AppKit
 /// control-左键)`hitTest` 返回 nil 透给下层 `RightClickCatcher`。拖真实 file URL(不用 promise)。
 struct DragSourceView: NSViewRepresentable {
     let url: URL
-    var onSelect: () -> Void = {}
+    var onClick: (NSEvent.ModifierFlags) -> Void = { _ in }
     var onActivate: () -> Void = {}
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}
+    /// 拖出时实际携带的 URL 集合(多选:拖已选中项 → 拖整组;拖未选中项 → 仅该项)。
+    /// 闭包延迟到拖拽发起时求值,读最新选中态(#5 多选拖出)。空则回退 [url]。
+    var dragURLs: () -> [URL] = { [] }
 
     func makeNSView(context: Context) -> DragSourceNSView {
         let v = DragSourceNSView()
-        v.configure(url: url, onSelect: onSelect, onActivate: onActivate,
-                    onDragBegin: onDragBegin, onDragEnd: onDragEnd)
+        v.configure(url: url, onClick: onClick, onActivate: onActivate,
+                    onDragBegin: onDragBegin, onDragEnd: onDragEnd, dragURLs: dragURLs)
         return v
     }
 
     func updateNSView(_ nsView: DragSourceNSView, context: Context) {
-        nsView.configure(url: url, onSelect: onSelect, onActivate: onActivate,
-                         onDragBegin: onDragBegin, onDragEnd: onDragEnd)
+        nsView.configure(url: url, onClick: onClick, onActivate: onActivate,
+                         onDragBegin: onDragBegin, onDragEnd: onDragEnd, dragURLs: dragURLs)
     }
 
     /// view 被移除时兜底:若拖拽仍在进行,解除 auto-hide 抑制(防 endedAt 不触达导致泄漏)。
@@ -36,23 +39,26 @@ struct DragSourceView: NSViewRepresentable {
 
 final class DragSourceNSView: NSView, NSDraggingSource {
     private var url: URL?
-    private var onSelect: () -> Void = {}
+    private var onClick: (NSEvent.ModifierFlags) -> Void = { _ in }
     private var onActivate: () -> Void = {}
     private var onDragBegin: () -> Void = {}
     private var onDragEnd: () -> Void = {}
+    private var dragURLs: () -> [URL] = { [] }
 
     private var mouseDownPoint: NSPoint?
     private var didStartDrag = false
     /// 拖拽是否进行中(willBegin 到 ended 之间)。用于 view 被移除时兜底解除 auto-hide 抑制。
     private var dragInProgress = false
 
-    func configure(url: URL, onSelect: @escaping () -> Void, onActivate: @escaping () -> Void,
-                   onDragBegin: @escaping () -> Void, onDragEnd: @escaping () -> Void) {
+    func configure(url: URL, onClick: @escaping (NSEvent.ModifierFlags) -> Void, onActivate: @escaping () -> Void,
+                   onDragBegin: @escaping () -> Void, onDragEnd: @escaping () -> Void,
+                   dragURLs: @escaping () -> [URL] = { [] }) {
         self.url = url
-        self.onSelect = onSelect
+        self.onClick = onClick
         self.onActivate = onActivate
         self.onDragBegin = onDragBegin
         self.onDragEnd = onDragEnd
+        self.dragURLs = dragURLs
     }
 
     /// 只认领左键;右键 / control-左键返回 nil,透给下层 RightClickCatcher 弹自拼菜单。
@@ -79,15 +85,25 @@ final class DragSourceNSView: NSView, NSDraggingSource {
         guard (dx * dx + dy * dy) > 16 else { return }   // 阈值 ~4pt,区分点击与拖拽
         didStartDrag = true
 
-        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
-        item.setDraggingFrame(bounds, contents: NSWorkspace.shared.icon(forFile: url.path))
-        beginDraggingSession(with: [item], event: event, source: self)
+        // 多选拖出:拖整组(本项在选中集内时)。空回退本项。各 URL 一个 NSDraggingItem,
+        // 本项的角标在原 bounds,其余略微错位堆叠(Finder 拖多文件的层叠观感)。
+        let urls = { let u = dragURLs(); return u.isEmpty ? [url] : u }()
+        let items: [NSDraggingItem] = urls.enumerated().map { offset, dragURL in
+            let item = NSDraggingItem(pasteboardWriter: dragURL as NSURL)
+            let frame = dragURL == url
+                ? bounds
+                : bounds.offsetBy(dx: CGFloat(offset) * 4, dy: CGFloat(offset) * -4)
+            item.setDraggingFrame(frame, contents: NSWorkspace.shared.icon(forFile: dragURL.path))
+            return item
+        }
+        beginDraggingSession(with: items, event: event, source: self)
     }
 
     override func mouseUp(with event: NSEvent) {
         defer { mouseDownPoint = nil }
         guard !didStartDrag else { return }   // 拖拽过就不是点击
-        if event.clickCount >= 2 { onActivate() } else { onSelect() }
+        // 双击激活;单击带修饰键交回上层(⌘ 离散 / ⇧ 区间 / 普通单选)。
+        if event.clickCount >= 2 { onActivate() } else { onClick(event.modifierFlags) }
     }
 
     // MARK: - NSDraggingSource

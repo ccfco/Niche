@@ -23,8 +23,8 @@ struct FileGridView: View {
                 }
                 // 列数变化(resize)→ 回填 model,使键盘跨行移动与真实布局一致。
                 .onChange(of: columns, initial: true) { _, new in model.columns = new }
-                // 键盘移动选中 → 滚动跟随,保持选中项可见(spec §4.7 手感)。
-                .onChange(of: model.selection.index) { _, index in
+                // 键盘移动光标 → 滚动跟随,保持光标项可见(spec §4.7 手感)。
+                .onChange(of: model.cursorIndex) { _, index in
                     guard let index else { return }
                     // Reduce Motion:滚动瞬时到位,不做动画(spec §4.3 非可选)。
                     if motion.reduceMotion {
@@ -40,6 +40,10 @@ struct FileGridView: View {
                 EmptyStateView(kind: .empty)
             }
         }
+        // 点空白处取消选中(#6):最底层透明命中层,只接落空的左键,不抢 cell(cell 在上层)。
+        .background(
+            Color.clear.contentShape(Rectangle()).onTapGesture { model.clearSelection() }
+        )
         // 空白处右键 → 背景菜单(新建文件夹/粘贴)。置于内容之下:cell 自带 RightClickCatcher 在上层
         // 优先认领落到条目上的右键,gap/空白处的右键穿透到此(catcher 只认右键,不挡左键/拖入)。
         .background(RightClickCatcher(makeMenu: { actions.onContextMenuBackground($0) }))
@@ -60,7 +64,7 @@ struct FileGridView: View {
     private func cell(index: Int, item: FileItem) -> some View {
         FileCellView(
             item: item,
-            isSelected: model.selection.index == index,
+            isSelected: model.selectedIDs.contains(item.id),
             isRenaming: model.renamingItemID == item.id,
             edge: edge,
             onRenameCommit: { newName in
@@ -69,20 +73,30 @@ struct FileGridView: View {
             },
             onRenameCancel: { model.endRename() },
             makeContextMenu: { anchor in
-                model.selection = GridSelection(index: index)
-                return actions.onContextMenu([item.url], anchor)
+                // 右键未选中的项 → 单选它;已在多选内 → 保留多选(菜单作用于整组)。
+                if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
+                return actions.onContextMenu(model.selectionURLs, anchor)
             },
-            onSelect: { model.selection = GridSelection(index: index) },
+            onClick: { flags in handleClick(item.id, flags) },
             onActivate: { activate(item) },
             onDragBegin: actions.onDragBegin,
-            onDragEnd: actions.onDragEnd
+            onDragEnd: actions.onDragEnd,
+            // 拖已选中项 → 拖整组多选;拖未选中项 → 仅该项(Finder 语义)。
+            dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] }
         )
+    }
+
+    /// 图标模式点击选中:⌘ 离散切换 / ⇧ 区间 / 普通单选(对齐 Finder;列表由原生 Table 处理)。
+    private func handleClick(_ id: FileItem.ID, _ flags: NSEvent.ModifierFlags) {
+        if flags.contains(.command) { model.toggle(id) }
+        else if flags.contains(.shift) { model.selectRange(to: id) }
+        else { model.selectSingle(id) }
     }
 
     private func activate(_ item: FileItem) {
         if item.isDirectory {
             model.currentMirror?.enter(item.url)
-            model.selection = GridSelection(index: nil)
+            model.clearSelection()
         } else {
             actions.onOpen(item)
         }

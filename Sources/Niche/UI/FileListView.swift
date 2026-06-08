@@ -12,7 +12,7 @@ struct FileListView: View {
     @FocusState private var tableFocused: Bool
 
     var body: some View {
-        Table(model.sortedItems, selection: selectionBinding, sortOrder: sortBinding) {
+        Table(model.sortedItems, selection: multiSelectionBinding, sortOrder: sortBinding) {
             TableColumn("名称", value: \.name) { item in nameCell(item) }
             TableColumn("大小", value: \.size) { item in
                 Text(sizeLabel(item)).foregroundStyle(.secondary).monospacedDigit()
@@ -48,20 +48,12 @@ struct FileListView: View {
         )
     }
 
-    // 选中态在 model.selection(index)与 Table(by id)之间双向映射。
-    private var selectionBinding: Binding<FileItem.ID?> {
+    // 列表多选:直接用 Table 原生 Set selection(⌘ 离散 / ⇧ 区间 / ⌘A 全选 / 点空白清空均原生);
+    // set 回写镜像到模型并据增量推断光标(供 Quick Look / 激活)。
+    private var multiSelectionBinding: Binding<Set<FileItem.ID>> {
         Binding(
-            get: {
-                guard let idx = model.selection.index, model.sortedItems.indices.contains(idx) else { return nil }
-                return model.sortedItems[idx].id
-            },
-            set: { id in
-                if let id, let idx = model.sortedItems.firstIndex(where: { $0.id == id }) {
-                    model.selection = GridSelection(index: idx)
-                } else {
-                    model.selection = GridSelection(index: nil)
-                }
-            }
+            get: { model.selectedIDs },
+            set: { ids in model.syncListSelection(ids) }
         )
     }
 
@@ -91,18 +83,16 @@ struct FileListView: View {
         // 驱动 .contextMenu auto-hide 抑制(菜单期间面板不收)。弃用阉割版 SwiftUI .contextMenu(#3)。
         // RightClickCatcher 只认领右键/control-左键,左键(原生选中/双击/拖出)透传不冲突。
         .overlay(RightClickCatcher(makeMenu: { anchor in
-            // 右键先选中该行(原生 Table 右键不自动选中,因 catcher 已拦截);确保菜单作用于正确条目。
-            if let idx = model.sortedItems.firstIndex(where: { $0.id == item.id }) {
-                model.selection = GridSelection(index: idx)
-            }
-            return actions.onContextMenu([item.url], anchor)
+            // 右键未选中的行 → 单选它;已在多选内 → 保留多选(Finder 语义:菜单作用于整组选中)。
+            if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
+            return actions.onContextMenu(model.selectionURLs, anchor)
         }))
     }
 
     private func activate(_ item: FileItem) {
         if item.isDirectory {
             model.currentMirror?.enter(item.url)
-            model.selection = GridSelection(index: nil)
+            model.clearSelection()
         } else {
             actions.onOpen(item)
         }
