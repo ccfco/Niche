@@ -69,13 +69,16 @@ struct FileListView: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
         // 拖出真实 file URL。拖拽 session 中 .mouseMoved 静默,面板不收;松手后在外才收(拖出即走)。
         .draggable(item.url)
-        .contextMenu {
-            Button("打开") { actions.onOpen(item) }
-            Button("重命名") { model.beginRename(item.url) }
-            Divider()
-            Button("拷贝路径") { actions.onCopyPath([item.url]) }
-            Button("移到废纸篓", role: .destructive) { actions.onTrash([item.url]) }
-        }
+        // 右键:与图标模式同款 RightClickCatcher → ContextMenuBuilder(13 项),菜单 delegate
+        // 驱动 .contextMenu auto-hide 抑制(菜单期间面板不收)。弃用阉割版 SwiftUI .contextMenu(#3)。
+        // RightClickCatcher 只认领右键/control-左键,左键(原生选中/双击/拖出)透传不冲突。
+        .overlay(RightClickCatcher(makeMenu: { anchor in
+            // 右键先选中该行(原生 Table 右键不自动选中,因 catcher 已拦截);确保菜单作用于正确条目。
+            if let idx = model.sortedItems.firstIndex(where: { $0.id == item.id }) {
+                model.selection = GridSelection(index: idx)
+            }
+            return actions.onContextMenu([item.url], anchor)
+        }))
     }
 
     private func activate(_ item: FileItem) {
