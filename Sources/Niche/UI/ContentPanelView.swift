@@ -61,10 +61,12 @@ struct ContentPanelView: View {
         case .idle, .loading:
             EmptyStateView(kind: .loading)
         case .permissionDenied:
-            EmptyStateView(kind: .permissionDenied, onAuthorize: { model.currentMirror?.reauthorize() })
+            EmptyStateView(kind: .permissionDenied(model.currentMirror?.binding.displayName ?? "此文件夹"),
+                           onAuthorize: { model.currentMirror?.reauthorize() })
         case let .volumeUnmounted(name):
-            EmptyStateView(kind: .volumeUnmounted(name))
-                .onTapGesture { model.currentMirror?.retryIfPossible() }
+            // 明确「重试」按钮(复用 button 槽),不靠隐形整区可点(#12)。
+            EmptyStateView(kind: .volumeUnmounted(name),
+                           onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .ready:
             switch model.viewMode {
             case .list: FileListView(model: model, edge: edge, actions: actions)

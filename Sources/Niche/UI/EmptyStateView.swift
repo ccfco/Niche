@@ -5,13 +5,13 @@ struct EmptyStateView: View {
     enum Kind: Equatable {
         case noFolders                 // 首次运行/未绑定任何文件夹,引导添加(spec §4.1 首启引导)
         case empty
-        case permissionDenied          // TCC 被拒,需引导授权(spec §4.1.1 失败即引导)
-        case volumeUnmounted(String)   // 绑定目录整卷卸载
+        case permissionDenied(String)  // TCC 被拒,需引导授权;带文件夹名指明是哪个(spec §4.1.1)
+        case volumeUnmounted(String)   // 绑定目录整卷卸载;带卷名
         case loading
     }
 
     let kind: Kind
-    /// 主动作回调(noFolders → 添加文件夹;permissionDenied → 授权并重试)。
+    /// 主动作回调(noFolders → 添加文件夹;permissionDenied → 授权并重试;volumeUnmounted → 重试)。
     var onAuthorize: (() -> Void)?
 
     var body: some View {
@@ -43,18 +43,19 @@ struct EmptyStateView: View {
         switch kind {
         case .noFolders: return "还没有绑定文件夹"
         case .empty: return "此文件夹为空"
-        case .permissionDenied: return "需要访问授权"
+        case let .permissionDenied(name): return "无法访问「\(name)」"
         case let .volumeUnmounted(name): return "卷「\(name)」已卸载"
         case .loading: return "载入中…"
         }
     }
 
-    /// 主动作按钮文案(仅 noFolders / permissionDenied 有按钮)。
+    /// 主动作按钮文案(noFolders / permissionDenied / volumeUnmounted 各有可点按钮,不靠隐形整区)。
     private var buttonTitle: String? {
         switch kind {
         case .noFolders: return "添加文件夹"
         case .permissionDenied: return "点此授权并重试"
-        case .empty, .volumeUnmounted, .loading: return nil
+        case .volumeUnmounted: return "重试"
+        case .empty, .loading: return nil
         }
     }
 }
