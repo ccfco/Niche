@@ -36,7 +36,9 @@ final class NicheController {
         onTrash: { [weak self] urls in self?.ops.trash(urls) },
         onPaste: { [weak self] in self?.paste() },
         onUndo: { [weak self] in self?.ops.undoLast() },
-        onClose: { [weak self] in self?.closeFromKeyboard() }
+        onClose: { [weak self] in self?.closeFromKeyboard() },
+        onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
+        onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
     private lazy var transient = NotchExpansion(model: model, motion: motion, actions: actions)
     private lazy var pinned = PinnedPanelController(

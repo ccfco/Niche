@@ -14,8 +14,13 @@ struct FileCellView: View {
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
     var makeContextMenu: (NSView) -> NSMenu? = { _ in nil }
-    /// VoiceOver 默认激活(打开文件 / 进文件夹);与双击同义。
+    /// 单击选中。
+    var onSelect: () -> Void = {}
+    /// 双击激活(打开文件 / 进文件夹);VoiceOver 默认激活复用此回调。
     var onActivate: () -> Void = {}
+    /// 拖出起止(接面板 auto-hide .draggingOut 抑制)。
+    var onDragBegin: () -> Void = {}
+    var onDragEnd: () -> Void = {}
 
     @State private var thumbnail: NSImage?
     @State private var isHovered = false
@@ -43,10 +48,14 @@ struct FileCellView: View {
                     .font(.caption2).foregroundStyle(.secondary).padding(2)
             }
         }
-        .overlay(RightClickCatcher(makeMenu: makeContextMenu))   // 右键:自拼 NSMenu
+        .overlay(RightClickCatcher(makeMenu: makeContextMenu))   // 右键:自拼 NSMenu(hitTest 只认右键)
         .contentShape(Rectangle())
-        // 拖出:真实 file URL(系统据此判同卷移动/跨卷复制)。
-        .onDrag { NSItemProvider(object: item.url as NSURL) }
+        // 左键(选中/双击)+ 拖出统一交给 AppKit DragSourceView:SwiftUI .onDrag 拿不到
+        // NSDraggingSession 起止回调,无法抑制 auto-hide / 实现拖出即走。重命名态不拦截(让 TextField 可编辑)。
+        .overlay { if !isRenaming {
+            DragSourceView(url: item.url, onSelect: onSelect, onActivate: onActivate,
+                           onDragBegin: onDragBegin, onDragEnd: onDragEnd)
+        } }
 
         // 无障碍:展示态把整格聚合为单一元素(VoiceOver 读"文件名,文件夹/文件,已选中");
         // 重命名态保留 children 可达,否则输入框对 VoiceOver 不可编辑。

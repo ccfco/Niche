@@ -72,10 +72,11 @@ struct FileGridView: View {
                 model.selection = GridSelection(index: index)
                 return actions.onContextMenu([item.url], anchor)
             },
-            onActivate: { activate(item) }
+            onSelect: { model.selection = GridSelection(index: index) },
+            onActivate: { activate(item) },
+            onDragBegin: actions.onDragBegin,
+            onDragEnd: actions.onDragEnd
         )
-        .onTapGesture(count: 2) { activate(item) }
-        .onTapGesture { model.selection = GridSelection(index: index) }
     }
 
     private func activate(_ item: FileItem) {
