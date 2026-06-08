@@ -51,6 +51,7 @@ final class NicheController {
     private var bindingsCancellable: AnyCancellable?
     private var selectionCancellable: AnyCancellable?
     private var quickLookContentCancellable: AnyCancellable?
+    private var relayoutCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -125,6 +126,12 @@ final class NicheController {
                 guard let self, self.quickLook.isActive else { return }
                 self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: self.model.cursorIndex ?? 0)
             }
+
+        // 内容/视图模式/下钻态变化 → 面板高度自适应重算(#14)。objectWillChange 高频,但
+        // relayoutHeight 内部高度无变化即跳过,选中等不改高度的变更天然 no-op。
+        relayoutCancellable = model.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.panelController.relayoutHeight() }
 
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
         renameCancellable = model.$renamingItemID

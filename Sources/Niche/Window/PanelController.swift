@@ -32,6 +32,8 @@ final class PanelController {
     /// 淡出竞态守卫:每次显示自增;hide 淡出回调若被新一次显示抢占(代次不符)则放弃 orderOut。
     private var showGeneration = 0
     private var isHiding = false
+    /// 瞬态生长动画进行中:抑制 relayoutHeight,避免高度重算与展开动画相互覆盖(#14)。
+    private var isPresenting = false
 
     init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
         self.model = model
@@ -59,18 +61,49 @@ final class PanelController {
 
     /// 高度按条目数 + 视图模式自适应:有几行就多高(消灭空白),超出上限滚动。
     /// 列表行矮(~26)、行数=条目数;图标行高(~98)、行数=ceil(条目/列)。chrome 含 tab/工具栏/分隔(列表多表头)。
+    /// 下钻后多一行面包屑(#7 加的路径栏),计入 chrome 否则内容被挤压(#14)。
     private func panelHeight(itemCount: Int) -> CGFloat {
         let count = max(itemCount, 1)
+        let breadcrumb: CGFloat = (model.currentMirror?.canGoUp == true) ? 34 : 0
         if model.viewMode == .list {
             let rowHeight: CGFloat = 26
             let chrome: CGFloat = 112        // tab + 表头 + 底栏 + 分隔 + padding
             let rows = max(4, min(12, count))
-            return (chrome + CGFloat(rows) * rowHeight).rounded()
+            return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
         } else {
             let rowHeight: CGFloat = 98
             let chrome: CGFloat = 96
             let rows = max(2, min(5, Int(ceil(Double(count) / Double(columns)))))
-            return (chrome + CGFloat(rows) * rowHeight).rounded()
+            return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
+        }
+    }
+
+    /// 内容/视图模式/下钻态变化后重算高度并动画到新高度(#14)。顶边固定(从刘海向下生长;
+    /// pinned 保持顶左固定,避免和用户拖动后的位置冲突 —— 只改高度不改顶点)。高度无变化即跳过。
+    func relayoutHeight() {
+        guard let panel, panel.isVisible, !isHiding, !isPresenting else { return }
+        // 用未排序 items.count(高度只关心条目数,与顺序无关)——避免每次 relayout 触发 sortedItems
+        // 全量排序(objectWillChange 高频,选中移动也触发,排序代价不该白花,Codex review)。
+        let count = model.currentMirror?.items.count ?? 0
+        let newHeight = panelHeight(itemCount: count)
+        let frame = panel.frame
+        guard abs(frame.height - newHeight) > 1 else { return }
+        let top = frame.maxY   // 顶边不动
+        var originY = top - newHeight
+        // 屏幕底部夹取:pinned 拖到屏幕下方后向下生长可能越界,保证不低于可视区下沿(Codex review)。
+        if let screenMinY = panel.screen?.visibleFrame.minY, originY < screenMinY {
+            originY = screenMinY
+        }
+        let newFrame = NSRect(x: frame.origin.x, y: originY, width: frame.width,
+                              height: top - originY)
+        if motion.reduceMotion {
+            panel.setFrame(newFrame, display: true)
+        } else {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(newFrame, display: true)
+            }
         }
     }
 
@@ -93,12 +126,15 @@ final class PanelController {
         panel.orderFrontRegardless()
         panel.makeKey()
         let dur = motion.reduceMotion ? 0.16 : 0.3
-        NSAnimationContext.runAnimationGroup { ctx in
+        isPresenting = true   // 生长动画期间抑制 relayout,避免与展开动画打架(#14)
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = dur
             ctx.timingFunction = CAMediaTimingFunction(name: motion.reduceMotion ? .easeOut : .easeInEaseOut)
             panel.animator().setFrame(target, display: true)
             panel.animator().alphaValue = 1
-        }
+        }, completionHandler: { [weak self] in
+            self?.isPresenting = false
+        })
         startMouseLeaveMonitor()
     }
 
