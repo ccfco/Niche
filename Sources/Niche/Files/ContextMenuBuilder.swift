@@ -18,11 +18,19 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     private let onRequestRename: (URL) -> Void
     private var context: Context?
 
-    /// 标准 Finder 标签色。
-    private static let standardTags: [(name: String, symbol: String)] = [
-        ("红色", "circle.fill"), ("橙色", "circle.fill"), ("黄色", "circle.fill"),
-        ("绿色", "circle.fill"), ("蓝色", "circle.fill"), ("紫色", "circle.fill"), ("灰色", "circle.fill"),
+    /// 标准 Finder 标签色(名称 + 圆点色)。此前 symbol 字段恒为 "circle.fill" 且从未用到(死数据);
+    /// 改为携带颜色,菜单项用彩色圆点 image 呈现(#19)。
+    private static let standardTags: [(name: String, color: NSColor)] = [
+        ("红色", .systemRed), ("橙色", .systemOrange), ("黄色", .systemYellow),
+        ("绿色", .systemGreen), ("蓝色", .systemBlue), ("紫色", .systemPurple), ("灰色", .systemGray),
     ]
+
+    /// 标签彩色圆点:SF Symbol circle.fill 上 paletteColors 染色(与 Finder 标签圆点观感一致)。
+    private static func tagDot(_ color: NSColor) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(paletteColors: [color])
+        return NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    }
 
     init(ops: FileOperations, autoHide: AutoHideCoordinator, onRequestRename: @escaping (URL) -> Void) {
         self.ops = ops
@@ -116,6 +124,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             let item = NSMenuItem(title: tag.name, action: #selector(doSetTag(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = tag.name
+            item.image = Self.tagDot(tag.color)   // 彩色圆点(#19)
             submenu.addItem(item)
         }
         submenu.addItem(.separator())
