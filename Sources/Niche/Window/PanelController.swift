@@ -34,6 +34,10 @@ final class PanelController {
     private var isHiding = false
     /// 瞬态生长动画进行中:抑制 relayoutHeight,避免高度重算与展开动画相互覆盖(#14)。
     private var isPresenting = false
+    /// 窗面玻璃:**不直接当 contentView**(那样会随窗口逐帧 resize → NSGlassEffectView 自带液态
+    /// morph,呼出动画又慢又横扫)。改作 clipsToBounds 容器内的顶部锚定子视图,尺寸固定、只被裁切
+    /// 露出 → 玻璃 bounds 全程不变,无 morph(见 ensurePanel / snapGlass / presentTransient)。
+    private var glass: NSGlassEffectView?
 
     init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
         self.model = model
@@ -96,6 +100,7 @@ final class PanelController {
         }
         let newFrame = NSRect(x: frame.origin.x, y: originY, width: frame.width,
                               height: top - originY)
+        snapGlass(toContentHeight: newFrame.height)   // 同 present:玻璃先到新高度,窗口裁切露出(无 morph)
         if motion.reduceMotion {
             panel.setFrame(newFrame, display: true)
         } else {
@@ -122,6 +127,7 @@ final class PanelController {
         let start = NSRect(x: target.midX - resolution.rect.width / 2,
                            y: target.maxY - 6, width: resolution.rect.width, height: 6)
         panel.setFrame(start, display: false)
+        snapGlass(toContentHeight: target.height)   // 玻璃先到目标尺寸,窗口长大只是裁切露出(无 morph)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         panel.makeKey()
@@ -198,6 +204,21 @@ final class PanelController {
                       width: w, height: h)
     }
 
+    /// 窗口 setFrame 动画**之前**调:把玻璃快照到目标内容尺寸、顶部居中锚定,并关隐式动画
+    /// (CATransaction)避免玻璃自己 morph。此后放大窗口 frame,容器裁切露出玻璃;autoresize 只改
+    /// 玻璃**位置**不改 bounds → 全程零 morph(根治呼出"慢 + 从右往左")。height = 目标内容高度。
+    private func snapGlass(toContentHeight height: CGFloat) {
+        guard let glass, let container = panel?.contentView else { return }
+        let w = panelWidth
+        let cb = container.bounds
+        // 相对当前容器:顶边对齐(y = 容器高 - 玻璃高)、水平居中。autoresize 随后维持此锚定。
+        let frame = NSRect(x: (cb.width - w) / 2, y: cb.height - height, width: w, height: height)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glass.frame = frame
+        CATransaction.commit()
+    }
+
     private func ensurePanel() -> NichePanel {
         if let panel { return panel }
         // .titled(而非 borderless)是 Clipin 干净边缘的前提:borderless 窗本身是直角矩形,
@@ -218,13 +239,25 @@ final class PanelController {
         p.minSize = NSSize(width: 1, height: 1)   // 允许"从刘海长出"动画起始的窄条
 
         // 窗面 = macOS 26 原生整窗 Liquid Glass(NSGlassEffectView,Spotlight/访达同款)。
-        // 几何绑定 contentView:自带干净圆角裁切 + 锐利系统阴影 —— 根治旧 NSVisualEffectView +
-        // masksToBounds 的"边缘发糊发灰"。借鉴姊妹项目 Clipin 已在真机验证的配方。
+        // 干净圆角裁切 + 锐利系统阴影 —— 根治旧 NSVisualEffectView + masksToBounds 的"边缘发糊发灰"。
+        //
+        // **不把玻璃直接当 contentView**:呼出是逐帧 setFrame 把窗口从刘海小条放大到整窗,玻璃若随窗口
+        // resize 会触发自带液态 morph(慢 + 高光横扫,盖掉"居中向下生长")。改为:容器(透明 + clipsToBounds)
+        // 作 contentView 随窗口廉价裁切;玻璃作子视图,固定宽高、顶部居中锚定(flexibleBottom/Left/Right
+        // margin),动画前由 snapGlass 快照到目标尺寸 → 窗口长大时玻璃只被"露出",bounds 全程不变,无 morph。
         let glass = NSGlassEffectView()
         glass.cornerRadius = edge.panelCornerRadius   // 外壳同心圆基准(= 底栏按钮 16 + gap 8)
+        glass.autoresizingMask = [.minYMargin, .minXMargin, .maxXMargin]   // 顶部居中锚定,宽高固定
         let host = NicheGlassHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
         glass.contentView = host
-        p.contentView = glass
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)))
+        container.wantsLayer = true
+        container.layer?.masksToBounds = true   // 裁掉露出范围外的玻璃(生长动画的"开口"由此实现)
+        glass.frame = container.bounds          // 初始铺满(稳态);呼出/relayout 前 snapGlass 会改写
+        container.addSubview(glass)
+        p.contentView = container
+        self.glass = glass
         // .titled 窗始终有系统 frame:用 cornerRadius KVC 把 frame 圆角对齐 shell 24,否则四角
         // 露 frame 发丝弧/尖角灰线(Clipin 同款,private _cornerRadius,不手动 masksToBounds)。
         p.setValue(edge.panelCornerRadius, forKey: "cornerRadius")
