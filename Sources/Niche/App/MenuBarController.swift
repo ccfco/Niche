@@ -18,11 +18,35 @@ final class MenuBarController {
 
     private func configureButton() {
         guard let button = statusItem.button else { return }
-        // 单色模板 SF Symbol:向下箭头到一条线 =「从顶部(刘海)滑出取用」。
-        // 彩色/自绘在 18pt 菜单栏会糊成一团(像素物理),故菜单栏只用极简单色符号保证一眼可辨;
-        // 品牌化的彩色「刘海+箭头」留给 App 图标(大尺寸)那个舞台。
-        button.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Niche")
-        button.image?.isTemplate = true
+        button.image = Self.makeIcon()
+        button.image?.accessibilityDescription = "Niche"
+    }
+
+    /// 自绘菜单栏图标:实心「刘海剪影」——MacBook 屏幕顶部中央那块标志性下凸区。
+    /// 这是 Niche 的本体符号(产品就叫"刘海原生"),单色实心在 18pt 必然清晰,且一眼是刘海、
+    /// 不会被误认成下载/文件夹。形状=顶部贴边小圆角、底部两角大圆角的下凸块;`isTemplate` 单色自适应。
+    private static func makeIcon() -> NSImage {
+        let h: CGFloat = 18
+        let image = NSImage(size: NSSize(width: h * 1.15, height: h), flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let W = rect.width * 0.74, H = rect.height * 0.64
+            let x0 = rect.midX - W / 2
+            let topY = rect.maxY - rect.height * 0.10
+            let botY = topY - H
+            let rTop = max(1.2, rect.width * 0.07)
+            let rBot = rect.width * 0.34
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: x0 + rTop, y: topY))
+            p.addArc(tangent1End: CGPoint(x: x0 + W, y: topY), tangent2End: CGPoint(x: x0 + W, y: botY), radius: rTop)
+            p.addArc(tangent1End: CGPoint(x: x0 + W, y: botY), tangent2End: CGPoint(x: x0, y: botY), radius: rBot)
+            p.addArc(tangent1End: CGPoint(x: x0, y: botY), tangent2End: CGPoint(x: x0, y: topY), radius: rBot)
+            p.addArc(tangent1End: CGPoint(x: x0, y: topY), tangent2End: CGPoint(x: x0 + W, y: topY), radius: rTop)
+            p.closeSubpath()
+            ctx.addPath(p); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func makeMenu() -> NSMenu {
