@@ -91,7 +91,9 @@ final class ICloudStatus {
         throw CocoaError(.userCancelled)
     }
 
-    private static func isDataless(_ url: URL) -> Bool {
+    /// 同步判 dataless(iCloud 占位、未下载)。供预览切换前判定走「同步即切」还是「先下后切」——
+    /// 本地/非 iCloud 文件零延迟切换,dataless 才异步下载(§4.1.2)。
+    static func isDataless(_ url: URL) -> Bool {
         let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey,
                                                        .ubiquitousItemDownloadingStatusKey])
         guard values?.isUbiquitousItem == true,

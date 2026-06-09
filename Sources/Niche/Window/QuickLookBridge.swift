@@ -14,6 +14,9 @@ final class QuickLookController: NSObject {
     private var closeObserver: NSObjectProtocol?
     /// 监听 QL 内 ←→ 翻页(currentPreviewItemIndex 变化)是否已注册,避免重复 add/remove KVO。
     private var observingIndex = false
+    /// 正在为哪个 index 下载 dataless 目标:防同 index 双触发(同步推送 + selectionCancellable 异步)
+    /// 与快速翻页时重复起轮询 Task。本地文件不经此(同步即切)。
+    private var pendingDownloadIndex: Int?
     /// 被 KVO 观察的 QL 面板弱引用:供 deinit 移除 observer,避免在 nonisolated deinit 里调
     /// @MainActor 的 QLPreviewPanel.shared()(消除隔离告警 + 守 deinit 红线)。
     private weak var observedPanel: QLPreviewPanel?
@@ -108,11 +111,29 @@ final class QuickLookController: NSObject {
     // MARK: - 选中跟随(面板 ↔ QL 双向,各带相等守卫防回环)
 
     /// 面板选中变化 → QL 跳到该项(仅 active 且 index 有效且与当前不同)。
+    /// 切换目标若是 dataless iCloud 占位 → 先显式下载再切(§4.1.2:等可用再交 QL,否则预览空白);
+    /// 本地文件同步即切,保方向键即时跟随。
     func syncCurrentIndex(_ newIndex: Int) {
         guard isActive, urls.indices.contains(newIndex), let panel = QLPreviewPanel.shared() else { return }
         guard panel.currentPreviewItemIndex != newIndex else { return }
         index = newIndex
-        panel.currentPreviewItemIndex = newIndex
+        downloadIfNeeded(at: newIndex) { panel.currentPreviewItemIndex = newIndex }
+    }
+
+    /// 切到 newIndex 前确保目标可用:本地/非 iCloud 文件同步执行 apply(零延迟,保方向键即时跟随);
+    /// dataless 占位先显式下载再 apply,期间用户又翻走(index 变)或预览已关则放弃(防快速翻页乱序)。
+    /// pendingDownloadIndex 防同 index 重复起轮询 Task(同步推送 + 异步 selectionCancellable 双触发)。
+    private func downloadIfNeeded(at idx: Int, then apply: @escaping () -> Void) {
+        let target = Self.resolvedForPreview(urls[idx])
+        guard ICloudStatus.isDataless(target) else { apply(); return }
+        guard pendingDownloadIndex != idx else { return }
+        pendingDownloadIndex = idx
+        Task {
+            defer { if pendingDownloadIndex == idx { pendingDownloadIndex = nil } }
+            do { try await ICloudStatus.ensureDownloaded(target) } catch { return }
+            guard index == idx, isActive else { return }
+            apply()
+        }
     }
 
     /// 内容(排序/目录)变化 → 刷新 QL 列表并定位(urls 未变则跳过,避免无谓 reload 抖动)。
@@ -159,6 +180,11 @@ final class QuickLookController: NSObject {
         guard index != newIndex else { return }
         index = newIndex
         onIndexChange?(newIndex)
+        // QL 自带翻页(工具栏箭头)切到 dataless 占位:QL 已切过去会显示空白 → 下载完 reloadData
+        // 让 QL 重新拉到真内容。本地文件 QL 已正确显示,无需动作(不无谓 reloadData 闪烁)。
+        guard urls.indices.contains(newIndex),
+              ICloudStatus.isDataless(Self.resolvedForPreview(urls[newIndex])) else { return }
+        downloadIfNeeded(at: newIndex) { QLPreviewPanel.shared()?.reloadData() }
     }
 
     private func handleClose() {
