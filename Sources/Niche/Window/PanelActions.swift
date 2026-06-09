@@ -13,6 +13,9 @@ struct PanelActions {
     var isQuickLookActive: () -> Bool = { false }
     /// 主动关闭 Quick Look 预览(空格 toggle / Esc 关预览,而非误关整个面板)。
     var onQuickLookClose: () -> Void = {}
+    /// QL 活跃时方向键移光标后**同步**把当前光标推给 QL(不绕 Combine 异步)。QL 是 key window 时
+    /// `.receive(on: RunLoop.main)` 的延迟块会滞后到下次按键 → 预览落后一格;同步推送当场翻页。
+    var onQuickLookSyncCursor: () -> Void = {}
 
     // MARK: - M3 文件操作交互
 

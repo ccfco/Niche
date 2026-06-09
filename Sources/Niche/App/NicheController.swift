@@ -29,6 +29,10 @@ final class NicheController {
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
         isQuickLookActive: { [weak self] in self?.quickLook.isActive ?? false },
         onQuickLookClose: { [weak self] in self?.quickLook.close() },
+        onQuickLookSyncCursor: { [weak self] in
+            guard let self, let index = self.model.cursorIndex else { return }
+            self.quickLook.syncCurrentIndex(index)
+        },
         onContextMenu: { [weak self] urls, anchor in self?.makeContextMenu(urls, anchor) },
         onContextMenuBackground: { [weak self] anchor in self?.makeBackgroundMenu(anchor) },
         onDropURLs: { [weak self] urls, modifiers in self?.handleDrop(urls, modifiers: modifiers) },
@@ -81,6 +85,11 @@ final class NicheController {
         }
         autoHide.onShouldHide = { [weak self] in
             self?.hideTransient()
+        }
+        // 抑制源(QL/菜单/重命名/拖拽)解除补隐时,重评鼠标当前位置而非盲目兑现 pendingHide:
+        // 关 QL 后若鼠标已回面板走廊内则取消收回(否则关预览会连带把面板也收走,不符直觉)。
+        autoHide.onReevaluate = { [weak self] in
+            self?.panelController.reevaluateAutoHide()
         }
         // 瞬态鼠标离开"面板↔刘海"走廊 → 过抑制判定后收回(移开即收的主路径)。
         panelController.onMouseExitedTransient = { [weak self] in

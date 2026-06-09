@@ -21,18 +21,24 @@ final class AutoHideCoordinator {
     /// 判定可隐藏后触发(由持有者执行真正的收回动画)。
     var onShouldHide: (() -> Void)?
 
+    /// 抑制解除补隐时调:重新评估鼠标当前位置,而非盲目兑现抑制期间记下的 pendingHide。
+    /// QL 盖住面板时鼠标移到 QL 上会记一笔 pendingHide,关 QL 后若鼠标已回面板走廊内则不该收。
+    /// 注入缺省(nil)时 fallback onShouldHide,保持本类纯状态逻辑、不强依赖几何、可单测。
+    var onReevaluate: (() -> Void)?
+
     var isSuppressed: Bool { !active.isEmpty }
 
     func begin(_ suppressor: Suppressor) {
         active.insert(suppressor)
     }
 
-    /// 结束某抑制源;若全部结束,重新评估是否该隐藏(失焦期间被抑制、抑制解除后补隐)。
+    /// 结束某抑制源;若全部结束且有待隐藏,**重新评估**(而非盲目兑现)——鼠标可能在抑制期间已
+    /// 移回面板走廊(尤其关 QL 后),由 onReevaluate 据当前位置决定收/留;缺省回落 onShouldHide。
     func end(_ suppressor: Suppressor) {
         active.remove(suppressor)
         if active.isEmpty, pendingHide {
             pendingHide = false
-            onShouldHide?()
+            (onReevaluate ?? onShouldHide)?()
         }
     }
 

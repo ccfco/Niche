@@ -328,12 +328,14 @@ final class PanelController {
         // 不稳。空格/Esc → 关预览(原生 toggle,Esc 不再误关整个面板);方向键 → 移光标(经选中同步
         // 让 QL 跟随);其余键透传给 QL/响应链。本地 monitor 是 app 级,QL 为 key 时仍先于其拿到事件。
         if actions.isQuickLookActive() {
+            // 方向键移光标后**同步**推 QL(onQuickLookSyncCursor):QL 是 key window 时,依赖
+            // `.receive(on: RunLoop.main)` 的异步跟随会滞后到下次按键 → 预览落后一格(再按一次才切)。
             switch event.keyCode {
             case 49, 53: actions.onQuickLookClose(); return nil   // Space / Esc
-            case 126: model.moveCursor(.up, extend: false); return nil
-            case 125: model.moveCursor(.down, extend: false); return nil
-            case 123: model.moveCursor(.left, extend: false); return nil
-            case 124: model.moveCursor(.right, extend: false); return nil
+            case 126: model.moveCursor(.up, extend: false); actions.onQuickLookSyncCursor(); return nil
+            case 125: model.moveCursor(.down, extend: false); actions.onQuickLookSyncCursor(); return nil
+            case 123: model.moveCursor(.left, extend: false); actions.onQuickLookSyncCursor(); return nil
+            case 124: model.moveCursor(.right, extend: false); actions.onQuickLookSyncCursor(); return nil
             default: return event
             }
         }
@@ -403,6 +405,10 @@ final class PanelController {
         }
         return event
     }
+
+    /// 抑制源(QL/菜单/重命名/拖拽)解除后由 AutoHideCoordinator 调:重新评估鼠标当前位置,
+    /// 而非盲目兑现抑制期间记下的 pendingHide —— 鼠标已回走廊内就不收(关 QL 不连带收面板)。
+    func reevaluateAutoHide() { evaluateLeave() }
 
     /// 鼠标在"面板 ∪ anchorRect"走廊内 → 取消待收;离开 → 起 0.35s 延时收回(被抑制由宿主拦)。
     private func evaluateLeave() {
