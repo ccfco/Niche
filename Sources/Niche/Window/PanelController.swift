@@ -156,7 +156,9 @@ final class PanelController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// 收起(两模式通用):淡出 + orderOut,停鼠标离开监听。
+    /// 收起:瞬态**几何收回刘海**(与 present 长出对称)+ 淡出;常驻(脱离刘海)仅淡出。
+    /// 收回时**不动玻璃**——玻璃仍是满尺寸顶部锚定,窗口缩成刘海小条只是容器从底部裁掉玻璃、向刘海口
+    /// 收拢,玻璃 bounds 全程不变 → 同 present 零 morph(复用同一根治思路)。
     func hide() {
         stopMouseLeaveMonitor()
         stopKeyMonitor()
@@ -164,13 +166,21 @@ final class PanelController {
         isHiding = true
         let gen = showGeneration
         let dur = motion.reduceMotion ? 0.12 : 0.18
+        // 瞬态:收回目标 = 刘海宽小条,顶边贴当前顶(present start 的镜像);常驻不收(已脱离刘海,
+        // 飞回刘海口反而突兀)。anchorRect 在贴刘海时=刘海矩形,故宽/中心取自它。
+        let collapse: NSRect? = panel.mode == .transient
+            ? NSRect(x: anchorRect.midX - anchorRect.width / 2,
+                     y: panel.frame.maxY - 6, width: anchorRect.width, height: 6)
+            : nil
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = dur
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)   // 加速收进刘海
+            if let collapse { panel.animator().setFrame(collapse, display: true) }
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, gen == self.showGeneration else { return }   // 被新一次显示抢占 → 不收
             panel.orderOut(nil)
-            panel.alphaValue = 1
+            panel.alphaValue = 1                                         // 复位;下次 present 会重设 frame/glass
             self.isHiding = false
         })
     }
