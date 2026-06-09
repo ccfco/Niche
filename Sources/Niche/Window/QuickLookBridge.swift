@@ -56,14 +56,25 @@ final class QuickLookController: NSObject {
 
         Task {
             do {
-                // 仅对当前要看的这个文件按需下载,不递归、不批量(§4.1.2)。
-                try await ICloudStatus.ensureDownloaded(urls[index])
+                // 仅对当前要看的这个文件按需下载,不递归、不批量(§4.1.2)。下载合同必须作用于
+                // **解析后的目标**:alias 指向 dataless iCloud 目标时,只下 alias 自身(本地 45B)
+                // 等于没下,数据源解析出的 dataless 目标会绕过下载直接丢给 QL(Codex review)。
+                try await ICloudStatus.ensureDownloaded(Self.resolvedForPreview(urls[index]))
             } catch {
                 // 下载失败/超时:不把 dataless URL 交给 Quick Look(spec §4.1.2:等可用后再预览)。
                 return
             }
             present()
         }
+    }
+
+    /// 主动关闭预览(键盘单一权威的空格 toggle / Esc 关入口)。
+    /// orderOut 不发 NSWindow.willClose,故显式走 handleClose 清理;handleClose 幂等(Set.remove +
+    /// observer nil 守卫),与原生关闭(Esc/红点 → willClose)路径重入也安全。
+    func close() {
+        guard QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared() else { return }
+        panel.orderOut(nil)
+        handleClose()
     }
 
     private func present() {
@@ -164,7 +175,15 @@ extension QuickLookController: QLPreviewPanelDataSource {
     func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { urls.count }
 
     func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> QLPreviewItem {
-        urls[index] as NSURL   // NSURL 符合 QLPreviewItem
+        Self.resolvedForPreview(urls[index]) as NSURL   // NSURL 符合 QLPreviewItem
+    }
+
+    /// alias/symlink 预览解析到真实目标(Finder 语义:预览替身看到的是目标内容,而非替身自身的
+    /// 元信息)。仅对 alias 文件解析;非 alias 或解析失败原样返回——不臆造、不吞错地退回原 URL。
+    private static func resolvedForPreview(_ url: URL) -> URL {
+        let isAlias = (try? url.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile ?? false
+        guard isAlias, let resolved = try? URL(resolvingAliasFileAt: url, options: []) else { return url }
+        return resolved
     }
 }
 

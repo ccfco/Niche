@@ -143,11 +143,14 @@ final class PanelModel: ObservableObject {
         anchorID = order.first
     }
 
-    /// 清空选中(点空白 / 切 tab / 下钻)。
+    /// 清空选中(点空白 / 切 tab / 下钻)。同时结束就地重命名——这些路径都是"导航离开/取消选中",
+    /// 重命名上下文已失效;否则键盘下钻(⌘↓/⌘↑)后 renamingItemID 残留会让 .renaming 抑制源泄漏,
+    /// 面板永不自动收回(两模式等价:无论键盘还是鼠标导航都收口)。
     func clearSelection() {
         selectedIDs = []
         cursorID = nil
         anchorID = nil
+        renamingItemID = nil
     }
 
     /// 列表原生 Table 的 Set selection 回写:镜像到模型 + 据增量推断光标。

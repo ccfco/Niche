@@ -49,7 +49,7 @@
 ### 窗口与触发
 - **触发位置**:刘海优先 → 顶/左/右/菜单栏可选 → 全局快捷键兜底;**多屏在鼠标活跃屏触发,无刘海回退顶部中央**。
 - **Pin 是两种窗口模式的切换**(瞬态 NSPanel ↔ 常驻可拖动 always-on-top 浮窗),**必须从一开始做成可切换状态机**,不能先写死 launcher 再改。
-- **面板键盘走 `PanelController` 的 AppKit 本地 `keyDown` monitor 单一权威**,禁止在 SwiftUI 视图加 `.onKeyPress`/`.focusable`(随焦点漂移失效,与 monitor 抢键)。重命名态(`firstResponder is NSText`)**必须整体放行**给字段编辑器,否则 monitor 会吞掉输入框的 Esc/空格/方向键(Esc 关面板而非取消重命名);列表方向键交原生 `NSTableView`,但 `listArrow` 须兜底 `model.moveCursor`(@FocusState 首现/QL 返回时未生效)。
+- **面板键盘走 `PanelController` 的 AppKit 本地 `keyDown` monitor 单一权威**,禁止在 SwiftUI 视图加 `.onKeyPress`/`.focusable`(随焦点漂移失效,与 monitor 抢键)。重命名态(`firstResponder is NSText`)**必须整体放行**给字段编辑器,否则 monitor 会吞掉输入框的 Esc/空格/方向键(Esc 关面板而非取消重命名);列表方向键交原生 `NSTableView`,但 `listArrow` 须兜底 `model.moveCursor`(@FocusState 首现/QL 返回时未生效)。**Quick Look 活跃时空格/Esc 关预览、方向键移光标也由此 monitor 接管**(在 `isKeyWindow` 守卫之前判 `isQuickLookActive`):accessory app + 自定义层级下 QLPreviewPanel 自带 space-to-close 不稳,别依赖它;否则空格不能 toggle 关、Esc 误关整个面板。
 
 ### Chrome / UI
 - **间距/圆角由单一旋钮派生**,禁止组件硬编码 padding/cornerRadius;**禁卡片套卡片**,底栏各按钮自承材质——沿用 Clipin chrome 纪律,达成 Liquid Glass 原生质感。

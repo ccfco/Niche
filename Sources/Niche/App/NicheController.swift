@@ -27,6 +27,8 @@ final class NicheController {
         onAddFolder: { [weak self] in self?.addFolder() },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
+        isQuickLookActive: { [weak self] in self?.quickLook.isActive ?? false },
+        onQuickLookClose: { [weak self] in self?.quickLook.close() },
         onContextMenu: { [weak self] urls, anchor in self?.makeContextMenu(urls, anchor) },
         onContextMenuBackground: { [weak self] anchor in self?.makeBackgroundMenu(anchor) },
         onDropURLs: { [weak self] urls, modifiers in self?.handleDrop(urls, modifiers: modifiers) },
@@ -113,7 +115,10 @@ final class NicheController {
             self.model.selectSingle(self.model.sortedItems[index].id)
         }
         // 光标变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
+        // @Published 在 willSet 阶段发布,此刻 cursorID 仍是旧值 → 派生的 cursorIndex 会算出"上一个"
+        // 光标,导致预览慢一拍(预览前一个对象)。故 receive(on:) 推迟到下一 runloop,读到新光标。
         selectionCancellable = model.$cursorID
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self, let index = self.model.cursorIndex else { return }
                 self.quickLook.syncCurrentIndex(index)
@@ -124,7 +129,10 @@ final class NicheController {
             .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self, self.quickLook.isActive else { return }
-                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: self.model.cursorIndex ?? 0)
+                // 光标失效(预览项被外部删除 / 下钻进无选中目录)→ 关预览,而非 ?? 0 跳到第一项
+                // (跳第一项会让用户莫名其妙地预览一个没选中的文件)。
+                guard let index = self.model.cursorIndex else { self.quickLook.close(); return }
+                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: index)
             }
 
         // 内容/视图模式/下钻态变化 → 面板高度自适应重算(#14)。objectWillChange 高频,但
@@ -252,8 +260,13 @@ final class NicheController {
 
     /// 按需下载失败 → 可见提示(用户双击的动作失败必须让其知道,不靠隐形日志)。
     private func presentDownloadFailure(name: String, error: Error) {
+        presentFailure(title: "无法下载「\(name)」", error: error)
+    }
+
+    /// 用户动作失败的统一可见提示(下载/拖入/未来的文件操作共用,不靠隐形日志吞错)。
+    private func presentFailure(title: String, error: Error) {
         let alert = NSAlert()
-        alert.messageText = "无法下载「\(name)」"
+        alert.messageText = title
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
         alert.addButton(withTitle: "好")
@@ -322,7 +335,10 @@ final class NicheController {
             if !toCopy.isEmpty { try ops.copy(toCopy, to: dir, resolve: ConflictPrompt.ask) }
             if !toMove.isEmpty { try ops.move(toMove, to: dir, resolve: ConflictPrompt.ask) }
         } catch {
+            // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
+            // 与双击下载失败提示对称,而非只记日志后无声消失。
             Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法移入文件", error: error)
         }
     }
 

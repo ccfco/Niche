@@ -9,6 +9,10 @@ struct PanelActions {
     var onAddFolder: () -> Void = {}
     var onRemoveFolder: (FolderBinding.ID) -> Void = { _ in }
     var onQuickLook: (_ urls: [URL], _ index: Int) -> Void = { _, _ in }
+    /// Quick Look 当前是否由本 app 驱动且可见(键盘单一权威据此接管预览态:空格 toggle / Esc 关)。
+    var isQuickLookActive: () -> Bool = { false }
+    /// 主动关闭 Quick Look 预览(空格 toggle / Esc 关预览,而非误关整个面板)。
+    var onQuickLookClose: () -> Void = {}
 
     // MARK: - M3 文件操作交互
 

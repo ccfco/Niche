@@ -323,6 +323,20 @@ final class PanelController {
 
     /// 返回 nil 吃掉事件,返回 event 放行给响应链(交原生控件,如 Table 原生方向键导航)。
     private func handlePanelKey(_ event: NSEvent) -> NSEvent? {
+        // Quick Look 活跃:键盘单一权威接管预览态。必须在 isKeyWindow 守卫之前 —— QL becomeKey 后
+        // 本面板 resignKey,守卫会提前 return;且 accessory app + 自定义层级下 QL 自带 space-to-close
+        // 不稳。空格/Esc → 关预览(原生 toggle,Esc 不再误关整个面板);方向键 → 移光标(经选中同步
+        // 让 QL 跟随);其余键透传给 QL/响应链。本地 monitor 是 app 级,QL 为 key 时仍先于其拿到事件。
+        if actions.isQuickLookActive() {
+            switch event.keyCode {
+            case 49, 53: actions.onQuickLookClose(); return nil   // Space / Esc
+            case 126: model.moveCursor(.up, extend: false); return nil
+            case 125: model.moveCursor(.down, extend: false); return nil
+            case 123: model.moveCursor(.left, extend: false); return nil
+            case 124: model.moveCursor(.right, extend: false); return nil
+            default: return event
+            }
+        }
         guard let panel, panel.isVisible, panel.isKeyWindow else { return event }
         // 重命名进行中:字段编辑器(NSText)是第一响应者 → 放行所有键给输入框(含空格/方向键/Esc)。
         // Esc 由 RenameTextField 的 cancelOperation 吃掉,不冒泡到这里关面板(#20)。
