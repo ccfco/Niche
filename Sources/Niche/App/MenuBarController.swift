@@ -22,25 +22,34 @@ final class MenuBarController {
         button.image?.accessibilityDescription = "Niche"
     }
 
-    /// 自绘菜单栏图标:实心「刘海剪影」——MacBook 屏幕顶部中央那块标志性下凸区。
-    /// 这是 Niche 的本体符号(产品就叫"刘海原生"),单色实心在 18pt 必然清晰,且一眼是刘海、
-    /// 不会被误认成下载/文件夹。形状=顶部贴边小圆角、底部两角大圆角的下凸块;`isTemplate` 单色自适应。
+    /// 自绘菜单栏图标:实心「刘海文件夹」——文件夹剪影,标签(tab)挪到正中央、做成刘海下凸形状。
+    /// 一眼是文件夹(文件快速访问,不被误认成下载/托盘),而「居中刘海 tab」是 Niche 独有签名
+    /// (普通文件夹 tab 在左上):文件 × 刘海合成一个标志。单色实心剪影,18pt 清晰。
     private static func makeIcon() -> NSImage {
         let h: CGFloat = 18
-        let image = NSImage(size: NSSize(width: h * 1.15, height: h), flipped: false) { rect in
+        let image = NSImage(size: NSSize(width: h * 1.08, height: h), flipped: false) { rect in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            let W = rect.width * 0.74, H = rect.height * 0.64
-            let x0 = rect.midX - W / 2
-            let topY = rect.maxY - rect.height * 0.10
-            let botY = topY - H
-            let rTop = max(1.2, rect.width * 0.07)
-            let rBot = rect.width * 0.34
+            let r = rect.insetBy(dx: rect.width * 0.08, dy: rect.height * 0.07)
+            let yB = r.minY
+            let yBT = r.minY + r.height * 0.70
+            let yT = r.maxY
+            let tabW = r.width * 0.42
+            let txL = r.midX - tabW / 2, txR = r.midX + tabW / 2
+            let bc = r.width * 0.13
+            let tc = r.width * 0.085
+            let corners: [(CGFloat, CGFloat, CGFloat)] = [
+                (r.maxX, yB, bc), (r.maxX, yBT, bc),
+                (txR, yBT, tc), (txR, yT, tc), (txL, yT, tc), (txL, yBT, tc),
+                (r.minX, yBT, bc), (r.minX, yB, bc),
+            ]
             let p = CGMutablePath()
-            p.move(to: CGPoint(x: x0 + rTop, y: topY))
-            p.addArc(tangent1End: CGPoint(x: x0 + W, y: topY), tangent2End: CGPoint(x: x0 + W, y: botY), radius: rTop)
-            p.addArc(tangent1End: CGPoint(x: x0 + W, y: botY), tangent2End: CGPoint(x: x0, y: botY), radius: rBot)
-            p.addArc(tangent1End: CGPoint(x: x0, y: botY), tangent2End: CGPoint(x: x0, y: topY), radius: rBot)
-            p.addArc(tangent1End: CGPoint(x: x0, y: topY), tangent2End: CGPoint(x: x0 + W, y: topY), radius: rTop)
+            let start = CGPoint(x: r.midX, y: yB)
+            p.move(to: start)
+            for i in 0..<corners.count {
+                let cur = CGPoint(x: corners[i].0, y: corners[i].1)
+                let nxt = i + 1 < corners.count ? CGPoint(x: corners[i + 1].0, y: corners[i + 1].1) : start
+                p.addArc(tangent1End: cur, tangent2End: nxt, radius: corners[i].2)
+            }
             p.closeSubpath()
             ctx.addPath(p); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
             return true
