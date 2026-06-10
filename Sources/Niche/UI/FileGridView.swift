@@ -201,20 +201,12 @@ private final class DropPreflightCache {
 
         let writable = FileManager.default.isWritableFile(atPath: dir.path)
         let sources = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
-        let sameVolume = aggregateSameVolume(sources: sources, dir: dir)
+        // 聚合判定与执行层(handleDrop)共用 DragSemantics.aggregateSameVolume:角标 = 实际操作。
+        let sameVolume = DragSemantics.aggregateSameVolume(sources: sources, destination: dir)
 
         changeCount = cc
         dirPath = dir.path
         cached = (writable, sameVolume)
         return cached
-    }
-
-    /// 混合来源保守判定:任一跨卷 → false(整体 copy);全同卷 → true(move);含未知/空 → nil(copy)。
-    private func aggregateSameVolume(sources: [URL], dir: URL) -> Bool? {
-        guard !sources.isEmpty else { return nil }
-        let results = sources.map { DragSemantics.isSameVolume($0, dir) }
-        if results.contains(false) { return false }
-        if results.allSatisfy({ $0 == true }) { return true }
-        return nil
     }
 }

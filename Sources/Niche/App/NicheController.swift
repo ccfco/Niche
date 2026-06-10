@@ -444,20 +444,19 @@ final class NicheController {
             return true
         }
         guard !incoming.isEmpty else { return }
+        model.clearDropTarget()   // 落地即收口高亮(列表多列 region 的计数不依赖逐一 exit)
 
-        // 每个源单独按卷判定 copy/move,避免首项卷判定误伤跨卷项。
-        var toCopy: [URL] = [], toMove: [URL] = []
-        for src in incoming {
-            switch DragSemantics.resolve(sameVolume: DragSemantics.isSameVolume(src, dir), modifiers: modifiers) {
-            case .copy: toCopy.append(src)
-            case .move: toMove.append(src)
-            }
-        }
+        // 与 dropUpdated 角标共用同一聚合决策(混合来源任一跨卷 → 整体 copy):角标说什么就
+        // 做什么。此前逐源各自决策,混合时角标显 copy、同卷项却被 move(Codex review)。
+        let sameVolume = DragSemantics.aggregateSameVolume(sources: incoming, destination: dir)
+        let operation = DragSemantics.resolve(sameVolume: sameVolume, modifiers: modifiers)
         autoHide.begin(.dragging)
         defer { autoHide.end(.dragging) }
         do {
-            if !toCopy.isEmpty { try ops.copy(toCopy, to: dir, resolve: ConflictPrompt.ask) }
-            if !toMove.isEmpty { try ops.move(toMove, to: dir, resolve: ConflictPrompt.ask) }
+            switch operation {
+            case .copy: try ops.copy(incoming, to: dir, resolve: ConflictPrompt.ask)
+            case .move: try ops.move(incoming, to: dir, resolve: ConflictPrompt.ask)
+            }
         } catch {
             // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
             // 与双击下载失败提示对称,而非只记日志后无声消失。

@@ -36,6 +36,10 @@ final class QuickLookController: NSObject {
     private var previewGeneration = 0
     /// 正在为初次预览下载的条目(同一文件重复按空格去重;与翻页路径的 pendingDownloadIndex 分账)。
     private var pendingPreviewURL: URL?
+    /// 初次预览的下载 Task(cancelPendingPreview 同步取消:ensureDownloaded 轮询用 Task.sleep,
+    /// 取消即抛出,defer 立刻清 spinner/去重标记 —— 不取消则残留到超时,期间同文件按空格被
+    /// pendingPreviewURL 去重挡住,"预览再也按不出来")。
+    private var pendingPreviewTask: Task<Void, Never>?
 
     init(autoHide: AutoHideCoordinator) {
         self.autoHide = autoHide
@@ -73,7 +77,7 @@ final class QuickLookController: NSObject {
         previewGeneration += 1
         let gen = previewGeneration
 
-        Task {
+        pendingPreviewTask = Task {
             do {
                 // 仅对当前要看的这个文件按需下载,不递归、不批量(§4.1.2)。下载合同必须作用于
                 // **解析后的目标**:alias 指向 dataless iCloud 目标时,只下 alias 自身(本地 45B)
@@ -114,8 +118,13 @@ final class QuickLookController: NSObject {
     /// 作废"下载中、QL 尚未呈现"的预览请求:面板收回(Esc/⌘W/自动隐藏)时必须调——
     /// 此时 QL 不可见,close() 的 orderOut 路径走不到,迟到的下载完成会把 QL 凭空弹出来
     /// 浮在已收起的面板原位(Codex review)。
+    /// 同时**取消下载 Task 并清去重标记**:只作废代次的话,旧 Task 轮询到超时才退出,期间
+    /// pendingPreviewURL 一直挡着同文件的新预览请求(Codex review)。
     func cancelPendingPreview() {
         previewGeneration += 1
+        pendingPreviewTask?.cancel()   // Task.sleep 抛 CancellationError → defer 清 spinner/标记
+        pendingPreviewTask = nil
+        pendingPreviewURL = nil        // 同步清:不等被取消的 Task 恢复执行,新请求立刻可发
     }
 
     private func present() {

@@ -24,6 +24,20 @@ enum DragSemantics {
         return sameVolume ? .move : .copy
     }
 
+    /// 多源拖入的整体卷判定:**一次决策、整组执行**,与 dropUpdated 角标共用 —— 逐源各自
+    /// 决策会在混合来源时撕裂(角标显 copy,同卷项却被 move,"看着是复制实际源文件消失")。
+    /// 任一跨卷 → false(整体 copy);全同卷 → true(move);含未知/空 → nil(保守 copy)。
+    static func aggregateSameVolume(_ results: [Bool?]) -> Bool? {
+        guard !results.isEmpty else { return nil }
+        if results.contains(false) { return false }
+        if results.allSatisfy({ $0 == true }) { return true }
+        return nil
+    }
+
+    static func aggregateSameVolume(sources: [URL], destination: URL) -> Bool? {
+        aggregateSameVolume(sources.map { isSameVolume($0, destination) })
+    }
+
     /// 判定两个 URL 是否在同一卷上。任一无法取到卷标识时返回 nil(未知)。
     static func isSameVolume(_ lhs: URL, _ rhs: URL) -> Bool? {
         guard let l = volumeIdentifierObject(of: lhs),

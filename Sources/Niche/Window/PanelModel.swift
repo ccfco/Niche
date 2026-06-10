@@ -57,6 +57,13 @@ final class PanelModel: ObservableObject {
         }
     }
 
+    /// 落地/取消后无条件收口高亮:performDrop 只回报一次 exit,列表多列 region 重叠瞬间松手
+    /// 时计数可能残留 > 0,靠减一清不掉(Codex review)。
+    func clearDropTarget() {
+        dropTargetID = nil
+        dropTargetCount = 0
+    }
+
     /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
     private var currentMirrorCancellable: AnyCancellable?
 
