@@ -35,13 +35,20 @@ final class AutoHideCoordinator {
         active.insert(suppressor)
     }
 
-    /// 结束某抑制源;若全部结束且有待隐藏,**重新评估**(而非盲目兑现)——鼠标可能在抑制期间已
-    /// 移回面板走廊(尤其关 QL 后),由 onReevaluate 据当前位置决定收/留;缺省回落 onShouldHide。
+    /// 结束某抑制源;若全部结束且有待隐藏,**推迟一拍再重新评估**(而非盲目兑现)。
+    /// 推迟是必须的:NSMenu 的 menuDidClose 先于菜单项 action 派发,同步兑现会插进
+    /// "解除 .contextMenu"与"action 建立下一个抑制(.modalDialog/.pathInput)"的空隙,
+    /// 面板在 NSOpenPanel/路径条出现前就开始收回(Codex review)。
+    /// pendingHide 留到兑现时刻才消费:① 兑现时已有新抑制接棒 → 原样保留等它解除再评;
+    /// ② 空隙里 handleMouseLeave/ResignKey 直接收回会消费它,排队的块自然失效,不双发
+    /// onShouldHide;③ 多次 end 排队多个块,首个消费后其余 guard 短路。
     func end(_ suppressor: Suppressor) {
         active.remove(suppressor)
-        if active.isEmpty, pendingHide {
-            pendingHide = false
-            (onReevaluate ?? onShouldHide)?()
+        guard active.isEmpty, pendingHide else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.pendingHide, self.active.isEmpty else { return }
+            self.pendingHide = false
+            (self.onReevaluate ?? self.onShouldHide)?()
         }
     }
 
@@ -64,6 +71,7 @@ final class AutoHideCoordinator {
             pendingHide = true
             return
         }
+        pendingHide = false   // 立即收回即消费待隐,end() 排队的兑现块据此短路(防双发)
         onShouldHide?()
     }
 
@@ -74,6 +82,7 @@ final class AutoHideCoordinator {
             pendingHide = true
             return
         }
+        pendingHide = false   // 同 handleResignKey:消费待隐,防 end() 兑现块双发
         onShouldHide?()
     }
 }

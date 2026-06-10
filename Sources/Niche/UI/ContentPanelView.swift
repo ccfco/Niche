@@ -16,7 +16,7 @@ struct ContentPanelView: View {
         VStack(spacing: 0) {
             HStack(spacing: edge.itemSpacing) {
                 FolderTabsView(model: model, edge: edge,
-                               onAddFolder: actions.onAddFolder, onRemoveFolder: actions.onRemoveFolder,
+                               onAddMenu: actions.onAddMenu, onTabMenu: actions.onTabMenu,
                                onPinTemporary: actions.onPinTemporary)
                 viewSwitcher
                     .fixedSize()

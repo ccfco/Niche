@@ -25,10 +25,24 @@ final class NicheController {
         onRequestRename: { [weak self] url in self?.beginRenameSafely(url) }
     )
 
+    /// tab 栏「+」的添加菜单(选择文件夹 / 前往路径)与 tab 右键菜单(移除)。
+    /// NSMenu+抑制,见 FolderTabMenus.swift。
+    private lazy var addMenu = AddFolderMenuPresenter(
+        autoHide: autoHide,
+        onChooseFolder: { [weak self] in self?.addFolder() },
+        onGoToPath: { [weak self] in self?.model.beginPathInput() }
+    )
+    private lazy var tabMenu = TabContextMenuPresenter(
+        autoHide: autoHide,
+        onRemove: { [weak self] id in self?.removeFolder(id) }
+    )
+
     private lazy var actions = PanelActions(
         onOpen: { [weak self] in self?.open($0) },
         onTogglePin: { [weak self] in self?.togglePin() },
         onAddFolder: { [weak self] in self?.addFolder() },
+        onAddMenu: { [weak self] anchor in self?.addMenu.present(from: anchor) },
+        onTabMenu: { [weak self] id in self?.tabMenu.makeMenu(for: id) },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
         isQuickLookActive: { [weak self] in self?.quickLook.isActive ?? false },

@@ -21,7 +21,9 @@ final class AutoHideCoordinatorTests: XCTestCase {
         c.handleResignKey(newKeyWindow: nil)
         XCTAssertEqual(hideCount, 0)  // 被抑制,不隐藏
 
-        c.end(.quickLook)             // 抑制解除 → 补隐
+        c.end(.quickLook)             // 抑制解除 → 下一拍补隐(给后继抑制留接棒窗口)
+        XCTAssertEqual(hideCount, 0)
+        drainMainQueue()
         XCTAssertEqual(hideCount, 1)
     }
 
@@ -34,8 +36,10 @@ final class AutoHideCoordinatorTests: XCTestCase {
         c.begin(.contextMenu)
         c.handleResignKey(newKeyWindow: nil)
         c.end(.dragging)
+        drainMainQueue()
         XCTAssertEqual(hideCount, 0)  // 还有 contextMenu 抑制
         c.end(.contextMenu)
+        drainMainQueue()
         XCTAssertEqual(hideCount, 1)
     }
 
@@ -70,6 +74,14 @@ final class AutoHideCoordinatorTests: XCTestCase {
         c.handleResignKey(newKeyWindow: nil)   // 拖到别的 app,面板失焦
         XCTAssertEqual(hideCount, 0)           // 拖出中,抑制
         c.end(.draggingOut)                    // 拖出结束
+        drainMainQueue()
         XCTAssertEqual(hideCount, 1)           // 补隐:拖出即走
+    }
+
+    /// 补隐兑现推迟一拍(NSMenu 的 didClose 先于 action 派发,给后继抑制留接棒窗口)。
+    private func drainMainQueue() {
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 1)
     }
 }

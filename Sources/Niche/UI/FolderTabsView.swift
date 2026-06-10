@@ -4,12 +4,15 @@ import SwiftUI
 struct FolderTabsView: View {
     @ObservedObject var model: PanelModel
     let edge: EdgeMetrics
-    /// 添加文件夹(由宿主弹 NSOpenPanel 并持久化绑定)。
-    var onAddFolder: () -> Void = {}
-    /// 移除当前 tab 的绑定。
-    var onRemoveFolder: (FolderBinding.ID) -> Void = { _ in }
+    /// 「+」:弹添加菜单(选择文件夹 / 前往路径,由宿主以 NSMenu+抑制呈现,锚定按钮)。
+    var onAddMenu: (_ anchor: NSView?) -> Void = { _ in }
+    /// tab 右键:宿主构建带抑制的 NSMenu(移除此文件夹);nil 不弹。
+    var onTabMenu: (_ id: FolderBinding.ID) -> NSMenu? = { _ in nil }
     /// 把临时 tab(前往)钉成正式绑定。
     var onPinTemporary: () -> Void = {}
+
+    /// 「+」菜单锚点(弹在按钮下方,toolbar 菜单惯例)。
+    private let addAnchor = MenuAnchorBox()
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -35,11 +38,9 @@ struct FolderTabsView: View {
             Text(title).lineLimit(1)
         }
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
-        .contextMenu {
-            Button("移除此文件夹", role: .destructive) {
-                onRemoveFolder(model.mirrors[index].binding.id)
-            }
-        }
+        // 右键菜单走 RightClickCatcher+NSMenu(抑制驱动),不用 .contextMenu —— 那接不上
+        // AutoHideCoordinator,菜单开着鼠标移出走廊面板会被收走(与文件右键同一根因)。
+        .overlay(RightClickCatcher { _ in onTabMenu(model.mirrors[index].binding.id) })
         // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
         .accessibilityLabel(title)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
@@ -74,11 +75,12 @@ struct FolderTabsView: View {
     }
 
     private var addButton: some View {
-        Button(action: onAddFolder) {
+        Button { onAddMenu(addAnchor.view) } label: {
             Image(systemName: "plus")
         }
         .buttonStyle(NicheFooterGlassButtonStyle(compact: true))   // 与视图切换/底栏同一玻璃语言
-        .help("添加文件夹")
-        .accessibilityLabel("添加文件夹")
+        .background(MenuAnchor(box: addAnchor))
+        .help("添加文件夹或前往路径")
+        .accessibilityLabel("添加文件夹或前往路径")
     }
 }
