@@ -114,10 +114,14 @@ final class DirectoryMirror: ObservableObject {
         armAttempt()
     }
 
-    /// 用户点"点此授权并重试":先开系统隐私设置(首拒后系统不再弹),再重试探针。
+    /// 用户点"点此授权并重试":**先重试探针,仍被拒才开系统隐私设置**。
+    /// 反过来(先开设置再立即重试)时序拧巴:此刻用户还没去开开关,重试必然失败,状态闪一下
+    /// loading 又回 denied;而用户在系统设置开完开关回来再点时,探针直接成功、不再弹设置页。
     func reauthorize() {
-        TCCAccess.openPrivacySettings()
         armAttempt()
+        if case .permissionDenied = state {
+            TCCAccess.openPrivacySettings()
+        }
     }
 
     /// 卷重新挂载且用户回到该 tab:重试。

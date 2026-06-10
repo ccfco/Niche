@@ -65,7 +65,12 @@ final class FileOperations {
         try ensureWritable(directory)
         for src in urls {
             guard let dest = resolvedDestination(for: src, in: directory, resolve: resolve) else { continue }
-            if FileManager.default.fileExists(atPath: dest.path) { try trashReplaced(dest) }
+            if FileManager.default.fileExists(atPath: dest.path) {
+                // 同一物理文件(源经符号链接路径指向 dest 本体):先 trash 会把真身丢进废纸篓,
+                // 随后从已悬空的 src 拷贝必然失败 —— 净效果是"复制"反而弄丢用户文件。跳过。
+                if Self.isSameFile(src, dest) { continue }
+                try trashReplaced(dest)
+            }
             try coordinatedCopy(from: src, to: dest)
             undo.record(.init(kind: .copy(created: dest)))
         }
@@ -77,10 +82,24 @@ final class FileOperations {
         for src in urls {
             guard let dest = resolvedDestination(for: src, in: directory, resolve: resolve) else { continue }
             if dest == src { continue }
-            if FileManager.default.fileExists(atPath: dest.path) { try trashReplaced(dest) }
+            if FileManager.default.fileExists(atPath: dest.path) {
+                // 同 copy:路径不同但同一物理文件(符号链接)→ 移动是无意义自我移动,跳过,
+                // 不能走 trashReplaced(那会把用户文件本体丢进废纸篓再 move 失败)。
+                if Self.isSameFile(src, dest) { continue }
+                try trashReplaced(dest)
+            }
             try coordinatedMove(from: src, to: dest)
             undo.record(.init(kind: .move(from: src, to: dest)))
         }
+    }
+
+    /// 按文件系统身份(volume+inode)判同一物理文件:路径字符串比较挡不住符号链接路径
+    /// 指向同一文件的情形。任一侧取不到身份(目标不存在等)视为不同文件。
+    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        guard let ra = (try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier,
+              let rb = (try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier
+        else { return false }
+        return ra.isEqual(rb)
     }
 
     // MARK: - 剪贴板(⌘X/C/V)

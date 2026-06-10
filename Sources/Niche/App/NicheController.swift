@@ -66,6 +66,7 @@ final class NicheController {
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
+    private var renameSweepCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
     private var selectionCancellable: AnyCancellable?
     private var quickLookContentCancellable: AnyCancellable?
@@ -178,6 +179,17 @@ final class NicheController {
             .sink { [weak self] id in
                 guard let self else { return }
                 if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+            }
+        // 重命名残留清扫:编辑期间条目被外部删除/改名(FSEvents 重扫后 id 消失),重命名框随
+        // cell 一起卸载但 renamingItemID 还在 → .renaming 抑制源泄漏,面板永不自动收回。
+        // 条目不在当前列表即结束重命名(endRename 触发上方 sink 解除抑制)。
+        renameSweepCancellable = model.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                guard let self, let id = self.model.renamingItemID else { return }
+                if !self.model.sortedItems.contains(where: { $0.id == id }) {
+                    self.model.endRename()
+                }
             }
 
         // 增删/重排绑定(设置页或添加文件夹)→ 统一在此重建镜像(保持设置与面板一致)。

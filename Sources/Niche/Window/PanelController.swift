@@ -151,6 +151,15 @@ final class PanelController {
         isHiding = false
         startKeyMonitor()
         panel.mode = .pinned
+        // 离屏自救:拖到外接屏后拔屏,frame 可能整窗落在所有屏可视区外 ——"显示了"但看不见,
+        // 且 pin 态不动 frame,用户无任何路径把它拽回来。回拉到鼠标所在屏(无则主屏)中央。
+        if !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }) {
+            let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+            if let vf = screen?.visibleFrame {
+                panel.setFrameOrigin(NSPoint(x: vf.midX - panel.frame.width / 2,
+                                             y: vf.midY - panel.frame.height / 2))
+            }
+        }
         panel.alphaValue = 1
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
