@@ -12,6 +12,8 @@ struct FileCellView: View {
     let isRenaming: Bool
     /// dataless 按需下载中:显 spinner 替代 iCloud 角标(#13)。
     var isDownloading: Bool = false
+    /// 拖入悬停目标(目录格子,Finder 语义"会落进这个文件夹"):高亮环 + 底色。
+    var isDropTarget: Bool = false
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
@@ -43,6 +45,13 @@ struct FileCellView: View {
             RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
                 .fill(cellFill)
         )
+        // 拖入悬停环(Finder 拖到文件夹上的高亮框同义):画在底色之上、角标/捕获层之下。
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+            }
+        }
         // hover 高亮:鼠标移入给一层比选中态更淡的底,提示可点(选中态优先)。
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
@@ -85,8 +94,9 @@ struct FileCellView: View {
         return parts.joined(separator: ",")
     }
 
-    /// 单元底色:选中(强调色)> hover(淡灰提示)> 无。强度收口到 GlassTokens(#16)。
+    /// 单元底色:拖入悬停(落点提示)> 选中(强调色)> hover(淡灰提示)> 无。强度收口到 GlassTokens(#16)。
     private var cellFill: Color {
+        if isDropTarget { return Color.accentColor.opacity(GlassTokens.selectionFill) }
         if isSelected { return Color.accentColor.opacity(GlassTokens.selectionFill) }
         if isHovered { return Color.primary.opacity(GlassTokens.hoverFill) }
         return Color.clear

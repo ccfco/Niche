@@ -41,6 +41,22 @@ final class PanelModel: ObservableObject {
     func beginDownload(_ id: FileItem.ID) { downloadingIDs.insert(id) }
     func endDownload(_ id: FileItem.ID) { downloadingIDs.remove(id) }
 
+    /// 拖入悬停的目录条目(目录格子/行是独立落点,悬停高亮提示"会落进这个文件夹")。
+    /// 两模式共用单一真相;列表模式一行四列各是独立 drop region,同 id 计数避免列间切换闪烁。
+    @Published private(set) var dropTargetID: FileItem.ID?
+    private var dropTargetCount = 0
+
+    /// 拖入悬停进/出某目录条目。同一条目可被多个 region 报告(列表的名称/大小/种类/日期列),
+    /// 进出顺序不保证配对有序,计数归零才清除高亮。
+    func setDropTarget(_ id: FileItem.ID, targeted: Bool) {
+        if targeted {
+            if dropTargetID == id { dropTargetCount += 1 } else { dropTargetID = id; dropTargetCount = 1 }
+        } else if dropTargetID == id {
+            dropTargetCount -= 1
+            if dropTargetCount <= 0 { dropTargetID = nil; dropTargetCount = 0 }
+        }
+    }
+
     /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
     private var currentMirrorCancellable: AnyCancellable?
 

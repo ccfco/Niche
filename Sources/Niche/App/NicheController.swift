@@ -35,7 +35,9 @@ final class NicheController {
         },
         onContextMenu: { [weak self] urls, anchor in self?.makeContextMenu(urls, anchor) },
         onContextMenuBackground: { [weak self] anchor in self?.makeBackgroundMenu(anchor) },
-        onDropURLs: { [weak self] urls, modifiers in self?.handleDrop(urls, modifiers: modifiers) },
+        onDropURLs: { [weak self] urls, modifiers, destination in
+            self?.handleDrop(urls, modifiers: modifiers, destination: destination)
+        },
         onRename: { [weak self] url, newName in self?.rename(url, to: newName) ?? false },
         onCopy: { [weak self] urls in self?.ops.copyToPasteboard(urls) },
         onCut: { [weak self] urls in self?.ops.cut(urls) },
@@ -397,8 +399,9 @@ final class NicheController {
 
     /// 拖入落地:Niche 自己执行 copy/move(spec §4.5 注②)。按目标目录与**每个源**的卷 +
     /// 修饰键分别决策(混合同卷/跨卷来源要分别处理),并拦截"目录拖进自身子目录"的循环。
-    private func handleDrop(_ urls: [URL], modifiers: NSEvent.ModifierFlags) {
-        guard let dir = model.currentMirror?.currentDirectory else { return }
+    /// destination = 显式落点(拖到目录格子/行上,Finder 语义:落进那个文件夹);nil = 当前目录。
+    private func handleDrop(_ urls: [URL], modifiers: NSEvent.ModifierFlags, destination: URL?) {
+        guard let dir = destination ?? model.currentMirror?.currentDirectory else { return }
         let destStd = dir.standardizedFileURL
 
         let incoming = urls.filter { src in

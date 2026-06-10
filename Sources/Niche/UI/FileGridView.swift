@@ -48,8 +48,9 @@ struct FileGridView: View {
         // 优先认领落到条目上的右键,gap/空白处的右键穿透到此(catcher 只认右键,不挡左键/拖入)。
         .background(RightClickCatcher(makeMenu: { actions.onContextMenuBackground($0) }))
         // 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②);实时角标见 dropUpdated。
+        // 目录格子是更内层的独立落点(cell 上的 onDrop),此处只接落到空白/非目录格子的拖入。
         .onDrop(of: [.fileURL], delegate: FileDropDelegate(
-            onDrop: actions.onDropURLs,
+            onDrop: { actions.onDropURLs($0, $1, nil) },
             targetDirectory: { model.currentMirror?.currentDirectory }
         ))
     }
@@ -64,12 +65,28 @@ struct FileGridView: View {
         Array(repeating: GridItem(.flexible(), spacing: edge.itemSpacing), count: count)
     }
 
-    private func cell(index: Int, item: FileItem) -> some View {
+    /// 目录格子自带 drop 目标(Finder 语义:拖到文件夹上 = 落进该文件夹,悬停高亮 +
+    /// 同款角标);非目录格子不拦,拖入穿透到外层(落当前目录)。
+    @ViewBuilder private func cell(index: Int, item: FileItem) -> some View {
+        if item.isDirectory {
+            baseCell(item)
+                .onDrop(of: [.fileURL], delegate: FileDropDelegate(
+                    onDrop: { actions.onDropURLs($0, $1, item.url) },
+                    targetDirectory: { item.url },
+                    onTargeted: { model.setDropTarget(item.id, targeted: $0) }
+                ))
+        } else {
+            baseCell(item)
+        }
+    }
+
+    private func baseCell(_ item: FileItem) -> some View {
         FileCellView(
             item: item,
             isSelected: model.selectedIDs.contains(item.id),
             isRenaming: model.renamingItemID == item.id,
             isDownloading: model.downloadingIDs.contains(item.id),
+            isDropTarget: model.dropTargetID == item.id,
             edge: edge,
             onRenameCommit: { newName in
                 // 失败(空名/非法字符)保持编辑态(Codex review)。
@@ -114,10 +131,16 @@ struct FileDropDelegate: DropDelegate {
     let onDrop: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags) -> Void
     /// 落点目录(算同卷/跨卷与可写判定)。
     var targetDirectory: () -> URL? = { nil }
+    /// 悬停进/出(目录格子/行据此高亮"会落进这个文件夹");perform 后也回报 false 收口
+    /// (松手落入后 dropExited 不保证再来一次)。
+    var onTargeted: ((Bool) -> Void)?
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.fileURL])
     }
+
+    func dropEntered(info: DropInfo) { onTargeted?(true) }
+    func dropExited(info: DropInfo) { onTargeted?(false) }
 
     /// 实时角标:⌥ 复制 / ⌘ 移动(修饰键优先);无修饰按同卷 move、跨卷 copy;目标不可写 forbidden。
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -136,6 +159,7 @@ struct FileDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        onTargeted?(false)
         let providers = info.itemProviders(for: [.fileURL])
         guard !providers.isEmpty else { return false }
         let modifiers = NSEvent.modifierFlags

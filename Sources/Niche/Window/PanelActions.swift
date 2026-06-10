@@ -24,7 +24,8 @@ struct PanelActions {
     /// 空白处右键:背景菜单(新建文件夹 / 粘贴);返回 nil 不弹。
     var onContextMenuBackground: (_ anchor: NSView) -> NSMenu? = { _ in nil }
     /// 拖入落地:Niche 自己执行 copy/move(读修饰键 + 卷判定,spec §4.5 注②)。
-    var onDropURLs: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags) -> Void = { _, _ in }
+    /// destination 显式落点(拖到目录格子/行上 = 落进该文件夹);nil = 当前目录。
+    var onDropURLs: (_ urls: [URL], _ modifiers: NSEvent.ModifierFlags, _ destination: URL?) -> Void = { _, _, _ in }
     /// 就地重命名提交;返回是否成功(失败 → cell 保持编辑态)。
     var onRename: (_ url: URL, _ newName: String) -> Bool = { _, _ in false }
     /// 键盘快捷键文件操作。

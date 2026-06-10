@@ -44,8 +44,9 @@ struct FileListView: View {
         .focused($tableFocused)
         .onAppear { tableFocused = true }
         // 拖入落地 + 实时角标(与图标模式等价):落点 = 当前目录。
+        // 目录行是更内层的独立落点(cell 上的 onDrop),此处只接落到空白/非目录行的拖入。
         .onDrop(of: [.fileURL], delegate: FileDropDelegate(
-            onDrop: actions.onDropURLs,
+            onDrop: { actions.onDropURLs($0, $1, nil) },
             targetDirectory: { model.currentMirror?.currentDirectory }
         ))
         // 空文件夹空态(与图标模式等价):overlay 而非替换 Table —— Table 的 onDrop 保持活跃,
@@ -79,7 +80,31 @@ struct FileListView: View {
         )
     }
 
+    /// 目录行 = 独立拖入落点(与图标模式文件夹格子等价)。一行四列各是独立 drop region,
+    /// 共写 model.dropTargetID(计数式)→ 四列同步高亮,看起来是整行高亮。非目录不拦,
+    /// 拖入穿透到 Table 外层(落当前目录)。
+    @ViewBuilder private func folderDropTarget<Content: View>(
+        _ item: FileItem, @ViewBuilder content: () -> Content
+    ) -> some View {
+        let highlighted = content()
+            .background(model.dropTargetID == item.id
+                        ? Color.accentColor.opacity(GlassTokens.selectionFill) : Color.clear)
+        if item.isDirectory {
+            highlighted.onDrop(of: [.fileURL], delegate: FileDropDelegate(
+                onDrop: { actions.onDropURLs($0, $1, item.url) },
+                targetDirectory: { item.url },
+                onTargeted: { model.setDropTarget(item.id, targeted: $0) }
+            ))
+        } else {
+            highlighted
+        }
+    }
+
     @ViewBuilder private func nameCell(_ item: FileItem) -> some View {
+        folderDropTarget(item) { nameCellContent(item) }
+    }
+
+    @ViewBuilder private func nameCellContent(_ item: FileItem) -> some View {
         HStack(spacing: edge.innerSpacing) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
                 .resizable().frame(width: 16, height: 16)
@@ -114,19 +139,21 @@ struct FileListView: View {
         }))
     }
 
-    /// 次列(大小/种类/日期)单元包装:补与名称列等价的双击激活 + 右键菜单(整行可右键,
-    /// 与图标模式整格可右键等价)。
+    /// 次列(大小/种类/日期)单元包装:补与名称列等价的双击激活 + 右键菜单 + 目录行拖入落点
+    /// (整行可右键/可落入,与图标模式整格等价)。
     @ViewBuilder private func secondaryCell<Content: View>(
-        _ item: FileItem, @ViewBuilder content: () -> Content
+        _ item: FileItem, @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
-            .overlay(RightClickCatcher(makeMenu: { anchor in
-                if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
-                return actions.onContextMenu(model.selectionURLs, anchor)
-            }))
+        folderDropTarget(item) {
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
+                .overlay(RightClickCatcher(makeMenu: { anchor in
+                    if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
+                    return actions.onContextMenu(model.selectionURLs, anchor)
+                }))
+        }
     }
 
     private func activate(_ item: FileItem) {
