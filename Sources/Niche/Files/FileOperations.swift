@@ -93,8 +93,11 @@ final class FileOperations {
         }
     }
 
-    /// 按文件系统身份(volume+inode)判同一物理文件:路径字符串比较挡不住符号链接路径
-    /// 指向同一文件的情形。任一侧取不到身份(目标不存在等)视为不同文件。
+    /// 按文件系统身份(volume+inode)判同一物理文件:路径字符串比较挡不住"路径**中间**含
+    /// 符号链接"的同文件情形(中间组件由内核解析,两路径取到同一 inode)。**末端组件本身是
+    /// symlink 时取的是链接自身身份**(实测 /var vs /private/var 不等)—— 这是有意保留:
+    /// 链接与其目标是两个文件系统对象,"用链接替换同名目标"经过冲突确认弹窗,与 Finder 一致。
+    /// 任一侧取不到身份(目标不存在等)视为不同文件。
     private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
         guard let ra = (try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier,
               let rb = (try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier

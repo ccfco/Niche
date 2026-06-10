@@ -31,9 +31,11 @@ final class QuickLookController: NSObject {
     var onDownloadBegin: ((URL) -> Void)?
     var onDownloadEnd: ((URL) -> Void)?
     var onDownloadFailed: ((URL, Error) -> Void)?
-    /// 预览请求代次:下载期间用户关预览/再次请求 → 旧 Task 的 present 作废(防迟到的下载
-    /// 完成把已关的预览重新拉起)。
+    /// 预览请求代次:下载期间用户关预览/关面板/再次请求 → 旧 Task 的 present 作废(防迟到的
+    /// 下载完成把已关的预览重新拉起)。
     private var previewGeneration = 0
+    /// 正在为初次预览下载的条目(同一文件重复按空格去重;与翻页路径的 pendingDownloadIndex 分账)。
+    private var pendingPreviewURL: URL?
 
     init(autoHide: AutoHideCoordinator) {
         self.autoHide = autoHide
@@ -62,11 +64,14 @@ final class QuickLookController: NSObject {
     /// dataless 文件先显式下载到本地再预览(§4.1.2:等可用后再把 URL 交给 QLPreviewPanel)。
     func preview(urls: [URL], at index: Int) {
         guard !urls.isEmpty, urls.indices.contains(index) else { return }
+        let itemURL = urls[index]   // 面板条目原 URL(= FileItem.ID),spinner 挂在该 cell 上
+        // 同一文件下载中重复按空格:no-op(与双击打开的 downloadingIDs 去重同理)——否则旧
+        // Task 的 defer onDownloadEnd 会提前清掉 spinner,且双 Task 重复轮询(Codex review)。
+        guard pendingPreviewURL != itemURL else { return }
         self.urls = urls
         self.index = index
         previewGeneration += 1
         let gen = previewGeneration
-        let itemURL = urls[index]   // 面板条目原 URL(= FileItem.ID),spinner 挂在该 cell 上
 
         Task {
             do {
@@ -75,14 +80,19 @@ final class QuickLookController: NSObject {
                 // 等于没下,数据源解析出的 dataless 目标会绕过下载直接丢给 QL(Codex review)。
                 let target = Self.resolvedForPreview(itemURL)
                 if ICloudStatus.isDataless(target) {
+                    pendingPreviewURL = itemURL
                     onDownloadBegin?(itemURL)
-                    defer { onDownloadEnd?(itemURL) }
+                    defer {
+                        onDownloadEnd?(itemURL)
+                        if pendingPreviewURL == itemURL { pendingPreviewURL = nil }
+                    }
                     try await ICloudStatus.ensureDownloaded(target)
                 }
             } catch {
                 // 下载失败/超时:不把 dataless URL 交给 Quick Look(spec §4.1.2),且必须可见
                 // (与双击打开路径对称)—— 此前 catch { return } 静默,用户按空格后 30s 无任何动静。
-                onDownloadFailed?(itemURL, error)
+                // 已被新请求/关面板作废的旧失败不弹(迟到的过期提示只会让用户困惑)。
+                if gen == previewGeneration { onDownloadFailed?(itemURL, error) }
                 return
             }
             // 下载期间预览被关闭/被新请求顶替 → 不再拉起(防迟到 present 重开预览)。
@@ -95,10 +105,17 @@ final class QuickLookController: NSObject {
     /// orderOut 不发 NSWindow.willClose,故显式走 handleClose 清理;handleClose 幂等(Set.remove +
     /// observer nil 守卫),与原生关闭(Esc/红点 → willClose)路径重入也安全。
     func close() {
-        previewGeneration += 1   // 作废下载中的 preview Task(关了就别再被迟到的 present 拉起)
+        cancelPendingPreview()
         guard QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared() else { return }
         panel.orderOut(nil)
         handleClose()
+    }
+
+    /// 作废"下载中、QL 尚未呈现"的预览请求:面板收回(Esc/⌘W/自动隐藏)时必须调——
+    /// 此时 QL 不可见,close() 的 orderOut 路径走不到,迟到的下载完成会把 QL 凭空弹出来
+    /// 浮在已收起的面板原位(Codex review)。
+    func cancelPendingPreview() {
+        previewGeneration += 1
     }
 
     private func present() {

@@ -17,17 +17,19 @@ struct FileListView: View {
         // 此前 nameCell 上挂 .draggable(item.url) 只能拖单项,违反「两模式行为等价」。
         Table(of: FileItem.self, selection: multiSelectionBinding, sortOrder: sortBinding) {
             TableColumn("名称", value: \.name) { item in nameCell(item) }
+            // 次列也挂右键/双击(secondaryCell):右键/双击不该只在名称列生效——图标模式整格
+            // 可右键,列表只覆盖名称列即违反「两模式行为等价」(Codex review)。
             TableColumn("大小", value: \.size) { item in
-                Text(sizeLabel(item)).foregroundStyle(.secondary).monospacedDigit()
+                secondaryCell(item) { Text(sizeLabel(item)).foregroundStyle(.secondary).monospacedDigit() }
             }
             .width(min: 64, ideal: 72, max: 96)
             TableColumn("种类", value: \.kindSortKey) { item in
-                Text(kindLabel(item)).foregroundStyle(.secondary).lineLimit(1)
+                secondaryCell(item) { Text(kindLabel(item)).foregroundStyle(.secondary).lineLimit(1) }
             }
             .width(min: 72, ideal: 96, max: 140)
             // 修改日期列(访达列表标配):让 .date 排序态在表头有列可表示,底栏菜单与表头不撕裂。
             TableColumn("修改日期", value: \.modificationDate) { item in
-                Text(dateLabel(item)).foregroundStyle(.secondary).lineLimit(1)
+                secondaryCell(item) { Text(dateLabel(item)).foregroundStyle(.secondary).lineLimit(1) }
             }
             .width(min: 96, ideal: 116, max: 150)
         } rows: {
@@ -110,6 +112,21 @@ struct FileListView: View {
             if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
             return actions.onContextMenu(model.selectionURLs, anchor)
         }))
+    }
+
+    /// 次列(大小/种类/日期)单元包装:补与名称列等价的双击激活 + 右键菜单(整行可右键,
+    /// 与图标模式整格可右键等价)。
+    @ViewBuilder private func secondaryCell<Content: View>(
+        _ item: FileItem, @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
+            .overlay(RightClickCatcher(makeMenu: { anchor in
+                if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
+                return actions.onContextMenu(model.selectionURLs, anchor)
+            }))
     }
 
     private func activate(_ item: FileItem) {

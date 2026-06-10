@@ -233,6 +233,7 @@ final class NicheController {
     }
 
     private func hideTransient() {
+        quickLook.cancelPendingPreview()   // 收面板即作废"下载中未呈现"的预览(防迟到弹出)
         panelController.hide()
         teardownTransientFocusObserver()
     }
