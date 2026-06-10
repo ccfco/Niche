@@ -357,8 +357,11 @@ final class PanelController {
             model.moveCursor(.up, extend: shift); return nil
         case 125: // ↓
             if cmd {
-                if let item = model.cursorItem, item.isDirectory {
-                    model.currentMirror?.enter(item.url); model.clearSelection()
+                // Finder 语义:⌘↓ = 打开所选(目录下钻,文件交系统打开)。此前只对目录生效,
+                // 文件按了没反应 —— 与 Finder 不一致的无声死区。
+                if let item = model.cursorItem {
+                    if item.isDirectory { model.currentMirror?.enter(item.url); model.clearSelection() }
+                    else { actions.onOpen(item) }
                 }
                 return nil
             }
@@ -375,10 +378,19 @@ final class PanelController {
                 actions.onQuickLook(model.sortedItems.map(\.url), idx)
             }
             return nil
-        case 36, 76: // Return / Enter → 打开 / 下钻(光标项)
+        case 36, 76: // Return / Enter → 打开 / 下钻;⇧Return → 就地重命名
+            // Return=打开是 spec §4.7 的有意取舍(非 Finder 的 Return=重命名),但重命名必须留
+            // 键盘路径(否则只剩右键菜单一条路,Finder 用户两头落空)。⇧Return:离 Finder 习惯
+            // 最近的空位(重命名态本身的 Return/Esc 由字段编辑器在 monitor 之前接管,不冲突)。
             if let item = model.cursorItem {
-                if item.isDirectory { model.currentMirror?.enter(item.url); model.clearSelection() }
-                else { actions.onOpen(item) }
+                if shift {
+                    model.selectSingle(item.id)
+                    model.beginRename(item.url)
+                } else if item.isDirectory {
+                    model.currentMirror?.enter(item.url); model.clearSelection()
+                } else {
+                    actions.onOpen(item)
+                }
             }
             return nil
         case 53: // Esc → 收回(未 pin)/ 隐藏常驻
@@ -392,6 +404,11 @@ final class PanelController {
 
         // ⌘ 字母快捷键(spec §4.5/§4.7)。
         if cmd, let ch = event.charactersIgnoringModifiers?.lowercased() {
+            // ⌘1…9 切 tab(访达/浏览器惯例):多文件夹是核心体验,切 tab 不能只有鼠标一条路。
+            if let n = Int(ch), (1...9).contains(n) {
+                model.selectTab(n - 1)   // 越界由 selectTab 守卫,no-op
+                return nil
+            }
             switch ch {
             case "a": model.selectAll(); return nil
             case "c" where option: actions.onCopyPath(model.selectionURLs); return nil
