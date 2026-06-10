@@ -424,7 +424,9 @@ final class PanelController {
             case "c": actions.onCopy(model.selectionURLs); return nil
             case "x": actions.onCut(model.selectionURLs); return nil
             case "v": actions.onPaste(); return nil
+            case "z" where shift: actions.onRedo(); return nil
             case "z": actions.onUndo(); return nil
+            case "n" where shift: actions.onNewFolder(); return nil
             case "w": actions.onClose(); return nil
             case ",": actions.onOpenSettings(); return nil
             default: break

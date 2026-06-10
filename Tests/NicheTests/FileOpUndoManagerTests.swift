@@ -8,7 +8,10 @@ final class FileOpUndoManagerTests: XCTestCase {
         var moves: [(from: URL, to: URL)] = []
         var trashed: [URL] = []
         func moveItem(at src: URL, to dst: URL) throws { moves.append((src, dst)) }
-        func trashItem(at url: URL) throws { trashed.append(url) }
+        func trashItemReturningURL(at url: URL) throws -> URL {
+            trashed.append(url)
+            return URL(fileURLWithPath: "/tmp/.Trash/" + url.lastPathComponent)
+        }
     }
 
     private func url(_ p: String) -> URL { URL(fileURLWithPath: p) }
@@ -73,7 +76,9 @@ final class FileOpUndoManagerTests: XCTestCase {
             if failNext { failNext = false; throw CocoaError(.fileWriteNoPermission) }
             moves.append((src, dst))
         }
-        func trashItem(at url: URL) throws {}
+        func trashItemReturningURL(at url: URL) throws -> URL {
+            URL(fileURLWithPath: "/tmp/.Trash/" + url.lastPathComponent)
+        }
     }
 
     func testFailedUndoKeepsRecordForRetry() {
@@ -86,5 +91,59 @@ final class FileOpUndoManagerTests: XCTestCase {
         XCTAssertNoThrow(try mgr.undoLast())       // 外部条件修复后可重试
         XCTAssertFalse(mgr.canUndo)
         XCTAssertEqual(flaky.moves.count, 1)
+    }
+
+    // MARK: - 重做(⇧⌘Z)
+
+    func testRedoMoveReappliesAndIsUndoableAgain() throws {
+        let spy = SpyService()
+        let mgr = FileOpUndoManager(service: spy)
+        mgr.record(.init(kind: .move(from: url("/a/x"), to: url("/b/x"))))
+        try mgr.undoLast()
+        XCTAssertTrue(mgr.canRedo)
+
+        let redone = try mgr.redoLast()
+        XCTAssertEqual(redone, .move(from: url("/a/x"), to: url("/b/x")))
+        XCTAssertEqual(spy.moves[1].from, url("/a/x"))   // 重做 = 再移动
+        XCTAssertEqual(spy.moves[1].to, url("/b/x"))
+        XCTAssertFalse(mgr.canRedo)
+        XCTAssertTrue(mgr.canUndo)                       // 重做后可再次撤销
+    }
+
+    func testRedoTrashCapturesFreshTrashURL() throws {
+        let spy = SpyService()
+        let mgr = FileOpUndoManager(service: spy)
+        let original = url("/tmp/a.txt")
+        mgr.record(.init(kind: .trash(original: original, trashed: url("/tmp/.Trash/a-old.txt"))))
+        try mgr.undoLast()
+
+        try mgr.redoLast()
+        // 重做移废纸篓产生新落点,undo 栈记录必须更新为新位置(旧位置已失效)。
+        XCTAssertEqual(mgr.stack.last?.kind,
+                       .trash(original: original, trashed: url("/tmp/.Trash/a.txt")))
+    }
+
+    func testUndoCopyThenRedoRestoresFromTrash() throws {
+        let spy = SpyService()
+        let mgr = FileOpUndoManager(service: spy)
+        let created = url("/b/x")
+        mgr.record(.init(kind: .copy(created: created)))
+        try mgr.undoLast()                               // 副本进废纸篓
+
+        try mgr.redoLast()                               // 重做 = 从废纸篓挪回
+        XCTAssertEqual(spy.moves.last?.from, url("/tmp/.Trash/x"))
+        XCTAssertEqual(spy.moves.last?.to, created)
+        XCTAssertEqual(mgr.stack.last?.kind, .copy(created: created))
+    }
+
+    func testNewRecordClearsRedoBranch() throws {
+        let mgr = FileOpUndoManager(service: SpyService())
+        mgr.record(.init(kind: .move(from: url("/a/x"), to: url("/b/x"))))
+        try mgr.undoLast()
+        XCTAssertTrue(mgr.canRedo)
+
+        mgr.record(.init(kind: .copy(created: url("/c/y"))))   // 新操作作废重做分支
+        XCTAssertFalse(mgr.canRedo)
+        XCTAssertNil(try mgr.redoLast())
     }
 }

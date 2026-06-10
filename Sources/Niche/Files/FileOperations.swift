@@ -222,6 +222,12 @@ final class FileOperations {
         try undo.undoLast()
     }
 
+    /// 重做最近一次撤销(⇧⌘Z;语义同 undoLast:失败上抛、栈空静默)。
+    @discardableResult
+    func redoLast() throws -> FileOperationRedoRecord? {
+        try undo.redoLast()
+    }
+
     // MARK: - 内部:NSFileCoordinator 协调的读写(注③)
 
     private func coordinatedCopy(from src: URL, to dst: URL) throws {

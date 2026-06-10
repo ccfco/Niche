@@ -18,7 +18,7 @@ final class NicheController {
     private lazy var ops = FileOperations(undo: undoManager)
     private lazy var contextMenu = ContextMenuBuilder(
         ops: ops, autoHide: autoHide,
-        onRequestRename: { [weak self] url in self?.model.beginRename(url) }
+        onRequestRename: { [weak self] url in self?.beginRenameSafely(url) }
     )
 
     private lazy var actions = PanelActions(
@@ -43,6 +43,8 @@ final class NicheController {
         onTrash: { [weak self] urls in self?.ops.trash(urls) },
         onPaste: { [weak self] in self?.paste() },
         onUndo: { [weak self] in self?.undoLast() },
+        onRedo: { [weak self] in self?.redoLast() },
+        onNewFolder: { [weak self] in self?.newFolderInCurrentDirectory() },
         onClose: { [weak self] in self?.closeFromKeyboard() },
         onOpenSettings: { [weak self] in self?.openSettings() },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
@@ -320,6 +322,38 @@ final class NicheController {
             Log.files.error("撤销失败:\(error.localizedDescription, privacy: .public)")
             presentFailure(title: "无法撤销", error: error)
         }
+    }
+
+    /// ⇧⌘Z 重做:语义与撤销对称(栈空静默,失败弹提示且记录留栈可重试)。
+    private func redoLast() {
+        do { try ops.redoLast() }
+        catch {
+            Log.files.error("重做失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法重做", error: error)
+        }
+    }
+
+    /// ⌘⇧N 新建文件夹(落点 = 当前目录,与背景右键菜单同款:新建即就地重命名)。
+    private func newFolderInCurrentDirectory() {
+        guard let dir = model.currentMirror?.currentDirectory else { return }
+        do {
+            let url = try ops.newFolder(in: dir)
+            beginRenameSafely(url)
+        } catch {
+            Log.files.error("新建文件夹失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法新建文件夹", error: error)
+        }
+    }
+
+    /// 进入就地重命名前确保条目已在镜像里:新建文件夹靠 FSEvents 异步重扫入列,而重命名残留
+    /// 清扫(renameSweep)会把"不在 sortedItems 里的 renamingItemID"立即清掉 —— 不先同步
+    /// refresh,新建后的重命名框会被清扫秒杀(出现一帧就消失)。顺带选中该项(Finder 语义)。
+    private func beginRenameSafely(_ url: URL) {
+        if !model.sortedItems.contains(where: { $0.id == url }) {
+            model.currentMirror?.refresh()
+        }
+        model.selectSingle(url)
+        model.beginRename(url)
     }
 
     /// 重命名提交;返回是否成功(失败 → cell 保持编辑态)。校验空名/同名/非法字符。

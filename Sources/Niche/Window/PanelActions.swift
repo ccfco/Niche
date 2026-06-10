@@ -34,6 +34,10 @@ struct PanelActions {
     var onTrash: (_ urls: [URL]) -> Void = { _ in }
     var onPaste: () -> Void = {}
     var onUndo: () -> Void = {}
+    /// ⇧⌘Z 重做最近一次撤销。
+    var onRedo: () -> Void = {}
+    /// ⌘⇧N 在当前目录新建文件夹并进入就地重命名(与背景右键菜单同一落点)。
+    var onNewFolder: () -> Void = {}
     /// ⌘W / Esc 收回(未 pin)。
     var onClose: () -> Void = {}
     /// ⌘, 打开设置窗口(面板是 nonactivating panel,app 常处于非激活态,主菜单 key equivalent
