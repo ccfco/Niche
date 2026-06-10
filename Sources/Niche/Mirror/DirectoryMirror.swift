@@ -148,6 +148,7 @@ final class DirectoryMirror: ObservableObject {
     }
 
     private func armAttempt() {
+        invalidateInFlightScans()   // 早退分支(卷/缺失/TCC)直接定错误态,不能被迟到扫描覆盖成 ready
         state = .loading
 
         // 卷已卸载?进入空态(保留绑定,不删)。
@@ -188,7 +189,9 @@ final class DirectoryMirror: ObservableObject {
 
     private func handle(_ batch: FSEventBatch) {
         if batch.unmounted, !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
+            invalidateInFlightScans()   // 卸载前已起飞的后台扫描不得回头把状态覆盖成 ready
             stream?.stop(); stream = nil
+            isWatching = false
             state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
             return
         }
@@ -204,30 +207,78 @@ final class DirectoryMirror: ObservableObject {
             startICloudIfNeeded()
         }
         // 无论 needsFullRescan 还是普通变化,一律重扫快照 + diff(不信任增量,§4.1.1)。
-        captureAndPublish()
+        // FSEvents 路径走后台扫:大目录(数千文件)同步列目录会卡主线程,高频变更(解压/
+        // 批量下载)时面板动画反复冻结(性能审计)。
+        captureAndPublishAsync()
     }
 
     // MARK: - 快照
 
-    /// 重扫目录、与旧快照 diff、发布。任何变化都走这条路径(镜像靠比对而非增量信任)。
+    /// 扫描代次:作废在途的后台扫描结果。任何一次扫描(同步或异步)都推进代次;
+    /// 异步结果回主线程时代次已变(期间有过更新的扫描/下钻换了目录)即丢弃,防旧结果
+    /// 覆盖新状态。@MainActor 串行,无锁。
+    private var scanGeneration = 0
+    /// 在途后台扫描(FSEvents 风暴合并:新事件取消未开扫的旧任务,已在扫的扫完被代次丢弃,
+    /// 并发扫描数有界,不随事件频率堆积)。
+    private var scanTask: Task<Void, Never>?
+
+    /// 任何"绕过扫描直接定状态"的路径(armAttempt 早退 / 卷卸载通知)必须先调:
+    /// 否则迟到的后台扫描结果会把刚设的错误态覆盖回 ready(Codex review)。
+    private func invalidateInFlightScans() {
+        scanGeneration &+= 1
+    }
+
+    /// 同步重扫(**仅用户动作路径**:arm / refresh / 下钻):立即扫、立即发布——
+    /// beginRenameSafely(新建文件夹即时入列)等依赖 refresh 的同步语义,不能改异步。
+    /// 重扫目录、与旧快照 diff、发布。镜像靠比对而非增量信任。
     @discardableResult
     private func captureAndPublish() -> Bool {
+        scanGeneration &+= 1
         guard let fresh = try? DirectorySnapshot.capture(directory: resolvedURL, showHidden: showHidden) else {
-            // 列目录失败:按"卷消失 → 目录被删 → 授权被撤销"顺序归因(误报 denied 会引导
-            // 用户去系统设置白授权;stat 不受 TCC 限,可与 denied 区分)。
-            if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
-                state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
-            } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
-                state = .missing
-            } else {
-                state = .permissionDenied
-            }
+            applyCaptureFailure()
             return false
         }
+        apply(fresh)
+        return true
+    }
+
+    /// 后台重扫(FSEvents 事件路径):capture 移到后台,回主线程后代次未变才发布。
+    private func captureAndPublishAsync() {
+        scanGeneration &+= 1
+        let generation = scanGeneration
+        let dir = resolvedURL
+        let hidden = showHidden
+        scanTask?.cancel()
+        scanTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard !Task.isCancelled else { return }   // 已被更新事件取代,省一次全量列目录
+            let fresh = try? DirectorySnapshot.capture(directory: dir, showHidden: hidden)
+            await MainActor.run {
+                guard let self, self.scanGeneration == generation else { return }
+                if let fresh {
+                    self.apply(fresh)
+                } else {
+                    self.applyCaptureFailure()
+                }
+            }
+        }
+    }
+
+    private func apply(_ fresh: DirectorySnapshot) {
         snapshot = fresh
         publishItems()
         if case .ready = state {} else { state = .ready }
-        return true
+    }
+
+    /// 列目录失败的统一归因:按"卷消失 → 目录被删 → 授权被撤销"顺序(误报 denied 会
+    /// 引导用户去系统设置白授权;stat 不受 TCC 限,可与 denied 区分)。
+    private func applyCaptureFailure() {
+        if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
+            state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
+        } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
+            state = .missing
+        } else {
+            state = .permissionDenied
+        }
     }
 
     func refresh() { captureAndPublish() }
@@ -265,6 +316,7 @@ final class DirectoryMirror: ObservableObject {
 
     func volumeDidUnmount(_ volumeURL: URL) {
         guard Self.contains(ancestor: volumeURL, descendant: rootURL) else { return }
+        invalidateInFlightScans()   // 同 handle 卸载分支:迟到扫描不得覆盖卸载态
         stream?.stop(); stream = nil
         isWatching = false
         // 卷名取通知里的挂载点名,不取绑定目录末段(深层子目录会把子目录名当卷名展示)。
