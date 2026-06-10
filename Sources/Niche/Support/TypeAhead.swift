@@ -21,6 +21,11 @@ struct TypeAheadBuffer {
         lastInput = .distantPast
     }
 
+    /// 当前仍在连击窗口内的有效前缀(超时即视为空 —— 直接读 buffer 会拿到过期残留)。
+    func activeBuffer(at now: Date = Date()) -> String {
+        now.timeIntervalSince(lastInput) > timeout ? "" : buffer
+    }
+
     /// 该按键是否参与 type-ahead:可见字符才算(控制键/F 键等私有区码位不算;空格被
     /// Quick Look 占用,方向键/Esc/Return 在 keyMonitor 更早的分支已各有语义)。
     static func isTypeAheadInput(_ chars: String?) -> Bool {

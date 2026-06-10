@@ -71,7 +71,8 @@ final class PanelController {
     /// 下钻后多一行面包屑(#7 加的路径栏),计入 chrome 否则内容被挤压(#14)。
     private func panelHeight(itemCount: Int) -> CGFloat {
         let count = max(itemCount, 1)
-        let breadcrumb: CGFloat = (model.currentMirror?.canGoUp == true) ? 34 : 0
+        let breadcrumb: CGFloat = ((model.currentMirror?.canGoUp == true) ? 34 : 0)
+                                + (model.pathInputVisible ? 34 : 0)   // 路径输入条同行高
         if model.viewMode == .list {
             let rowHeight: CGFloat = 26
             let chrome: CGFloat = 112        // tab + 表头 + 底栏 + 分隔 + padding
@@ -424,6 +425,7 @@ final class PanelController {
             }
             switch ch {
             case "a": model.selectAll(); return nil
+            case "g" where shift: model.beginPathInput(); return nil   // ⌘⇧G 前往(Finder 同款)
             case "c" where option: actions.onCopyPath(model.selectionURLs); return nil
             case "c": actions.onCopy(model.selectionURLs); return nil
             case "x": actions.onCut(model.selectionURLs); return nil
@@ -441,7 +443,14 @@ final class PanelController {
         // 列表态 NSTableView 自带 type-select,若放行会与此处双权威各跳各的(键盘单一权威)。
         if !cmd, !option, !flags.contains(.control),
            TypeAheadBuffer.isTypeAheadInput(event.charactersIgnoringModifiers) {
-            let prefix = typeAhead.append(event.charactersIgnoringModifiers ?? "")
+            let chars = event.charactersIgnoringModifiers ?? ""
+            // `/` 必是路径(文件名不可能含);`~` 仅在新一轮输入(有效缓冲空)时视为路径起手
+            // —— 两者转入路径输入条并带入首字符,不进 type-ahead。
+            if chars == "/" || (chars == "~" && typeAhead.activeBuffer().isEmpty) {
+                model.beginPathInput(initial: chars)
+                return nil
+            }
+            let prefix = typeAhead.append(chars)
             if let idx = TypeAheadBuffer.firstMatch(prefix: prefix, in: model.sortedItems.map(\.name)) {
                 model.selectSingle(model.sortedItems[idx].id)
             }

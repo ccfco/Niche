@@ -14,6 +14,7 @@ final class AutoHideCoordinator {
         case dragging     // 拖入(面板是 drop 目标)进行中
         case draggingOut  // 拖出(面板是 drag 源)进行中
         case renaming     // 就地重命名编辑中
+        case pathInput    // 路径输入条(前往)展开中:输入路径常要对照别处,鼠标离开不该把面板抽走
         case modalDialog  // 模态对话框(NSOpenPanel/NSAlert)展示中:对话框成 key + 鼠标移去
                           // 点按都会触发收回,不抑制则"添加文件夹/移动到…/冲突确认"期间面板被挤走
     }

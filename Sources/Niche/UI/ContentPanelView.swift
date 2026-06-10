@@ -16,10 +16,15 @@ struct ContentPanelView: View {
         VStack(spacing: 0) {
             HStack(spacing: edge.itemSpacing) {
                 FolderTabsView(model: model, edge: edge,
-                               onAddFolder: actions.onAddFolder, onRemoveFolder: actions.onRemoveFolder)
+                               onAddFolder: actions.onAddFolder, onRemoveFolder: actions.onRemoveFolder,
+                               onPinTemporary: actions.onPinTemporary)
                 viewSwitcher
                     .fixedSize()
                     .padding(.trailing, edge.panelPadding)
+            }
+            // 路径输入条(前往):⌘⇧G / 键入 `/`、`~` 弹出,位于 tab 与面包屑之间。
+            if model.pathInputVisible {
+                PathInputBar(model: model, edge: edge, onGoToPath: actions.onGoToPath)
             }
             breadcrumb
             content

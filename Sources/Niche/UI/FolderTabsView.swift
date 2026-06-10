@@ -8,12 +8,18 @@ struct FolderTabsView: View {
     var onAddFolder: () -> Void = {}
     /// 移除当前 tab 的绑定。
     var onRemoveFolder: (FolderBinding.ID) -> Void = { _ in }
+    /// 把临时 tab(前往)钉成正式绑定。
+    var onPinTemporary: () -> Void = {}
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: edge.innerSpacing) {
                 ForEach(Array(model.mirrors.enumerated()), id: \.element.binding.id) { index, mirror in
-                    tab(index: index, title: mirror.binding.displayName)
+                    if mirror.isTemporary {
+                        temporaryTab(index: index, mirror: mirror)
+                    } else {
+                        tab(index: index, title: mirror.binding.displayName)
+                    }
                 }
                 addButton
             }
@@ -37,6 +43,34 @@ struct FolderTabsView: View {
         // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
         .accessibilityLabel(title)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+
+    /// 临时 tab(前往根外目录):前往图标点出身份,内联 📌 钉住(转正式绑定)与 ✕ 关闭。
+    /// 不用 .contextMenu 挂动作:SwiftUI 菜单不接 AutoHideCoordinator 抑制,菜单开着面板
+    /// 可能被收走(文件右键走 RightClickCatcher+NSMenu 正是为此)。
+    private func temporaryTab(index: Int, mirror: DirectoryMirror) -> some View {
+        let isCurrent = index == model.currentTab
+        return HStack(spacing: 2) {
+            Button { model.selectTab(index) } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.turn.down.right").font(.caption2)
+                    Text(mirror.binding.displayName).lineLimit(1)
+                }
+            }
+            .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
+            .accessibilityLabel("临时:\(mirror.binding.displayName)")
+            .accessibilityAddTraits(isCurrent ? .isSelected : [])
+            Button(action: onPinTemporary) { Image(systemName: "pin") }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("钉住为常驻文件夹")
+                .accessibilityLabel("钉住为常驻文件夹")
+            Button { model.closeTemporary() } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("关闭临时文件夹")
+                .accessibilityLabel("关闭临时文件夹")
+        }
     }
 
     private var addButton: some View {

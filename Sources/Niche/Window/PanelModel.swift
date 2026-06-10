@@ -64,6 +64,27 @@ final class PanelModel: ObservableObject {
         dropTargetCount = 0
     }
 
+    // MARK: - 路径输入(前往,spec:specs/2026-06-10-niche-path-input-design.md)
+
+    /// 路径输入条是否展开(⌘⇧G / 键入 `/`、`~` 弹出;Esc/前往成功收起)。
+    @Published private(set) var pathInputVisible = false
+    /// 弹出时带入的首字符(键入 `/`、`~` 触发时不丢第一击)。
+    private(set) var pathInputInitial = ""
+    /// 聚焦代次:条已开但焦点回到列表后再次 ⌘⇧G/键入 `/` → 自增让输入框重新夺焦
+    /// (NSView 无法被 model 直接夺焦,经 updateNSView 对比代次驱动)。
+    private(set) var pathInputFocusToken = 0
+
+    func beginPathInput(initial: String = "") {
+        pathInputInitial = initial
+        pathInputFocusToken += 1
+        pathInputVisible = true
+    }
+
+    func endPathInput() {
+        pathInputVisible = false
+        pathInputInitial = ""
+    }
+
     /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
     private var currentMirrorCancellable: AnyCancellable?
 
@@ -101,9 +122,18 @@ final class PanelModel: ObservableObject {
     /// 用绑定列表重建镜像(增删/重排文件夹后调用)。
     /// 按 binding id 保留"当前正在看的文件夹"(`selecting` 显式指定则优先);只有原绑定被删才回退 clamp。
     /// 这样设置页重排不会让当前 tab 静默跳到另一个文件夹,新增也能精确选中(Codex review)。
+    /// 临时 tab(前往)不来自绑定列表,重建时原样保留在末位 —— 除非其路径已被「钉住」成正式
+    /// 绑定(此时临时槽让位,选中将命中新绑定 id)。
     func rebuildMirrors(from bindings: [FolderBinding], selecting preferredID: FolderBinding.ID? = nil) {
         let desiredID = preferredID ?? currentMirror?.binding.id
-        mirrors = bindings.map { DirectoryMirror(binding: $0, showHidden: showHidden) }
+        var rebuilt = bindings.map { DirectoryMirror(binding: $0, showHidden: showHidden) }
+        if let temp = mirrors.first(where: \.isTemporary),
+           !bindings.contains(where: {
+               URL(fileURLWithPath: $0.path).standardizedFileURL == temp.rootURL.standardizedFileURL
+           }) {
+            rebuilt.append(temp)
+        }
+        mirrors = rebuilt
         if let desiredID, let index = mirrors.firstIndex(where: { $0.binding.id == desiredID }) {
             currentTab = index
         } else {
@@ -112,6 +142,38 @@ final class PanelModel: ObservableObject {
         subscribeToCurrent()
         // 不在此 arm:rebuild 可能发生在启动期,arm 会列目录触发 TCC,违反"权限按需触发、
         // 不启动弹"(spec §4.1.1)。arm 由调用方(面板可见时)或 selectTab/present 驱动。
+    }
+
+    // MARK: - 临时 tab(前往根外目录;单槽,不持久化)
+
+    /// 当前的临时 mirror(至多一个)。
+    var temporaryMirror: DirectoryMirror? { mirrors.first(where: \.isTemporary) }
+
+    /// 打开/替换临时 tab 并切过去(用户显式动作,arm 可触发 TCC)。
+    /// 单槽:再次前往根外路径即替换 —— 防 tab 泛滥,要常驻就「钉住」转正式绑定。
+    func openTemporary(_ url: URL) {
+        let binding = FolderBinding(path: url.path)   // 不入 BindingStore,不持久化
+        let mirror = DirectoryMirror(binding: binding, showHidden: showHidden, isTemporary: true)
+        if let index = mirrors.firstIndex(where: \.isTemporary) {
+            mirrors[index] = mirror
+            currentTab = index
+        } else {
+            mirrors.append(mirror)
+            currentTab = mirrors.count - 1
+        }
+        clearSelection()
+        subscribeToCurrent()
+        armCurrent()
+    }
+
+    /// 关闭临时 tab(✕):回到最近一个正式 tab。
+    func closeTemporary() {
+        guard let index = mirrors.firstIndex(where: \.isTemporary) else { return }
+        mirrors.remove(at: index)
+        currentTab = min(currentTab, max(0, mirrors.count - 1))
+        clearSelection()
+        subscribeToCurrent()
+        if !mirrors.isEmpty { armCurrent() }   // 关闭临时 tab 是用户动作,回落 tab 需要内容
     }
 
     /// 切换 tab:arm 目标 mirror(打开 tab = 用户显式动作,可触发 TCC §4.1.1)。

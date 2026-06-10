@@ -53,6 +53,8 @@ final class NicheController {
         onNewFolder: { [weak self] in self?.newFolderInCurrentDirectory() },
         onClose: { [weak self] in self?.closeFromKeyboard() },
         onOpenSettings: { [weak self] in self?.openSettings() },
+        onGoToPath: { [weak self] input in self?.goToPath(input) ?? false },
+        onPinTemporary: { [weak self] in self?.pinTemporary() },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
@@ -74,6 +76,7 @@ final class NicheController {
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
+    private var pathInputCancellable: AnyCancellable?
     private var renameSweepCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
     private var triggerPrefsCancellable: AnyCancellable?
@@ -208,6 +211,14 @@ final class NicheController {
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.panelController.relayoutHeight() }
 
+        // 路径输入条展开中 → .pathInput 抑制(输入路径常要对照别处,鼠标离开不该抽走面板)。
+        pathInputCancellable = model.$pathInputVisible
+            .removeDuplicates()
+            .sink { [weak self] visible in
+                guard let self else { return }
+                if visible { self.autoHide.begin(.pathInput) } else { self.autoHide.end(.pathInput) }
+            }
+
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
         renameCancellable = model.$renamingItemID
             .removeDuplicates()
@@ -269,6 +280,7 @@ final class NicheController {
 
     private func hideTransient() {
         quickLook.cancelPendingPreview()   // 收面板即作废"下载中未呈现"的预览(防迟到弹出)
+        model.endPathInput()               // 路径条随面板收口,否则 .pathInput 抑制源跨次泄漏
         panelController.hide()
         teardownTransientFocusObserver()
     }
@@ -415,6 +427,67 @@ final class NicheController {
             Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
             presentFailure(title: "无法粘贴", error: error)
         }
+    }
+
+    // MARK: - 路径输入(前往,spec:specs/2026-06-10-niche-path-input-design.md)
+
+    /// 提交「前往」。返回 false = 路径不存在/非法(输入条显错留条)。
+    /// 目录:当前 tab 根内 → 当前 mirror 下钻(上下文/面包屑完整);根外 → 临时 tab(单槽)。
+    /// 文件:默认 app 打开 + 收面板(用完即走)。进入受保护目录由用户显式输入驱动,符合
+    /// "TCC 按需触发"不变量(arm 在 openTemporary/enter 的用户动作路径上)。
+    private func goToPath(_ input: String) -> Bool {
+        switch PathCompleter.resolve(input) {
+        case .missing:
+            return false
+        case let .file(url):
+            model.endPathInput()
+            hideTransient()
+            openExternalFile(url)
+            return true
+        case let .directory(url):
+            model.endPathInput()
+            // 已有正式 tab 覆盖该路径 → 切过去下钻(不开重复的临时 tab);当前 tab 优先。
+            let formals = ([model.currentMirror].compactMap { $0 } + model.mirrors)
+                .filter { !$0.isTemporary }
+            if let host = formals.first(where: {
+                DirectoryMirror.contains(ancestor: $0.rootURL, descendant: url)
+            }) {
+                if let index = model.mirrors.firstIndex(where: { $0 === host }),
+                   index != model.currentTab {
+                    model.selectTab(index)   // 切 tab 即 arm(用户动作)
+                }
+                host.enter(url)              // enter 自校验仍在根内;url == 根时回到根
+                model.clearSelection()
+            } else {
+                model.openTemporary(url)
+            }
+            return true
+        }
+    }
+
+    /// 前往的目标是文件:默认 app 打开。dataless iCloud 占位先显式下载(与 open(_:) 同理,
+    /// 但条目不在任何镜像里、面板已收,无 cell 可挂 spinner;失败仍要可见提示)。
+    private func openExternalFile(_ url: URL) {
+        guard ICloudStatus.isDataless(url) else { ops.open(url); return }
+        Task {
+            do {
+                try await ICloudStatus.ensureDownloaded(url)
+                ops.open(url)
+            } catch {
+                Log.files.error("前往目标下载失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法下载「\(url.lastPathComponent)」", error: error)
+            }
+        }
+    }
+
+    /// 把临时 tab 钉成正式绑定:生成 bookmark 入 BindingStore,随后的订阅重建会让临时槽
+    /// 让位给同路径正式 tab(rebuildMirrors 的去重逻辑),并精确选中它。
+    private func pinTemporary() {
+        guard let temp = model.temporaryMirror else { return }
+        let url = temp.rootURL
+        let binding = FolderBinding(bookmarkData: DirectoryMirror.makeBookmark(for: url), path: url.path)
+        pendingSelectBindingID = binding.id
+        environment.bindingStore.add(binding)
     }
 
     private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {

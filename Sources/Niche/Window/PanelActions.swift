@@ -44,6 +44,10 @@ struct PanelActions {
     /// ⌘, 打开设置窗口(面板是 nonactivating panel,app 常处于非激活态,主菜单 key equivalent
     /// 不可靠 —— 由面板键盘权威显式接管)。
     var onOpenSettings: () -> Void = {}
+    /// 路径输入条提交「前往」。返回 false = 路径不存在/非法(条上显错,不关条)。
+    var onGoToPath: (String) -> Bool = { _ in false }
+    /// 把临时 tab 钉成正式绑定(bookmark + 入 BindingStore,临时槽让位)。
+    var onPinTemporary: () -> Void = {}
     /// 拖出(面板作 drag 源)起止 → 宿主抑制/解除 auto-hide(拖出全程不消失 + 拖出即走)。
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}

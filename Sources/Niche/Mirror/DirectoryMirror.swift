@@ -24,6 +24,9 @@ final class DirectoryMirror: ObservableObject {
     @Published private(set) var items: [FileItem] = []
 
     let binding: FolderBinding
+    /// 临时 tab(路径输入「前往」根外目录):不入 BindingStore、不持久化,单槽替换;
+    /// 其余能力(文件操作/TCC/FSEvents/iCloud)与正式 tab 完全等价。
+    let isTemporary: Bool
     /// 绑定根目录(bookmark 解析所得,不随下钻变化)。
     private(set) var rootURL: URL
     /// 当前展示的目录(spec §4.7 ⌘↓ 进子目录 / ⌘↑ 回上级;下钻不越过 rootURL)。
@@ -68,9 +71,10 @@ final class DirectoryMirror: ObservableObject {
     /// FSEvents 流是否成功建立(失败 → 无实时同步,需手动 refresh)。
     private(set) var isWatching = false
 
-    init(binding: FolderBinding, showHidden: Bool) {
+    init(binding: FolderBinding, showHidden: Bool, isTemporary: Bool = false) {
         self.binding = binding
         self.showHidden = showHidden
+        self.isTemporary = isTemporary
         let root = Self.resolve(binding) ?? binding.url
         self.rootURL = root
         self.currentDirectory = root
