@@ -18,10 +18,21 @@ final class DirectoryMirror: ObservableObject {
         case ready
         case permissionDenied   // TCC 被拒,需引导授权
         case volumeUnmounted(String)
+        case missing            // 绑定目录已被删除/移动且 bookmark 追踪不到(≠权限被拒,
+                                // 误报成 denied 会引导用户去系统设置白授权一通)
     }
 
     @Published private(set) var state: State = .idle
-    @Published private(set) var items: [FileItem] = []
+    @Published private(set) var items: [FileItem] = [] {
+        didSet {
+            Self.contentGeneration &+= 1
+            itemsVersion = Self.contentGeneration
+        }
+    }
+    /// 内容代次(PanelModel.sortedItems 的缓存键):数组逐元素比较太贵,代次即内容身份。
+    /// 全局单调计数,避免"实例释放后新 mirror 复用同地址 + 代次同为初值"的脏缓存。
+    private static var contentGeneration = 0
+    private(set) var itemsVersion = 0
 
     let binding: FolderBinding
     /// 临时 tab(路径输入「前往」根外目录):不入 BindingStore、不持久化,单槽替换;
@@ -128,10 +139,12 @@ final class DirectoryMirror: ObservableObject {
         }
     }
 
-    /// 卷重新挂载且用户回到该 tab:重试。
+    /// 卷重新挂载 / 目录从废纸篓恢复,且用户回到该 tab:重试。
     func retryIfPossible() {
-        guard case .volumeUnmounted = state else { return }
-        armAttempt()
+        switch state {
+        case .volumeUnmounted, .missing: armAttempt()
+        default: return
+        }
     }
 
     private func armAttempt() {
@@ -139,7 +152,13 @@ final class DirectoryMirror: ObservableObject {
 
         // 卷已卸载?进入空态(保留绑定,不删)。
         guard VolumeMonitor.isVolumeMounted(for: resolvedURL) else {
-            state = .volumeUnmounted(resolvedURL.lastPathComponent)
+            state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
+            return
+        }
+        // 目录不存在(被删/移走且 bookmark 追踪不到):先于 TCC 探针判定 —— 探针对不存在
+        // 路径同样失败,会误报 permissionDenied 引导用户白授权(stat 不受 TCC 限,可区分)。
+        guard FileManager.default.fileExists(atPath: resolvedURL.path) else {
+            state = .missing
             return
         }
         // TCC 探针(真实访问):失败即引导。
@@ -170,7 +189,7 @@ final class DirectoryMirror: ObservableObject {
     private func handle(_ batch: FSEventBatch) {
         if batch.unmounted, !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
             stream?.stop(); stream = nil
-            state = .volumeUnmounted(resolvedURL.lastPathComponent)
+            state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
             return
         }
         if batch.rootChanged {
@@ -194,9 +213,12 @@ final class DirectoryMirror: ObservableObject {
     @discardableResult
     private func captureAndPublish() -> Bool {
         guard let fresh = try? DirectorySnapshot.capture(directory: resolvedURL, showHidden: showHidden) else {
-            // 列目录失败:可能授权被撤销或卷消失。
+            // 列目录失败:按"卷消失 → 目录被删 → 授权被撤销"顺序归因(误报 denied 会引导
+            // 用户去系统设置白授权;stat 不受 TCC 限,可与 denied 区分)。
             if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
-                state = .volumeUnmounted(resolvedURL.lastPathComponent)
+                state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
+            } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
+                state = .missing
             } else {
                 state = .permissionDenied
             }
@@ -212,7 +234,7 @@ final class DirectoryMirror: ObservableObject {
 
     private func publishItems() {
         // 合并 iCloud 实时 dataless 覆盖(NSMetadataQuery 比 resourceValues 更及时)。
-        items = snapshot.fileItems.map { item in
+        let merged = snapshot.fileItems.map { item in
             guard let override = datalessOverride[item.url.standardizedFileURL],
                   override != item.isDataless else { return item }
             return FileItem(
@@ -221,6 +243,10 @@ final class DirectoryMirror: ObservableObject {
                 contentType: item.contentType, isDataless: override, tags: item.tags
             )
         }
+        // 内容没变不重赋值:FSEvents 重扫常是无关事件(同目录元数据抖动),原样赋值会
+        // 空 bump itemsVersion(排序缓存白失效)+ 空发布(全面板白重渲染)(Codex review)。
+        guard merged != items else { return }
+        items = merged
     }
 
     // MARK: - iCloud
@@ -241,7 +267,8 @@ final class DirectoryMirror: ObservableObject {
         guard Self.contains(ancestor: volumeURL, descendant: rootURL) else { return }
         stream?.stop(); stream = nil
         isWatching = false
-        state = .volumeUnmounted(rootURL.lastPathComponent)
+        // 卷名取通知里的挂载点名,不取绑定目录末段(深层子目录会把子目录名当卷名展示)。
+        state = .volumeUnmounted(volumeURL.lastPathComponent)
     }
 
     func volumeDidMount(_ volumeURL: URL) {

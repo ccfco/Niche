@@ -15,7 +15,7 @@ final class FolderTabMenusTests: XCTestCase {
         )
         let menu = presenter.makeMenu()
 
-        XCTAssertEqual(menu.items.map(\.title), ["选择文件夹…", "前往路径…"])
+        XCTAssertEqual(menu.items.map(\.title), ["添加文件夹…", "前往路径…"])
         // ⇧⌘G 提示展示在「前往路径…」上(发现入口,派发本体在面板键盘权威)。
         XCTAssertEqual(menu.items[1].keyEquivalent, "g")
         XCTAssertEqual(menu.items[1].keyEquivalentModifierMask, [.command, .shift])

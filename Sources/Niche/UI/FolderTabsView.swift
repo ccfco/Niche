@@ -21,7 +21,7 @@ struct FolderTabsView: View {
                     if mirror.isTemporary {
                         temporaryTab(index: index, mirror: mirror)
                     } else {
-                        tab(index: index, title: mirror.binding.displayName)
+                        tab(index: index, mirror: mirror)
                     }
                 }
                 addButton
@@ -31,8 +31,9 @@ struct FolderTabsView: View {
         }
     }
 
-    private func tab(index: Int, title: String) -> some View {
+    private func tab(index: Int, mirror: DirectoryMirror) -> some View {
         let isCurrent = index == model.currentTab
+        let title = mirror.binding.displayName
         // 与 +/视图切换/底栏统一玻璃语言:当前 tab 用 isActive 常驻高亮,去掉裸 accent 方块(#15)。
         return Button { model.selectTab(index) } label: {
             Text(title).lineLimit(1)
@@ -40,7 +41,8 @@ struct FolderTabsView: View {
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
         // 右键菜单走 RightClickCatcher+NSMenu(抑制驱动),不用 .contextMenu —— 那接不上
         // AutoHideCoordinator,菜单开着鼠标移出走廊面板会被收走(与文件右键同一根因)。
-        .overlay(RightClickCatcher { _ in onTabMenu(model.mirrors[index].binding.id) })
+        // id 从 ForEach 的 mirror 直取,不经 model.mirrors[index](闭包延迟执行,重建后下标可能已失效)。
+        .overlay(RightClickCatcher { _ in onTabMenu(mirror.binding.id) })
         // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
         .accessibilityLabel(title)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])

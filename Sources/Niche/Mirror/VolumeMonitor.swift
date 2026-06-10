@@ -38,8 +38,21 @@ final class VolumeMonitor {
         observers.forEach { center.removeObserver($0) }
     }
 
-    /// 给定目录当前所在卷是否仍挂载(目录可访问即视为挂载)。
+    /// 给定目录所在卷是否仍挂载:按挂载点存在性判定(/Volumes/<卷名> 在不在)。
+    /// 不能用 checkResourceIsReachable —— 目录被删时同样 unreachable,会把"目录没了"
+    /// 误归因成"卷已卸载"(体检审计:误报让用户以为要插回 U 盘,实际该去废纸篓找)。
+    /// 启动卷路径(非 /Volumes 下)恒视为挂载;外接/网络卷在 macOS 统一挂在 /Volumes 下。
     static func isVolumeMounted(for url: URL) -> Bool {
-        (try? url.checkResourceIsReachable()) ?? false
+        let comps = url.standardizedFileURL.pathComponents
+        guard comps.count > 2, comps[1] == "Volumes" else { return true }
+        return FileManager.default.fileExists(atPath: "/Volumes/\(comps[2])")
+    }
+
+    /// 卷显示名:外接卷取挂载点目录名(/Volumes/<卷名>);启动卷路径回落末段目录名。
+    /// 此前空态直接用 lastPathComponent —— 深层子目录会把子目录名当卷名展示。
+    static func volumeDisplayName(for url: URL) -> String {
+        let comps = url.standardizedFileURL.pathComponents
+        if comps.count > 2, comps[1] == "Volumes" { return comps[2] }
+        return url.lastPathComponent
     }
 }

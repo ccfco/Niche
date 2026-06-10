@@ -12,7 +12,7 @@ struct BreadcrumbBar: View {
         HStack(spacing: edge.innerSpacing) {
             Button(action: onUp) { Image(systemName: "chevron.up") }
                 .buttonStyle(NicheFooterGlassButtonStyle(compact: true))
-                .help("上级")
+                .help("回上级目录")
                 .accessibilityLabel("回上级目录")
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -22,6 +22,7 @@ struct BreadcrumbBar: View {
                             Image(systemName: "chevron.compact.right")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)   // 纯装饰分隔符
                         }
                         segment(name: comp.name, url: comp.url, isLast: index == components.count - 1)
                     }

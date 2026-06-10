@@ -95,9 +95,22 @@ final class PanelModel: ObservableObject {
     /// 当前 tab 的镜像状态(空态/授权/卷卸载由 UI 据此切换)。
     var currentState: DirectoryMirror.State { currentMirror?.state ?? .idle }
 
+    /// 排序结果缓存:sortedItems 是高频派生属性(一次按键/重渲染内 body、光标、键盘权威
+    /// 会各取数次),localizedStandard 比较昂贵,大目录下每次全排序可感卡顿(性能审计)。
+    /// 键 =(mirror 身份, 内容代次, 排序规则),任一变化才重排。
+    private var sortedCache: (mirror: ObjectIdentifier, version: Int, order: FileSortOrder, value: [FileItem])?
+
     /// 当前 tab 经排序的可见条目。
     var sortedItems: [FileItem] {
-        (currentMirror?.items ?? []).sorted(by: sortOrder.comparator())
+        guard let mirror = currentMirror else { return [] }
+        let id = ObjectIdentifier(mirror)
+        if let cache = sortedCache, cache.mirror == id,
+           cache.version == mirror.itemsVersion, cache.order == sortOrder {
+            return cache.value
+        }
+        let sorted = mirror.items.sorted(by: sortOrder.comparator())
+        sortedCache = (id, mirror.itemsVersion, sortOrder, sorted)
+        return sorted
     }
 
     /// 光标项(键盘焦点 / 预览 / 激活目标)。
@@ -257,7 +270,7 @@ final class PanelModel: ObservableObject {
             cursorID = added
                 .compactMap { id in order.firstIndex(of: id).map { (id: id, dist: abs($0 - baseIdx)) } }
                 .max { $0.dist < $1.dist }?.id
-        } else if cursorID == nil || !ids.contains(cursorID!) {
+        } else if cursorID.map({ !ids.contains($0) }) ?? true {
             cursorID = sortedItems.first { ids.contains($0.id) }?.id
         }
         anchorID = cursorID

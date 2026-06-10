@@ -28,4 +28,26 @@ final class DirectoryMirrorStateTests: XCTestCase {
 
         XCTAssertEqual(mirror.state, .permissionDenied, "列目录失败必须进错误态,不得显示 ready")
     }
+
+    /// 绑定目录被删 → .missing(≠ permissionDenied:误报会引导用户去系统设置白授权);
+    /// 目录恢复(如从废纸篓拖回)后 retryIfPossible → 回 ready。
+    func testDeletedDirectoryIsMissingNotDeniedAndRecovers() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("niche-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let binding = FolderBinding(bookmarkData: nil, path: tmp.path)
+        let mirror = DirectoryMirror(binding: binding, showHidden: false)
+        mirror.arm()
+        XCTAssertEqual(mirror.state, .ready)
+
+        try FileManager.default.removeItem(at: tmp)
+        mirror.refresh()
+        XCTAssertEqual(mirror.state, .missing, "目录不存在应归因 missing,不得误报权限被拒")
+
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        mirror.retryIfPossible()
+        XCTAssertEqual(mirror.state, .ready, "目录恢复后重试应回 ready")
+    }
 }

@@ -40,7 +40,7 @@ final class AddFolderMenuPresenter: NSObject, NSMenuDelegate {
     /// 菜单构建拆出来供测试断言(popUp 是模态追踪,测试里跑不了)。
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        let choose = NSMenuItem(title: "选择文件夹…", action: #selector(doChooseFolder), keyEquivalent: "")
+        let choose = NSMenuItem(title: "添加文件夹…", action: #selector(doChooseFolder), keyEquivalent: "")
         choose.target = self
         choose.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: nil)
         menu.addItem(choose)

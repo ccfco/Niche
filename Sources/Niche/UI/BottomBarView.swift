@@ -40,7 +40,20 @@ struct BottomBarView: View {
         .menuStyle(.button)
         .buttonStyle(NicheFooterGlassButtonStyle())
         .fixedSize()
+        .help("排序方式")
         .accessibilityLabel("排序方式")
+        .accessibilityValue(sortDescription)   // VoiceOver 读出当前排序态,不用进菜单才知道
+    }
+
+    private var sortDescription: String {
+        let key: String
+        switch model.sortOrder.key {
+        case .name: key = "名称"
+        case .date: key = "修改日期"
+        case .size: key = "大小"
+        case .kind: key = "类型"
+        }
+        return "按\(key)\(model.sortOrder.direction == .ascending ? "升序" : "降序")"
     }
 
     private var hiddenToggle: some View {

@@ -48,6 +48,8 @@ private struct FoldersSettings: View {
                             pendingRemoval = binding
                         } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
+                            .help("移除此文件夹")
+                            .accessibilityLabel("移除「\(binding.displayName)」")
                     }
                 }
                 .onMove { source, dest in
@@ -56,7 +58,7 @@ private struct FoldersSettings: View {
             }
             .frame(minHeight: 180)
 
-            Button { onAddFolder() } label: { Label("添加文件夹", systemImage: "plus") }
+            Button { onAddFolder() } label: { Label("添加文件夹…", systemImage: "plus") }
         }
         .padding()
         .confirmationDialog(
@@ -85,7 +87,8 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("默认显示隐藏文件", isOn: $model.showHidden)
+                // 与面板 eye 按钮同一真相源,改了立即生效 —— 不是"默认值",别写"默认"误导。
+                Toggle("显示隐藏文件", isOn: $model.showHidden)
                 Toggle("开机自启", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         guard enabled != LaunchAtLogin.isEnabled else { return }
@@ -110,7 +113,7 @@ private struct GeneralSettings: View {
                 Text("关闭热区后仍可用菜单栏图标或快捷键呼出。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("提示:首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权窗;授权后镜像才会实时同步。")
+            Text("提示:首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权请求;允许后镜像才会实时同步。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

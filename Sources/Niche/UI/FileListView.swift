@@ -108,6 +108,7 @@ struct FileListView: View {
         HStack(spacing: edge.innerSpacing) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
                 .resizable().frame(width: 16, height: 16)
+                .accessibilityHidden(true)   // 装饰性类型图标,种类列已承载语义
             if model.renamingItemID == item.id {
                 RenameTextField(
                     initialName: item.name,

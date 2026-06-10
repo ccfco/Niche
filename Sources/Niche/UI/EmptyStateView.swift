@@ -7,6 +7,7 @@ struct EmptyStateView: View {
         case empty
         case permissionDenied(String)  // TCC 被拒,需引导授权;带文件夹名指明是哪个(spec §4.1.1)
         case volumeUnmounted(String)   // 绑定目录整卷卸载;带卷名
+        case missing(String)           // 绑定目录被删/移走且 bookmark 追踪不到;带文件夹名
         case loading
     }
 
@@ -36,6 +37,7 @@ struct EmptyStateView: View {
         case .empty: return "tray"
         case .permissionDenied: return "lock.shield"
         case .volumeUnmounted: return "externaldrive.badge.xmark"
+        case .missing: return "questionmark.folder"
         case .loading: return "hourglass"
         }
     }
@@ -46,6 +48,7 @@ struct EmptyStateView: View {
         case .empty: return "此文件夹为空"
         case let .permissionDenied(name): return "无法访问「\(name)」"
         case let .volumeUnmounted(name): return "卷「\(name)」已卸载"
+        case let .missing(name): return "「\(name)」不存在或已被移动"
         case .loading: return "载入中…"
         }
     }
@@ -55,7 +58,7 @@ struct EmptyStateView: View {
         switch kind {
         case .noFolders: return "添加文件夹"
         case .permissionDenied: return "点此授权并重试"
-        case .volumeUnmounted: return "重试"
+        case .volumeUnmounted, .missing: return "重试"
         case .empty, .loading: return nil
         }
     }

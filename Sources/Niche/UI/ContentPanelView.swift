@@ -72,6 +72,11 @@ struct ContentPanelView: View {
             // 明确「重试」按钮(复用 button 槽),不靠隐形整区可点(#12)。
             EmptyStateView(kind: .volumeUnmounted(name),
                            onAuthorize: { model.currentMirror?.retryIfPossible() })
+        case .missing:
+            // 目录被删/移走 ≠ 权限被拒:误报 denied 会引导用户白授权(体检审计)。
+            // 从废纸篓恢复后点「重试」即可;不再要可右键 tab 移除绑定。
+            EmptyStateView(kind: .missing(model.currentMirror?.binding.displayName ?? "此文件夹"),
+                           onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .ready:
             switch model.viewMode {
             case .list: FileListView(model: model, edge: edge, actions: actions)
@@ -86,9 +91,11 @@ struct ContentPanelView: View {
         HStack(spacing: edge.innerSpacing) {
             Button { model.viewMode = .list } label: { Image(systemName: "list.bullet") }
                 .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .list, compact: true))
+                .help("列表视图")
                 .accessibilityLabel("列表视图")
             Button { model.viewMode = .icon } label: { Image(systemName: "square.grid.2x2") }
                 .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .icon, compact: true))
+                .help("图标视图")
                 .accessibilityLabel("图标视图")
         }
     }
