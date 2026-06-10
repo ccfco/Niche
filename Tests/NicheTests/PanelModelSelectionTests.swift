@@ -45,9 +45,13 @@ final class PanelModelSelectionTests: XCTestCase {
     }
 
     func testSyncListSelectionCursorFallsBackWhenRemoved() {
-        model.selectSingle(ids[2])
-        // 模拟 ⌘ 点掉光标项:光标回退到剩余选中里的第一项(按排序顺序)。
-        model.syncListSelection([ids[0], ids[4]])
+        // 先建立 {a,c,e} 多选(光标 e)。不能从单选 {c} 直接 sync 到 {a,e}:那会让 a、e 都算
+        // "新增"且距旧光标等距,平手时取谁取决于 Set 顺序 —— 测试会随机翻车(flaky,实测踩中)。
+        model.selectSingle(ids[0])
+        model.toggle(ids[2])
+        model.toggle(ids[4])
+        // 模拟 ⌘ 点掉光标项 e:无新增 → 光标回退到剩余选中里的第一项(按排序顺序)。
+        model.syncListSelection([ids[0], ids[2]])
         XCTAssertEqual(model.cursorID, ids[0])
     }
 
