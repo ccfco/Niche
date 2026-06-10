@@ -38,6 +38,9 @@ struct EdgeMetrics: Equatable {
     /// 按钮 hover 高亮相对玻璃边的内缩量 —— 高亮比按钮小一圈、露一圈玻璃 rim。
     /// 纯渲染细节,远小于最小网格单位,刻意不挂 base。
     var footerHoverRimInset: CGFloat { 2 }
+    /// 单元角标(下载 spinner / iCloud 云标)相对单元角的内缩。同 footerHoverRimInset:
+    /// 纯渲染细节,刻意不挂 base。
+    var badgeInset: CGFloat { 2 }
 
     /// 网格单元目标宽度。网格列数计算与面板标准宽度共用同一来源(禁两处魔法数 84)。
     var cellWidth: CGFloat { base * 10.5 }   // 8 * 10.5 = 84

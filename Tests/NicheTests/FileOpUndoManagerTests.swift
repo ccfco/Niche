@@ -64,4 +64,27 @@ final class FileOpUndoManagerTests: XCTestCase {
         for i in 0..<5 { mgr.record(.init(kind: .copy(created: url("/x/\(i)")))) }
         XCTAssertEqual(mgr.stack.count, 2)
     }
+
+    /// 恢复动作可被注入失败的 service,验证"先执行后出栈"的可重试语义。
+    final class FlakyService: UndoFileService {
+        var failNext = true
+        var moves: [(from: URL, to: URL)] = []
+        func moveItem(at src: URL, to dst: URL) throws {
+            if failNext { failNext = false; throw CocoaError(.fileWriteNoPermission) }
+            moves.append((src, dst))
+        }
+        func trashItem(at url: URL) throws {}
+    }
+
+    func testFailedUndoKeepsRecordForRetry() {
+        let flaky = FlakyService()
+        let mgr = FileOpUndoManager(service: flaky)
+        mgr.record(.init(kind: .move(from: url("/a/x"), to: url("/b/x"))))
+
+        XCTAssertThrowsError(try mgr.undoLast())   // 首次恢复失败
+        XCTAssertTrue(mgr.canUndo)                 // 记录必须留在栈顶(先执行后出栈)
+        XCTAssertNoThrow(try mgr.undoLast())       // 外部条件修复后可重试
+        XCTAssertFalse(mgr.canUndo)
+        XCTAssertEqual(flaky.moves.count, 1)
+    }
 }

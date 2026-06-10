@@ -13,9 +13,10 @@ struct EmptyStateView: View {
     let kind: Kind
     /// 主动作回调(noFolders → 添加文件夹;permissionDenied → 授权并重试;volumeUnmounted → 重试)。
     var onAuthorize: (() -> Void)?
+    private let edge = EdgeMetrics.standard
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: edge.itemSpacing) {
             Image(systemName: symbol)
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
@@ -25,7 +26,7 @@ struct EmptyStateView: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding()
+        .padding(edge.sectionSpacing)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

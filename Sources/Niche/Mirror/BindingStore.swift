@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// 绑定文件夹列表的持久化(UserDefaults JSON)+ tab 顺序 + 窗口尺寸/位置记忆。
+/// 绑定文件夹列表的持久化(UserDefaults JSON)+ tab 顺序。
 ///
 /// 不用 security-scoped bookmark(见 [FolderBinding])。重命名/移动追踪与 bookmark 重解析
 /// 在 M2 的 DirectoryMirror 里处理;本类只负责"存什么、读什么、顺序"。

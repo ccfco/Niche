@@ -16,9 +16,10 @@ final class ThumbnailCache {
         cache.countLimit = countLimit
     }
 
-    /// 缓存键:路径 + 修改时间 → 文件被改后缩略图自动失效。
-    private func key(for item: FileItem) -> NSString {
-        "\(item.url.path):\(item.modificationDate.timeIntervalSince1970)" as NSString
+    /// 缓存键:路径 + 修改时间 + 目标尺寸 → 文件被改后自动失效;不同 maxPixel 各占一格,
+    /// 防将来两模式用不同缩略图尺寸时低清覆盖高清(或反之)互相污染。
+    private func key(for item: FileItem, maxPixel: CGFloat) -> NSString {
+        "\(item.url.path):\(item.modificationDate.timeIntervalSince1970):\(Int(maxPixel))" as NSString
     }
 
     /// 异步取缩略图。dataless / 非图片 / 解码失败 → nil(调用方退回系统图标)。
@@ -28,7 +29,7 @@ final class ThumbnailCache {
         // 仅图片类型走 ImageIO;其余交给系统图标。
         guard item.contentType?.conforms(to: .image) == true else { return nil }
 
-        let cacheKey = key(for: item)
+        let cacheKey = key(for: item, maxPixel: maxPixel)
         if let cached = cache.object(forKey: cacheKey) { return cached }
 
         let url = item.url

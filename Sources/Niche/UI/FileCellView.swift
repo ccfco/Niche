@@ -48,10 +48,10 @@ struct FileCellView: View {
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
             if isDownloading {
-                ProgressView().controlSize(.small).padding(2)
+                ProgressView().controlSize(.small).padding(edge.badgeInset)
             } else if item.isDataless {
                 Image(systemName: "icloud.and.arrow.down")
-                    .font(.caption2).foregroundStyle(.secondary).padding(2)
+                    .font(.caption2).foregroundStyle(.secondary).padding(edge.badgeInset)
             }
         }
         .overlay(RightClickCatcher(makeMenu: makeContextMenu))   // 右键:自拼 NSMenu(hitTest 只认右键)
