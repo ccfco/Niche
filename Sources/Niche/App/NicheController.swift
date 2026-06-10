@@ -580,12 +580,16 @@ final class NicheController {
         // 收回,不抑制则选完文件夹面板已不见,"添加成功"没有任何可见结果(首次用户以为失败)。
         autoHide.begin(.modalDialog)
         defer { autoHide.end(.modalDialog) }
+        // NichePanel 瞬态级别(.statusBar ≈ 25)高于 NSOpenPanel 的 modal 级别(≈ 8),
+        // 不降级则 Niche 面板会浮在选文件夹对话框上方遮挡它。临时降到 .floating(≈ 3)让
+        // modal panel 自然浮到上面;runModal 同步阻塞,返回后 defer 立即恢复,无竞态。
+        panelController.panel?.level = .floating
+        defer { panelController.panel?.level = model.windowMode.level }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "添加"
-        NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         let bookmark = DirectoryMirror.makeBookmark(for: url)
