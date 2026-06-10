@@ -8,16 +8,14 @@ final class GlobalHotkey {
     private var handlerRef: EventHandlerRef?
     var onTrigger: (() -> Void)?
 
-    /// 默认快捷键的展示文案(设置页用)。**必须与 register 默认参数同步改**,
-    /// 否则设置页教用户按一个不存在的键。
-    static let displayString = "⌃⌥⌘Space"
-
-    /// 默认 ⌃⌥⌘Space。keyCode 49 = Space。
+    /// 默认 ⌃⌥⌘Space(具体值/展示文案收口 HotkeyPreference.default)。keyCode 49 = Space。
     /// **不能用 ⌥⌘Space**:那是系统 symbolic hotkey 65「Show Finder search window」(默认启用),
     /// 系统级 symbolic hotkey 优先于 RegisterEventHotKey,会把热键抢走、面板出不来(实测确认)。
     /// 也避开 ⌃⌘Space(emoji 选择器)。热键是兜底,主触发是刘海热区。
+    /// 返回是否注册成功(自定义快捷键可能撞系统占用,失败必须可见,由调用方回退提示)。
+    @discardableResult
     func register(keyCode: UInt32 = 49,
-                  modifiers: UInt32 = UInt32(controlKey | optionKey | cmdKey)) {
+                  modifiers: UInt32 = UInt32(controlKey | optionKey | cmdKey)) -> Bool {
         unregister()
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
@@ -36,7 +34,7 @@ final class GlobalHotkey {
         guard installStatus == noErr else {
             Log.window.error("全局快捷键事件处理器安装失败:\(installStatus)")
             handlerRef = nil
-            return
+            return false
         }
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4E494348) /* 'NICH' */, id: 1)
@@ -45,8 +43,9 @@ final class GlobalHotkey {
         guard registerStatus == noErr else {
             Log.window.error("全局快捷键注册失败:\(registerStatus)")
             unregister()   // 回滚已装的 handler,避免半注册状态
-            return
+            return false
         }
+        return true
     }
 
     func unregister() {

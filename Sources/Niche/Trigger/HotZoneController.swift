@@ -21,6 +21,21 @@ final class HotZoneController {
     /// 鼠标进入新屏时用它重算 rect。
     var resolveRect: ((NSScreen) -> CGRect?)?
 
+    /// 热区触发开关(设置页"刘海热区触发"):关掉只停 hover 判定,监听保留(开关随时可逆,
+    /// 拖拽迎上也一并停 —— 用户关热区的预期是"鼠标靠近刘海不再有任何反应")。
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue, !isEnabled else { return }
+            insideHotZone = false
+            hoverIntent.exit()
+        }
+    }
+
+    /// hover 意图延迟随设置调整。
+    func setHoverDelay(_ delay: TimeInterval) {
+        hoverIntent.delay = delay
+    }
+
     private var globalMonitor: Any?
     private var localMonitor: Any?
     /// 当前命中矩形(全局坐标,原点左下)。鼠标进入即起 hover intent。
@@ -36,8 +51,9 @@ final class HotZoneController {
         }
         // 拖拽迎上:窗口的 NSDraggingDestination 立即触发(不等防抖)。
         window.onDragEntered = { [weak self] in
-            self?.hoverIntent.exit()
-            self?.onTrigger?(true)
+            guard let self, self.isEnabled else { return }
+            self.hoverIntent.exit()
+            self.onTrigger?(true)
         }
         startMouseMonitor()
     }
@@ -62,6 +78,7 @@ final class HotZoneController {
 
     /// 轻量:跨屏时换几何,否则只读全局坐标 + 矩形包含判断,只在跨边界时动作。
     private func evaluateMouse() {
+        guard isEnabled else { return }
         let mouse = NSEvent.mouseLocation
         syncScreenIfNeeded(mouse: mouse)
         guard hotZoneRect != .zero else { return }

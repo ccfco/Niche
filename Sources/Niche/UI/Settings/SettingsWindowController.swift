@@ -10,12 +10,15 @@ import SwiftUI
 final class SettingsWindowController {
     private let environment: AppEnvironment
     private let model: PanelModel
+    private let triggerPrefs: TriggerPreferences
     private let onAddFolder: () -> Void
     private var window: NSWindow?
 
-    init(environment: AppEnvironment, model: PanelModel, onAddFolder: @escaping () -> Void) {
+    init(environment: AppEnvironment, model: PanelModel, triggerPrefs: TriggerPreferences,
+         onAddFolder: @escaping () -> Void) {
         self.environment = environment
         self.model = model
+        self.triggerPrefs = triggerPrefs
         self.onAddFolder = onAddFolder
     }
 
@@ -29,7 +32,7 @@ final class SettingsWindowController {
     private func ensureWindow() -> NSWindow {
         if let window { return window }
         let host = NSHostingController(
-            rootView: SettingsView(model: model, onAddFolder: onAddFolder)
+            rootView: SettingsView(model: model, triggerPrefs: triggerPrefs, onAddFolder: onAddFolder)
                 .environmentObject(environment)
         )
         let w = NSWindow(contentViewController: host)

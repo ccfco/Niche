@@ -15,7 +15,8 @@ final class HoverIntent {
         func cancel()
     }
 
-    private let delay: TimeInterval
+    /// 意图延迟,可在运行期由设置调整(只影响下一次 enter,正在跑的计时不重排)。
+    var delay: TimeInterval
     private let scheduler: Scheduler
     private var pending: Cancelable?
     /// 展开回调。

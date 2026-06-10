@@ -13,6 +13,10 @@ final class NicheController {
     private let hotZone = HotZoneController()
     private let volumes = VolumeMonitor()
     private let hotkey = GlobalHotkey()
+    /// 触发方式偏好(热区开关/hover 延迟/快捷键)单一真相源,设置页共绑。
+    private let triggerPrefs = TriggerPreferences()
+    /// 最近一次注册成功的快捷键(新键注册失败时回退用,保证兜底呼出永远有效)。
+    private var lastGoodHotkey: HotkeyPreference?
     private lazy var quickLook = QuickLookController(autoHide: autoHide)
     private let undoManager = FileOpUndoManager()
     private lazy var ops = FileOperations(undo: undoManager)
@@ -58,7 +62,7 @@ final class NicheController {
     /// 自管设置窗口(SwiftUI Settings scene 在 accessory app 无法编程打开,见 SettingsWindowController)。
     /// 注入同一个 PanelModel(showHidden 单真相源)与统一的 addFolder 路径。
     private lazy var settingsWindow = SettingsWindowController(
-        environment: environment, model: model,
+        environment: environment, model: model, triggerPrefs: triggerPrefs,
         onAddFolder: { [weak self] in self?.addFolder() }
     )
 
@@ -72,6 +76,7 @@ final class NicheController {
     private var renameCancellable: AnyCancellable?
     private var renameSweepCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
+    private var triggerPrefsCancellable: AnyCancellable?
     private var selectionCancellable: AnyCancellable?
     private var quickLookContentCancellable: AnyCancellable?
     private var relayoutCancellable: AnyCancellable?
@@ -82,7 +87,33 @@ final class NicheController {
         hotZone.refreshPlacement()
         rebuildMirrors()
         hotkey.onTrigger = { [weak self] in self?.toggle() }
-        hotkey.register()   // 默认 ⌃⌥⌘Space 兜底呼出(展示文案见 GlobalHotkey.displayString)
+        applyTriggerPreferences()   // 热区开关/延迟 + 注册快捷键(默认 ⌃⌥⌘Space 兜底呼出)
+        // objectWillChange 在赋值前发布 → 推迟一拍读新值再应用。
+        triggerPrefsCancellable = triggerPrefs.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.applyTriggerPreferences() }
+    }
+
+    /// 把触发偏好应用到触发系统。快捷键注册失败(撞系统占用等)→ 可见提示并回退到上一个
+    /// 可用键(兜底呼出不能无声失效)。
+    private func applyTriggerPreferences() {
+        hotZone.isEnabled = triggerPrefs.hotZoneEnabled
+        hotZone.setHoverDelay(triggerPrefs.hoverDelay)
+        let pref = triggerPrefs.hotkey
+        if pref == lastGoodHotkey { return }   // 热区项变化不必反复重注册同一热键
+        if hotkey.register(keyCode: pref.keyCode, modifiers: pref.carbonModifiers) {
+            lastGoodHotkey = pref
+        } else {
+            presentFailure(title: "无法注册快捷键 \(pref.display)",
+                           error: HotkeyRegistrationError(display: pref.display))
+            // 回退上一个可用键(写回偏好,设置页同步显示;sink 再触发时命中 == 守卫不再循环)。
+            // 启动期第一发就失败(持久化了已被占用的键)→ 回退出厂默认。
+            if let lastGoodHotkey, lastGoodHotkey != pref {
+                triggerPrefs.hotkey = lastGoodHotkey
+            } else if pref != .default {
+                triggerPrefs.hotkey = .default
+            }
+        }
     }
 
     deinit {
