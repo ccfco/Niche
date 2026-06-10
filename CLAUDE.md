@@ -23,8 +23,8 @@
 ## 架构方向
 
 - **SwiftUI 为主**;MVP 数据量小,配置/设置用纯 Swift(UserDefaults / 轻量本地存储),暂不引 Rust。
-- **触发动画引 DynamicNotchKit**(开源 SwiftUI 库)——Niche **不继承** Clipin 的"零 SPM 依赖"红线。
-- **menu bar accessory**(`LSUIElement=true`),不进 Dock。
+- **触发动画自研 PanelController**(DynamicNotchKit 已弃用,170a1cd:黑底吞玻璃 + 两套窗口系统);依赖政策不变:Niche **不继承** Clipin 的"零 SPM 依赖"红线,需要时可引库。
+- **menu bar accessory**(`LSUIElement=true`),不进 Dock;**AppKit 启动,无 SwiftUI App scene**:设置窗口自管(Settings scene 在 accessory app 无公开 API 可编程打开,`showSettingsWindow:` 在 macOS 14+ 被封禁);主菜单由 AppDelegate 显式重建,**Edit 菜单不能删**——重命名输入框的 ⌘C/V/X/A 靠它路由,删了静默失效。
 - **只发 Apple Silicon / arm64**(沿用 Clipin)。
 
 ## 关键决策(读代码得不到、违反会出问题的不变量)
