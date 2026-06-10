@@ -18,6 +18,8 @@ struct SettingsView: View {
                 .tabItem { Label("文件夹", systemImage: "folder") }
             GeneralSettings(model: model, triggerPrefs: triggerPrefs)
                 .tabItem { Label("通用", systemImage: "gearshape") }
+            AboutSettings()
+                .tabItem { Label("关于", systemImage: "info.circle") }
         }
         .frame(width: 480, height: 420)
     }
@@ -71,6 +73,65 @@ private struct FoldersSettings: View {
             }
         } message: {
             Text("只解除绑定,不会动磁盘上的文件夹。")
+        }
+    }
+}
+
+private struct AboutSettings: View {
+    @ObservedObject private var checker = UpdateChecker.shared
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("当前版本") {
+                    Text("Niche \(checker.currentVersion)")
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("自动检查更新", isOn: Binding(
+                    get: { checker.autoCheckEnabled },
+                    set: { checker.setAutoCheckEnabled($0) }
+                ))
+            }
+            Section("更新") {
+                LabeledContent("状态") {
+                    updateStatusView
+                }
+                if let release = checker.latestRelease {
+                    HStack(spacing: 8) {
+                        Button("下载最新版…") { checker.downloadLatest() }
+                        Button("查看 Release") { checker.openReleasePage() }
+                            .buttonStyle(.borderless)
+                    }
+                    .padding(.top, 2)
+                    Text("Niche \(release.displayVersion) 已可用。")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button("立即检查") { checker.checkNow() }
+                        .disabled(checker.isChecking)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    @ViewBuilder private var updateStatusView: some View {
+        if checker.isChecking {
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.small)
+                Text("正在检查…").foregroundStyle(.secondary)
+            }
+        } else if checker.latestRelease != nil {
+            Label("发现新版本", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(.green)
+        } else if checker.didLastCheckFail {
+            Label("检查失败", systemImage: "exclamationmark.circle")
+                .foregroundStyle(.secondary)
+        } else if let last = checker.lastCheckedAt {
+            Text("已是最新（\(last.formatted(.relative(presentation: .named)))）")
+                .foregroundStyle(.secondary)
+        } else {
+            Text("尚未检查").foregroundStyle(.secondary)
         }
     }
 }

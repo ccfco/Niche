@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// 菜单栏图标 + 下拉菜单。提供"呼出 Niche / 设置… / 退出"等入口,并作为全局快捷键兜底
 /// 之外的常驻可见触发点(spec §4.2:菜单栏图标是可选触发位置之一)。
@@ -8,6 +9,7 @@ final class MenuBarController {
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
     private let onOpenSettings: () -> Void
+    private var updateCancellable: AnyCancellable?
 
     init(environment: AppEnvironment, onToggle: @escaping () -> Void,
          onOpenSettings: @escaping () -> Void) {
@@ -17,6 +19,11 @@ final class MenuBarController {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureButton()
         statusItem.menu = makeMenu()
+
+        // latestRelease 变化时重建菜单(有新版 → 加更新区;已是最新 → 去掉更新区)。
+        updateCancellable = UpdateChecker.shared.$latestRelease
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.statusItem.menu = self?.makeMenu() }
     }
 
     private func configureButton() {
@@ -66,6 +73,20 @@ final class MenuBarController {
         menu.addItem(withTitle: "呼出 Niche", action: #selector(togglePanel), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
+
+        // 有新版本时在设置前插入更新区。
+        if let release = UpdateChecker.shared.latestRelease {
+            let badge = menu.addItem(
+                withTitle: "新版本可用：\(release.displayVersion)",
+                action: nil, keyEquivalent: ""
+            )
+            badge.isEnabled = false
+            let download = NSMenuItem(title: "下载最新版…", action: #selector(downloadUpdate), keyEquivalent: "")
+            download.target = self
+            menu.addItem(download)
+            menu.addItem(.separator())
+        }
+
         let settings = menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(.separator())
@@ -81,5 +102,9 @@ final class MenuBarController {
     /// (点了没反应,控制台提示改用 SettingsLink),设置窗口已 AppKit 自管(SettingsWindowController)。
     @objc private func openSettings() {
         onOpenSettings()
+    }
+
+    @objc private func downloadUpdate() {
+        UpdateChecker.shared.downloadLatest()
     }
 }

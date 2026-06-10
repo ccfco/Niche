@@ -6,4 +6,5 @@ enum Log {
     static let files = Logger(subsystem: "com.ccfco.Niche", category: "files")
     static let mirror = Logger(subsystem: "com.ccfco.Niche", category: "mirror")
     static let window = Logger(subsystem: "com.ccfco.Niche", category: "window")
+    static let updates = Logger(subsystem: "com.ccfco.Niche", category: "updates")
 }

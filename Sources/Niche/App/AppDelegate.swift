@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = makeMainMenu()
         let controller = NicheController(environment: environment)
         self.controller = controller
+        UpdateChecker.shared.start()
         menuBarController = MenuBarController(
             environment: environment,
             onToggle: { [weak controller] in controller?.toggle() },
