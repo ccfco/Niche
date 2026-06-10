@@ -155,35 +155,59 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
 
     @objc private func doCopyPath() { if let urls = context?.selection { ops.copyPaths(urls) } }
 
+    /// 「移动到…」:NSOpenPanel 选目标(模态期间抑制 auto-hide,否则选目录时面板被挤收回),
+    /// 失败弹可见提示(此前 try? 静默吞错:目标只读/磁盘满时文件原地不动、用户无任何反馈)。
     @objc private func doMoveTo() {
         guard let ctx = context else { return }
+        autoHide.begin(.modalDialog)
+        defer { autoHide.end(.modalDialog) }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.prompt = "移动到此"
         guard panel.runModal() == .OK, let dest = panel.url else { return }
-        try? ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask)
+        do { try ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
+        catch {
+            Log.files.error("移动到失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法移动到所选位置", error: error)
+        }
     }
 
     @objc private func doCompress() {
         guard let ctx = context else { return }
         Task {
             do { try await ops.compress(ctx.selection, in: ctx.directory) }
-            catch { Log.files.error("压缩失败:\(error.localizedDescription, privacy: .public)") }
+            catch {
+                Log.files.error("压缩失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法压缩", error: error)
+            }
         }
     }
 
     @objc private func doSetTag(_ sender: NSMenuItem) {
         guard let tag = sender.representedObject as? String, let urls = context?.selection else { return }
         for url in urls {
+            // 读现有标签失败按"无标签"处理(读不到不该挡写入);写入失败必须可见。
             let existing = (try? url.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
             let merged = Array(Set(existing + [tag]))
-            try? ops.setTags(merged, on: url)
+            do { try ops.setTags(merged, on: url) }
+            catch {
+                Log.files.error("设置标签失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法设置标签", error: error)
+                return   // 多选逐项失败不连环弹窗,首错即止
+            }
         }
     }
 
     @objc private func doClearTags() {
-        context?.selection.forEach { try? ops.setTags([], on: $0) }
+        for url in context?.selection ?? [] {
+            do { try ops.setTags([], on: url) }
+            catch {
+                Log.files.error("清除标签失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法清除标签", error: error)
+                return
+            }
+        }
     }
 
     @objc private func doShare() {
@@ -203,13 +227,24 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             onRequestRename(url)
         } catch {
             Log.files.error("新建文件夹失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法新建文件夹", error: error)
         }
     }
 
+    /// 粘贴:同名冲突会弹 ConflictPrompt 模态 → 全程挂 .modalDialog 抑制(对话框期间面板不收)。
     @objc private func doPaste() {
         guard let dir = context?.directory else { return }
+        autoHide.begin(.modalDialog)
+        defer { autoHide.end(.modalDialog) }
         do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
-        catch { Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)") }
+        catch {
+            Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法粘贴", error: error)
+        }
+    }
+
+    private func presentFailure(title: String, error: Error) {
+        FailureAlert.present(title: title, error: error, autoHide: autoHide)
     }
 }
 

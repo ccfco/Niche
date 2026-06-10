@@ -49,9 +49,11 @@ final class FileOpUndoManager {
     }
 
     /// 撤销最近一次操作。返回被撤销的记录(nil 表示栈空)。
+    /// **先执行后出栈**:恢复动作抛错(目标被占用/卷未挂载等)时记录留在栈顶,
+    /// 用户修正外部条件后可重试 —— 先 popLast 会把记录弄丢,撤销机会一次性蒸发。
     @discardableResult
     func undoLast() throws -> FileOperationRecord? {
-        guard let record = stack.popLast() else { return nil }
+        guard let record = stack.last else { return nil }
         switch record.kind {
         case let .trash(original, trashed):
             // 从废纸篓挪回原位。
@@ -64,6 +66,7 @@ final class FileOpUndoManager {
         case let .rename(from, to):
             try service.moveItem(at: to, to: from)
         }
+        stack.removeLast()
         return record
     }
 }

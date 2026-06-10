@@ -74,6 +74,13 @@ final class ICloudStatus {
 
     // MARK: - 预览前显式下载(不递归目录)
 
+    /// 下载超时的可读错误(此前抛 CocoaError(.userCancelled),提示文案是"操作已取消"——
+    /// 用户没取消任何东西,看不懂哪里出了问题)。
+    enum DownloadError: LocalizedError {
+        case timeout
+        var errorDescription: String? { "iCloud 下载超时,请检查网络后重试。" }
+    }
+
     /// 显式请求下载一个占位文件,轮询到可用(spec §4.1.2:等可用后再把 URL 交给 QLPreviewPanel)。
     /// 目录型 item 不在此递归下载(调用方只对文件调用)。
     static func ensureDownloaded(_ url: URL, timeout: TimeInterval = 30) async throws {
@@ -88,7 +95,7 @@ final class ICloudStatus {
             if !isDataless(url) { return }
             try await Task.sleep(nanoseconds: 200_000_000)  // 0.2s
         }
-        throw CocoaError(.userCancelled)
+        throw DownloadError.timeout
     }
 
     /// 同步判 dataless(iCloud 占位、未下载)。供预览切换前判定走「同步即切」还是「先下后切」——

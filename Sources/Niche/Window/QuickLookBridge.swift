@@ -26,6 +26,14 @@ final class QuickLookController: NSObject {
     var hostWindowLevel: (() -> NSWindow.Level?)?
     /// QL 内翻页 → 回写面板选中(NicheController 据此把选中停在最后预览项)。
     var onIndexChange: ((Int) -> Void)?
+    /// dataless 按需下载起止/失败(URL = 面板条目原 URL,即 FileItem.ID):宿主据此显示 cell
+    /// spinner 与失败提示 —— 与双击打开路径对称,空格预览不再是"静默等 30s、失败无声"的黑箱。
+    var onDownloadBegin: ((URL) -> Void)?
+    var onDownloadEnd: ((URL) -> Void)?
+    var onDownloadFailed: ((URL, Error) -> Void)?
+    /// 预览请求代次:下载期间用户关预览/再次请求 → 旧 Task 的 present 作废(防迟到的下载
+    /// 完成把已关的预览重新拉起)。
+    private var previewGeneration = 0
 
     init(autoHide: AutoHideCoordinator) {
         self.autoHide = autoHide
@@ -56,17 +64,29 @@ final class QuickLookController: NSObject {
         guard !urls.isEmpty, urls.indices.contains(index) else { return }
         self.urls = urls
         self.index = index
+        previewGeneration += 1
+        let gen = previewGeneration
+        let itemURL = urls[index]   // 面板条目原 URL(= FileItem.ID),spinner 挂在该 cell 上
 
         Task {
             do {
                 // 仅对当前要看的这个文件按需下载,不递归、不批量(§4.1.2)。下载合同必须作用于
                 // **解析后的目标**:alias 指向 dataless iCloud 目标时,只下 alias 自身(本地 45B)
                 // 等于没下,数据源解析出的 dataless 目标会绕过下载直接丢给 QL(Codex review)。
-                try await ICloudStatus.ensureDownloaded(Self.resolvedForPreview(urls[index]))
+                let target = Self.resolvedForPreview(itemURL)
+                if ICloudStatus.isDataless(target) {
+                    onDownloadBegin?(itemURL)
+                    defer { onDownloadEnd?(itemURL) }
+                    try await ICloudStatus.ensureDownloaded(target)
+                }
             } catch {
-                // 下载失败/超时:不把 dataless URL 交给 Quick Look(spec §4.1.2:等可用后再预览)。
+                // 下载失败/超时:不把 dataless URL 交给 Quick Look(spec §4.1.2),且必须可见
+                // (与双击打开路径对称)—— 此前 catch { return } 静默,用户按空格后 30s 无任何动静。
+                onDownloadFailed?(itemURL, error)
                 return
             }
+            // 下载期间预览被关闭/被新请求顶替 → 不再拉起(防迟到 present 重开预览)。
+            guard gen == previewGeneration else { return }
             present()
         }
     }
@@ -75,6 +95,7 @@ final class QuickLookController: NSObject {
     /// orderOut 不发 NSWindow.willClose,故显式走 handleClose 清理;handleClose 幂等(Set.remove +
     /// observer nil 守卫),与原生关闭(Esc/红点 → willClose)路径重入也安全。
     func close() {
+        previewGeneration += 1   // 作废下载中的 preview Task(关了就别再被迟到的 present 拉起)
         guard QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared() else { return }
         panel.orderOut(nil)
         handleClose()
@@ -128,9 +149,19 @@ final class QuickLookController: NSObject {
         guard ICloudStatus.isDataless(target) else { apply(); return }
         guard pendingDownloadIndex != idx else { return }
         pendingDownloadIndex = idx
+        let itemURL = urls[idx]
+        onDownloadBegin?(itemURL)
         Task {
-            defer { if pendingDownloadIndex == idx { pendingDownloadIndex = nil } }
-            do { try await ICloudStatus.ensureDownloaded(target) } catch { return }
+            defer {
+                onDownloadEnd?(itemURL)
+                if pendingDownloadIndex == idx { pendingDownloadIndex = nil }
+            }
+            do { try await ICloudStatus.ensureDownloaded(target) }
+            catch {
+                // 翻页目标下载失败也要可见:QL 此刻显示空白页,不提示用户只会以为预览坏了。
+                onDownloadFailed?(itemURL, error)
+                return
+            }
             guard index == idx, isActive else { return }
             apply()
         }

@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 @MainActor
 final class FileOperations {
     let undo: FileOpUndoManager
+    /// 异步路径(recycle 完成回调等无法 throws 上抛)的失败出口,由宿主接到可见提示。
+    var onError: ((_ title: String, _ error: Error) -> Void)?
 
     init(undo: FileOpUndoManager) {
         self.undo = undo
@@ -35,9 +37,10 @@ final class FileOperations {
                 for (original, trashed) in mapping {
                     self?.undo.record(.init(kind: .trash(original: original, trashed: trashed)))
                 }
-                // 失败项不静默吞(CLAUDE.md:让问题暴露):落日志,部分失败也可见。
+                // 失败项不静默吞(CLAUDE.md:让问题暴露):日志 + 可见提示,部分失败也让用户知道。
                 if let error {
                     Log.files.error("移到废纸篓部分失败:\(error.localizedDescription, privacy: .public)")
+                    self?.onError?("无法移到废纸篓", error)
                 }
             }
         }
@@ -191,9 +194,10 @@ final class FileOperations {
 
     // MARK: - Undo
 
+    /// 撤销最近一次操作(失败上抛,由宿主弹可见提示;栈空返回 nil 静默 —— 无事可撤不是错误)。
     @discardableResult
-    func undoLast() -> Bool {
-        (try? undo.undoLast()) != nil && true
+    func undoLast() throws -> FileOperationRecord? {
+        try undo.undoLast()
     }
 
     // MARK: - 内部:NSFileCoordinator 协调的读写(注③)

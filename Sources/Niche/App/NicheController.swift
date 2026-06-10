@@ -42,7 +42,7 @@ final class NicheController {
         onCopyPath: { [weak self] urls in self?.ops.copyPaths(urls) },
         onTrash: { [weak self] urls in self?.ops.trash(urls) },
         onPaste: { [weak self] in self?.paste() },
-        onUndo: { [weak self] in self?.ops.undoLast() },
+        onUndo: { [weak self] in self?.undoLast() },
         onClose: { [weak self] in self?.closeFromKeyboard() },
         onOpenSettings: { [weak self] in self?.openSettings() },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
@@ -87,6 +87,8 @@ final class NicheController {
     // MARK: - 接线
 
     private func wire() {
+        // 异步文件操作(recycle 完成回调)失败 → 可见提示(throws 上抛不到的路径)。
+        ops.onError = { [weak self] title, error in self?.presentFailure(title: title, error: error) }
         hotZone.onTrigger = { [weak self] _ in
             self?.present()
         }
@@ -134,6 +136,14 @@ final class NicheController {
             guard let self, self.model.cursorIndex != index,
                   self.model.sortedItems.indices.contains(index) else { return }
             self.model.selectSingle(self.model.sortedItems[index].id)
+        }
+        // QL dataless 按需下载起止/失败 → cell spinner + 可见提示(与双击打开路径对称,
+        // 空格预览不再是"静默等 30s、失败无声"的黑箱)。URL 即 FileItem.ID。
+        quickLook.onDownloadBegin = { [weak self] url in self?.model.beginDownload(url) }
+        quickLook.onDownloadEnd = { [weak self] url in self?.model.endDownload(url) }
+        quickLook.onDownloadFailed = { [weak self] url, error in
+            Log.files.error("预览按需下载失败:\(error.localizedDescription, privacy: .public)")
+            self?.presentFailure(title: "无法下载「\(url.lastPathComponent)」", error: error)
         }
         // 光标变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
         // @Published 在 willSet 阶段发布,此刻 cursorID 仍是旧值 → 派生的 cursorIndex 会算出"上一个"
@@ -284,14 +294,19 @@ final class NicheController {
         presentFailure(title: "无法下载「\(name)」", error: error)
     }
 
-    /// 用户动作失败的统一可见提示(下载/拖入/未来的文件操作共用,不靠隐形日志吞错)。
+    /// 用户动作失败的统一可见提示(下载/拖入/文件操作共用,不靠隐形日志吞错)。
+    /// FailureAlert 自带 .modalDialog 抑制:提示期间面板不被挤收回。
     private func presentFailure(title: String, error: Error) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "好")
-        alert.runModal()
+        FailureAlert.present(title: title, error: error, autoHide: autoHide)
+    }
+
+    /// ⌘Z 撤销:栈空静默(无事可撤不是错误);恢复失败弹提示(记录留栈顶,修正后可重试)。
+    private func undoLast() {
+        do { try ops.undoLast() }
+        catch {
+            Log.files.error("撤销失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法撤销", error: error)
+        }
     }
 
     /// 重命名提交;返回是否成功(失败 → cell 保持编辑态)。校验空名/同名/非法字符。
@@ -309,10 +324,17 @@ final class NicheController {
         }
     }
 
+    /// ⌘V 粘贴:同名冲突会弹 ConflictPrompt 模态 → 挂 .modalDialog 抑制(对话框期间面板不收);
+    /// 失败弹可见提示(此前只记日志,用户视角"按了没反应")。
     private func paste() {
         guard let dir = model.currentMirror?.currentDirectory else { return }
+        autoHide.begin(.modalDialog)
+        defer { autoHide.end(.modalDialog) }
         do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
-        catch { Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)") }
+        catch {
+            Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
+            presentFailure(title: "无法粘贴", error: error)
+        }
     }
 
     private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {
@@ -379,6 +401,10 @@ final class NicheController {
     /// 添加文件夹:NSOpenPanel 选目录 → 生成普通 bookmark → 持久化。
     /// 重建由 bindingStore.$bindings 的订阅统一驱动(selecting 新 id),避免双重 rebuild。
     private func addFolder() {
+        // NSOpenPanel 模态期间挂 .modalDialog 抑制:open panel 成 key + 鼠标移去选目录会触发
+        // 收回,不抑制则选完文件夹面板已不见,"添加成功"没有任何可见结果(首次用户以为失败)。
+        autoHide.begin(.modalDialog)
+        defer { autoHide.end(.modalDialog) }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
