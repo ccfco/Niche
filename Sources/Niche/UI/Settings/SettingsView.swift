@@ -2,14 +2,19 @@ import SwiftUI
 import AppKit
 
 /// 设置页(spec §M5):绑定文件夹管理(增删/排序)、触发与快捷键、隐藏文件默认。
+/// 宿主是自管 NSWindow(SettingsWindowController),注入面板同一个 PanelModel ——
+/// showHidden 等偏好只有一个真相源,设置页改了面板立即生效,面板切了设置页同步显示。
 struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @ObservedObject var model: PanelModel
+    /// 添加文件夹走 NicheController 统一路径(与面板「+」一致:自动选中新 tab)。
+    var onAddFolder: () -> Void = {}
 
     var body: some View {
         TabView {
-            FoldersSettings()
+            FoldersSettings(onAddFolder: onAddFolder)
                 .tabItem { Label("文件夹", systemImage: "folder") }
-            GeneralSettings()
+            GeneralSettings(model: model)
                 .tabItem { Label("通用", systemImage: "gearshape") }
         }
         .frame(width: 480, height: 360)
@@ -18,6 +23,9 @@ struct SettingsView: View {
 
 private struct FoldersSettings: View {
     @EnvironmentObject private var environment: AppEnvironment
+    var onAddFolder: () -> Void = {}
+    /// 待确认移除的绑定(误点 minus 无 undo,弹确认而非立即删)。
+    @State private var pendingRemoval: FolderBinding?
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -35,7 +43,7 @@ private struct FoldersSettings: View {
                         }
                         Spacer()
                         Button(role: .destructive) {
-                            environment.bindingStore.remove(id: binding.id)
+                            pendingRemoval = binding
                         } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
                     }
@@ -46,30 +54,32 @@ private struct FoldersSettings: View {
             }
             .frame(minHeight: 180)
 
-            Button { addFolder() } label: { Label("添加文件夹", systemImage: "plus") }
+            Button { onAddFolder() } label: { Label("添加文件夹", systemImage: "plus") }
         }
         .padding()
-    }
-
-    private func addFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "添加"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let bookmark = DirectoryMirror.makeBookmark(for: url)
-        environment.bindingStore.add(FolderBinding(bookmarkData: bookmark, path: url.path))
+        .confirmationDialog(
+            "移除「\(pendingRemoval?.displayName ?? "")」?",
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
+        ) {
+            Button("移除", role: .destructive) {
+                if let binding = pendingRemoval { environment.bindingStore.remove(id: binding.id) }
+                pendingRemoval = nil
+            }
+        } message: {
+            Text("只解除绑定,不会动磁盘上的文件夹。")
+        }
     }
 }
 
 private struct GeneralSettings: View {
-    @AppStorage("niche.showHidden") private var showHidden = false
+    /// 直接绑面板的 PanelModel:showHidden 单真相源(模型持久化到 UserDefaults),
+    /// 不再用 @AppStorage 另起一份 —— 那会与面板 eye 按钮互相看不见(双真相源撕裂)。
+    @ObservedObject var model: PanelModel
 
     var body: some View {
         Form {
-            Toggle("默认显示隐藏文件", isOn: $showHidden)
-            LabeledContent("呼出快捷键", value: "⌥⌘Space")
+            Toggle("默认显示隐藏文件", isOn: $model.showHidden)
+            LabeledContent("呼出快捷键", value: GlobalHotkey.displayString)
             LabeledContent("触发位置") {
                 Text("刘海热区(无刘海回退顶部中央)+ 菜单栏图标 + 快捷键")
                     .font(.caption).foregroundStyle(.secondary)

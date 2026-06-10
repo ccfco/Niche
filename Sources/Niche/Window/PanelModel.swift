@@ -19,8 +19,13 @@ final class PanelModel: ObservableObject {
     @Published var sortOrder = FileSortOrder.load() {
         didSet { sortOrder.save() }
     }
+    /// 隐藏文件偏好的**唯一真相源**:面板 eye 按钮与设置页共绑此属性,didSet 同步镜像并持久化
+    /// (此前设置页用 @AppStorage 另存一份:设置页改了面板无感、面板切了重启即丢)。
     @Published var showHidden: Bool = UserDefaults.standard.bool(forKey: "niche.showHidden") {
-        didSet { mirrors.forEach { $0.showHidden = showHidden } }
+        didSet {
+            mirrors.forEach { $0.showHidden = showHidden }
+            UserDefaults.standard.set(showHidden, forKey: "niche.showHidden")
+        }
     }
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4

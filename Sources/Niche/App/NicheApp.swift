@@ -1,18 +1,21 @@
-import SwiftUI
+import AppKit
 
 /// Niche 入口。menu bar accessory(`LSUIElement=true`),不进 Dock、平时无主窗口。
 ///
-/// 用 `Settings` scene 作为唯一 SwiftUI scene —— 它不会在启动时开窗,仅在用户从菜单选
-/// "设置…"或按 ⌘, 时出现,符合"用完即走、平时无窗口"的形态。所有呼出窗口由 AppKit
-/// 侧(`PanelController` / `HotZoneWindow`)在运行时按需创建,不走 SwiftUI WindowGroup。
+/// **纯 AppKit 启动,不用 SwiftUI App**:此前用 `Settings` scene 承载设置页,但 accessory app
+/// 没有公开 API 能从 AppKit 侧编程打开它 —— `showSettingsWindow:` 私有选择子在 macOS 14+ 被
+/// 系统封禁(要求 SettingsLink,只能放在 SwiftUI 菜单里),菜单栏「设置…」点了没反应。
+/// 设置窗口改为自管(SettingsWindowController);SwiftUI App 自动生成的主菜单由
+/// AppDelegate.makeMainMenu 显式重建(Edit 菜单是重命名输入框 ⌘C/V/A 的路由,不能丢)。
 @main
-struct NicheApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+@MainActor
+enum NicheMain {
+    private static let delegate = AppDelegate()
 
-    var body: some Scene {
-        Settings {
-            SettingsView()
-                .environmentObject(appDelegate.environment)
-        }
+    static func main() {
+        let app = NSApplication.shared
+        // NSApp.delegate 是 unsafe-unretained:静态持有,防 delegate 被提前释放。
+        app.delegate = delegate
+        app.run()
     }
 }

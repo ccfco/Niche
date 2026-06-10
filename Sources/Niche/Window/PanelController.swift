@@ -400,6 +400,7 @@ final class PanelController {
             case "v": actions.onPaste(); return nil
             case "z": actions.onUndo(); return nil
             case "w": actions.onClose(); return nil
+            case ",": actions.onOpenSettings(); return nil
             default: break
             }
         }

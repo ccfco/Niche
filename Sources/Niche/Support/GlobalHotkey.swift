@@ -8,6 +8,10 @@ final class GlobalHotkey {
     private var handlerRef: EventHandlerRef?
     var onTrigger: (() -> Void)?
 
+    /// 默认快捷键的展示文案(设置页用)。**必须与 register 默认参数同步改**,
+    /// 否则设置页教用户按一个不存在的键。
+    static let displayString = "⌃⌥⌘Space"
+
     /// 默认 ⌃⌥⌘Space。keyCode 49 = Space。
     /// **不能用 ⌥⌘Space**:那是系统 symbolic hotkey 65「Show Finder search window」(默认启用),
     /// 系统级 symbolic hotkey 优先于 RegisterEventHotKey,会把热键抢走、面板出不来(实测确认)。

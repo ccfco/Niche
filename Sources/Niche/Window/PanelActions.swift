@@ -36,6 +36,9 @@ struct PanelActions {
     var onUndo: () -> Void = {}
     /// ⌘W / Esc 收回(未 pin)。
     var onClose: () -> Void = {}
+    /// ⌘, 打开设置窗口(面板是 nonactivating panel,app 常处于非激活态,主菜单 key equivalent
+    /// 不可靠 —— 由面板键盘权威显式接管)。
+    var onOpenSettings: () -> Void = {}
     /// 拖出(面板作 drag 源)起止 → 宿主抑制/解除 auto-hide(拖出全程不消失 + 拖出即走)。
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}

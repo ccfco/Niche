@@ -44,12 +44,24 @@ final class NicheController {
         onPaste: { [weak self] in self?.paste() },
         onUndo: { [weak self] in self?.ops.undoLast() },
         onClose: { [weak self] in self?.closeFromKeyboard() },
+        onOpenSettings: { [weak self] in self?.openSettings() },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
     private lazy var panelController = PanelController(
         model: model, motion: motion, actions: actions
     )
+    /// 自管设置窗口(SwiftUI Settings scene 在 accessory app 无法编程打开,见 SettingsWindowController)。
+    /// 注入同一个 PanelModel(showHidden 单真相源)与统一的 addFolder 路径。
+    private lazy var settingsWindow = SettingsWindowController(
+        environment: environment, model: model,
+        onAddFolder: { [weak self] in self?.addFolder() }
+    )
+
+    /// 打开设置窗口(菜单栏「设置…」、主菜单 ⌘, 与面板内 ⌘, 共用入口)。
+    func openSettings() {
+        settingsWindow.show()
+    }
 
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
@@ -65,7 +77,7 @@ final class NicheController {
         hotZone.refreshPlacement()
         rebuildMirrors()
         hotkey.onTrigger = { [weak self] in self?.toggle() }
-        hotkey.register()   // 默认 ⌥⌘Space 兜底呼出
+        hotkey.register()   // 默认 ⌃⌥⌘Space 兜底呼出(展示文案见 GlobalHotkey.displayString)
     }
 
     deinit {

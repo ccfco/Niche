@@ -7,10 +7,13 @@ final class MenuBarController {
     private let environment: AppEnvironment
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
+    private let onOpenSettings: () -> Void
 
-    init(environment: AppEnvironment, onToggle: @escaping () -> Void) {
+    init(environment: AppEnvironment, onToggle: @escaping () -> Void,
+         onOpenSettings: @escaping () -> Void) {
         self.environment = environment
         self.onToggle = onToggle
+        self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureButton()
         statusItem.menu = makeMenu()
@@ -74,12 +77,9 @@ final class MenuBarController {
         onToggle()
     }
 
+    /// 打开自管设置窗口。不能再走 `showSettingsWindow:` 私有选择子 —— macOS 14+ 系统已封禁
+    /// (点了没反应,控制台提示改用 SettingsLink),设置窗口已 AppKit 自管(SettingsWindowController)。
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if #available(macOS 14.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        onOpenSettings()
     }
 }
