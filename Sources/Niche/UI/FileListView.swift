@@ -12,7 +12,10 @@ struct FileListView: View {
     @FocusState private var tableFocused: Bool
 
     var body: some View {
-        Table(model.sortedItems, selection: multiSelectionBinding, sortOrder: sortBinding) {
+        // 显式 rows + TableRow.itemProvider:走 NSTableView 原生行拖拽 —— 拖已选中行 = 拖**整组
+        // 选中**(每行各自的 provider,真实 file URL),与图标模式 DragSourceView 的多选拖出等价。
+        // 此前 nameCell 上挂 .draggable(item.url) 只能拖单项,违反「两模式行为等价」。
+        Table(of: FileItem.self, selection: multiSelectionBinding, sortOrder: sortBinding) {
             TableColumn("名称", value: \.name) { item in nameCell(item) }
             TableColumn("大小", value: \.size) { item in
                 Text(sizeLabel(item)).foregroundStyle(.secondary).monospacedDigit()
@@ -27,6 +30,11 @@ struct FileListView: View {
                 Text(dateLabel(item)).foregroundStyle(.secondary).lineLimit(1)
             }
             .width(min: 96, ideal: 116, max: 150)
+        } rows: {
+            ForEach(model.sortedItems) { item in
+                TableRow(item)
+                    .itemProvider { NSItemProvider(object: item.url as NSURL) }
+            }
         }
         // 关隔行背景:访达列表是纯白行 + 极细分隔;隔行底色会把行界读成"更粗更深的分割线"。
         .tableStyle(.inset(alternatesRowBackgrounds: false))
@@ -38,6 +46,13 @@ struct FileListView: View {
             onDrop: actions.onDropURLs,
             targetDirectory: { model.currentMirror?.currentDirectory }
         ))
+        // 空文件夹空态(与图标模式等价):overlay 而非替换 Table —— Table 的 onDrop 保持活跃,
+        // 空文件夹仍可拖入文件。
+        .overlay {
+            if model.sortedItems.isEmpty {
+                EmptyStateView(kind: .empty)
+            }
+        }
     }
 
     /// 表头排序桥接:get 把真相源 FileSortOrder 映射为 Table 排序描述子(驱动表头箭头);
@@ -85,8 +100,8 @@ struct FileListView: View {
         .contentShape(Rectangle())
         // 双击打开/下钻(Table 原生单击负责选中,叠加双击手势不冲突)。
         .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
-        // 拖出真实 file URL。拖拽 session 中 .mouseMoved 静默,面板不收;松手后在外才收(拖出即走)。
-        .draggable(item.url)
+        // 拖出由 TableRow.itemProvider 承担(原生多选拖整组);拖拽 session 中 .mouseMoved 静默,
+        // 面板不收;松手后在外才收(拖出即走)。
         // 右键:与图标模式同款 RightClickCatcher → ContextMenuBuilder(13 项),菜单 delegate
         // 驱动 .contextMenu auto-hide 抑制(菜单期间面板不收)。弃用阉割版 SwiftUI .contextMenu(#3)。
         // RightClickCatcher 只认领右键/control-左键,左键(原生选中/双击/拖出)透传不冲突。
