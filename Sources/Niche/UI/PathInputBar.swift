@@ -73,13 +73,22 @@ private struct PathTextField: NSViewRepresentable {
 
     func updateNSView(_ nsView: FocusingPathField, context: Context) {
         context.coordinator.parent = self
-        // 再次触发(⌘⇧G / 键入 `/`)且焦点不在框内 → 重新夺焦并全选(直接打字即覆盖旧路径)。
+        // 再次触发(⌘⇧G / 键入 `/`、`~`)且焦点不在框内 → 重新夺焦。带首字符的触发把文本
+        // 重置为该字符(否则那一击被键盘权威吃掉、旧路径还赖在框里);⌘⇧G(无首字符)保留
+        // 旧文本全选,直接打字即覆盖(Finder ⌘⇧G 同款)。
         if context.coordinator.lastFocusToken != focusToken {
             context.coordinator.lastFocusToken = focusToken
             if let window = nsView.window, nsView.currentEditor() == nil {
                 window.makeFirstResponder(nsView)
-                nsView.currentEditor()?.selectedRange =
-                    NSRange(location: 0, length: (nsView.stringValue as NSString).length)
+                if initialText.isEmpty {
+                    nsView.currentEditor()?.selectedRange =
+                        NSRange(location: 0, length: (nsView.stringValue as NSString).length)
+                } else {
+                    nsView.stringValue = initialText
+                    context.coordinator.noteProgrammaticChange(length: (initialText as NSString).length)
+                    nsView.currentEditor()?.selectedRange =
+                        NSRange(location: (initialText as NSString).length, length: 0)
+                }
             }
         }
     }
@@ -96,11 +105,20 @@ private struct PathTextField: NSViewRepresentable {
 
         init(_ parent: PathTextField) { self.parent = parent }
 
+        /// 程序性写入(补全/重置)后同步长度基线 —— 程序写入不触发 controlTextDidChange,
+        /// 否则下一次人工输入的"净增长"判定会失真。
+        func noteProgrammaticChange(length: Int) {
+            lastLength = length
+        }
+
         func controlTextDidChange(_ obj: Notification) {
             parent.onEdit()
             guard !isCompleting,
                   let field = obj.object as? NSTextField,
                   let editor = field.currentEditor() else { return }
+            // 输入法组合态(拼音未上屏)不补全:此刻 stringValue 是 marked text,把它当
+            // 成品路径去匹配/改选区会打断组合(Codex review,中文目录名是常规场景)。
+            if let textView = editor as? NSTextView, textView.hasMarkedText() { return }
             let text = field.stringValue
             defer { lastLength = (text as NSString).length }
 
@@ -111,18 +129,29 @@ private struct PathTextField: NSViewRepresentable {
             else { return }
 
             let expanded = PathCompleter.expand(text)
-            guard let suggestion = PathCompleter.suggest(expanded),
-                  (suggestion as NSString).length > (expanded as NSString).length,
-                  suggestion.lowercased().hasPrefix(expanded.lowercased())
-            else { return }
+            guard let suggestion = PathCompleter.suggest(expanded) else { return }
+            // 把"未完成段"整体替换为磁盘上的真实拼写(Finder 同款):只追加尾巴会保留用户
+            // 键入的大小写/音调形态,大小写敏感卷上提交必失败(Codex review)。
+            // suggestion = 展开形父目录 + 真实条目名(+/),故未完成段之前的部分照搬用户原文
+            // (保留 ~ 输入形态),之后取 suggestion 的对应尾部。
+            let partialLen = (((expanded as NSString).lastPathComponent) as NSString).length
+            let basePrefixLen = length - partialLen                      // 用户原文中未完成段起点
+            let suggestionBaseLen = (expanded as NSString).length - partialLen
+            guard basePrefixLen >= 0, suggestionBaseLen >= 0,
+                  (suggestion as NSString).length > suggestionBaseLen else { return }
+            let replacement = (suggestion as NSString).substring(from: suggestionBaseLen)
+            let newText = (text as NSString).substring(to: basePrefixLen) + replacement
+            guard newText != text else { return }                        // 已是完整真实拼写,无事可补
 
-            // 用户输入形态保留(尤其 ~ 前缀不被展开形替换):建议只追加"展开形之后多出来的尾巴"。
-            let tail = (suggestion as NSString).substring(from: (expanded as NSString).length)
             isCompleting = true
-            field.stringValue = text + tail
-            editor.selectedRange = NSRange(location: length, length: (tail as NSString).length)
+            field.stringValue = newText
+            // 选中"用户已键入长度之后"的部分:继续打字覆盖,Tab/→ 接受。音调不敏感匹配下
+            // 真实名与键入段长度可能不同,夹取防越界。
+            let newLength = (newText as NSString).length
+            let selStart = min(length, newLength)
+            editor.selectedRange = NSRange(location: selStart, length: newLength - selStart)
             isCompleting = false
-            lastLength = (field.stringValue as NSString).length
+            lastLength = newLength
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -135,6 +164,8 @@ private struct PathTextField: NSViewRepresentable {
                 parent.onCancel()
                 return true
             case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.moveRight(_:)):
+                // IME 组合态的 Tab/→ 是候选词操作,原样还给输入法(Codex review)。
+                if textView.hasMarkedText() { return false }
                 // Tab / → 接受补全:光标跳到末尾、清选区(→ 在无选区时保持默认行为)。
                 guard let editor = control.currentEditor(), editor.selectedRange.length > 0 else {
                     return selector == #selector(NSResponder.insertTab(_:))   // Tab 不跳焦点,吃掉

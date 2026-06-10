@@ -127,9 +127,11 @@ final class PanelModel: ObservableObject {
     func rebuildMirrors(from bindings: [FolderBinding], selecting preferredID: FolderBinding.ID? = nil) {
         let desiredID = preferredID ?? currentMirror?.binding.id
         var rebuilt = bindings.map { DirectoryMirror(binding: $0, showHidden: showHidden) }
+        // 去重比 rootURL(bookmark 解析结果)而非 binding.path:绑定目录被移动后持久化 path
+        // 仍是旧值,按 path 比会同目录双 tab(Codex review)。
         if let temp = mirrors.first(where: \.isTemporary),
-           !bindings.contains(where: {
-               URL(fileURLWithPath: $0.path).standardizedFileURL == temp.rootURL.standardizedFileURL
+           !rebuilt.contains(where: {
+               $0.rootURL.standardizedFileURL == temp.rootURL.standardizedFileURL
            }) {
             rebuilt.append(temp)
         }
