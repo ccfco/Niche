@@ -25,6 +25,9 @@ final class PanelController {
     /// 取代旧的 SwiftUI 面板级 `.onKeyPress` —— 后者在「父视图聚焦 vs Table 抢焦点」两态行为不一致
     /// (列表 ↑↓ 跳行 #1、空格被 Table 吞 #2/#22)。monitor 与 SwiftUI 焦点无关,行为确定。
     private var keyMonitor: Any?
+    /// type-ahead 键入跳选缓冲(键盘单一权威持有;吃掉可见字符,避免列表态原生 NSTableView
+    /// 的 type-select 与之双权威打架)。
+    private var typeAhead = TypeAheadBuffer()
     private var leaveWorkItem: DispatchWorkItem?
     /// 瞬态 keep-alive 区域基准(面板 frame ∪ 此矩形);防 hover-收-再 hover 闪烁。
     /// 贴刘海时=刘海矩形(连成走廊);脱离刘海(unpin)时=面板自身。
@@ -311,6 +314,7 @@ final class PanelController {
 
     private func startKeyMonitor() {
         guard keyMonitor == nil else { return }
+        typeAhead.reset()   // 每次呼出重新开始,不延续上次面板的输入前缀
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             return self.handlePanelKey(event)
@@ -431,6 +435,17 @@ final class PanelController {
             case ",": actions.onOpenSettings(); return nil
             default: break
             }
+        }
+
+        // type-ahead 键入跳选(Finder 同款):无 ⌘/⌃/⌥ 的可见字符拼前缀跳选。吃掉事件 ——
+        // 列表态 NSTableView 自带 type-select,若放行会与此处双权威各跳各的(键盘单一权威)。
+        if !cmd, !option, !flags.contains(.control),
+           TypeAheadBuffer.isTypeAheadInput(event.charactersIgnoringModifiers) {
+            let prefix = typeAhead.append(event.charactersIgnoringModifiers ?? "")
+            if let idx = TypeAheadBuffer.firstMatch(prefix: prefix, in: model.sortedItems.map(\.name)) {
+                model.selectSingle(model.sortedItems[idx].id)
+            }
+            return nil
         }
         return event
     }
