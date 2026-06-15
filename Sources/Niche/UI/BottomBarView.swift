@@ -5,11 +5,17 @@ import SwiftUI
 struct BottomBarView: View {
     @ObservedObject var model: PanelModel
     let edge: EdgeMetrics
+    /// 排序按钮:弹排序菜单(由宿主以 NSMenu+抑制呈现,锚定按钮)。不用 SwiftUI Menu——
+    /// 那会抢 key 焦点让瞬态面板 didResignKey 即收回(鼠标移到排序按钮上面板就消失的根因)。
+    var onSortMenu: (_ anchor: NSView?) -> Void = { _ in }
     var onTogglePin: () -> Void = {}
+
+    /// 排序菜单锚点(弹在按钮下方,toolbar 菜单惯例)。
+    private let sortAnchor = MenuAnchorBox()
 
     var body: some View {
         HStack(spacing: edge.itemSpacing) {
-            sortMenu
+            sortButton
             hiddenToggle
             Spacer()
             pinButton
@@ -20,26 +26,13 @@ struct BottomBarView: View {
         .padding(.top, edge.innerSpacing)
     }
 
-    private var sortMenu: some View {
-        Menu {
-            Picker("排序", selection: $model.sortOrder.key) {
-                Text("名称").tag(FileSortOrder.Key.name)
-                Text("修改日期").tag(FileSortOrder.Key.date)
-                Text("大小").tag(FileSortOrder.Key.size)
-                Text("类型").tag(FileSortOrder.Key.kind)
-            }
-            Divider()
-            Picker("方向", selection: $model.sortOrder.direction) {
-                Text("升序").tag(FileSortOrder.Direction.ascending)
-                Text("降序").tag(FileSortOrder.Direction.descending)
-            }
-        } label: {
+    private var sortButton: some View {
+        Button { onSortMenu(sortAnchor.view) } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
-        // 菜单渲染为按钮,套同心圆玻璃样式,与底栏其余按钮统一(chrome 纪律:各按钮自承材质)。
-        .menuStyle(.button)
+        // 与底栏其余按钮统一玻璃语言(chrome 纪律:各按钮自承材质)。
         .buttonStyle(NicheFooterGlassButtonStyle())
-        .fixedSize()
+        .background(MenuAnchor(box: sortAnchor))
         .help("排序方式")
         .accessibilityLabel("排序方式")
         .accessibilityValue(sortDescription)   // VoiceOver 读出当前排序态,不用进菜单才知道

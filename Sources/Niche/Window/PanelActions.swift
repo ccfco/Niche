@@ -11,6 +11,8 @@ struct PanelActions {
     var onAddMenu: (_ anchor: NSView?) -> Void = { _ in }
     /// tab 右键:构建带抑制的 NSMenu(移除此文件夹);nil 不弹。
     var onTabMenu: (_ id: FolderBinding.ID) -> NSMenu? = { _ in nil }
+    /// 底栏排序按钮:弹排序菜单(NSMenu+抑制,锚定按钮下方);不用 SwiftUI Menu(会抢焦点收面板)。
+    var onSortMenu: (_ anchor: NSView?) -> Void = { _ in }
     var onRemoveFolder: (FolderBinding.ID) -> Void = { _ in }
     var onQuickLook: (_ urls: [URL], _ index: Int) -> Void = { _, _ in }
     /// Quick Look 当前是否由本 app 驱动且可见(键盘单一权威据此接管预览态:空格 toggle / Esc 关)。

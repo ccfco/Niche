@@ -11,12 +11,14 @@ struct FileSortOrder: Equatable, Codable {
 
     var key: Key = .name
     var direction: Direction = .ascending
-    /// 目录恒排在文件之前(与 Finder 同款,不受 key 影响)。
-    var directoriesFirst: Bool = true
+    /// 文件夹是否聚在最前(底栏排序菜单可切换)。默认混排 —— 与访达默认一致(访达「将文件夹
+    /// 保留在顶部」默认关闭);开启时对全部排序键生效,且目录优先不随升降序翻转。
+    var directoriesFirst: Bool = false
 
     static let `default` = FileSortOrder()
 
-    private static let storageKey = "niche.sortOrder"
+    /// internal(非 private):测试侧据此快照/还原偏好,避免字面量副本与本键漂移(Codex/review)。
+    static let storageKey = "niche.sortOrder"
 
     /// 持久化(仿 FileViewMode):重启保留排序。解码失败回退默认(让问题显式,不静默)。
     static func load() -> FileSortOrder {

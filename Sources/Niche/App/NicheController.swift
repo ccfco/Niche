@@ -36,6 +36,8 @@ final class NicheController {
         autoHide: autoHide,
         onRemove: { [weak self] id in self?.removeFolder(id) }
     )
+    /// 底栏排序菜单(NSMenu+抑制),见 SortMenuPresenter.swift。
+    private lazy var sortMenu = SortMenuPresenter(autoHide: autoHide, model: model)
 
     private lazy var actions = PanelActions(
         onOpen: { [weak self] in self?.open($0) },
@@ -43,6 +45,7 @@ final class NicheController {
         onAddFolder: { [weak self] in self?.addFolder() },
         onAddMenu: { [weak self] anchor in self?.addMenu.present(from: anchor) },
         onTabMenu: { [weak self] id in self?.tabMenu.makeMenu(for: id) },
+        onSortMenu: { [weak self] anchor in self?.sortMenu.present(from: anchor) },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
         isQuickLookActive: { [weak self] in self?.quickLook.isActive ?? false },
