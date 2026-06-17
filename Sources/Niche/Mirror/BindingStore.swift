@@ -37,6 +37,14 @@ final class BindingStore: ObservableObject {
         persist()
     }
 
+    /// 批量追加(拖入多个文件夹一次固定):一次 append + 一次 persist + 一次 @Published 变更,
+    /// 避免逐个 add 触发 N 次持久化与 N 次镜像重建(Codex review)。空数组为 no-op。
+    func add(_ newBindings: [FolderBinding]) {
+        guard !newBindings.isEmpty else { return }
+        bindings.append(contentsOf: newBindings)
+        persist()
+    }
+
     func remove(id: FolderBinding.ID) {
         bindings.removeAll { $0.id == id }
         persist()

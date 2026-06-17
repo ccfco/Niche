@@ -77,6 +77,7 @@ final class NicheController {
         onGoToPath: { [weak self] input in self?.goToPath(input) ?? false },
         onPinTemporary: { [weak self] in self?.pinTemporary() },
         onMoveTab: { [weak self] from, to in self?.moveTab(from: from, to: to) },
+        onDropFolders: { [weak self] urls in self?.dropFolders(urls) },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
@@ -542,6 +543,22 @@ final class NicheController {
     private func moveTab(from: Int, to: Int) {
         pendingSelectBindingID = model.currentMirror?.binding.id
         environment.bindingStore.move(from: IndexSet(integer: from), to: to)
+    }
+
+    /// 拖文件夹进 tab 栏 → 固定为常驻绑定。只接文件夹,去重已绑定路径;多个依次 add,选中最后一个。
+    /// 复用 pinTemporary 同款 bookmark + pendingSelect 路径,重建由 bindingStore.$bindings 订阅统一驱动。
+    private func dropFolders(_ urls: [URL]) {
+        let existing = Set(environment.bindingStore.bindings.map(\.path))
+        let folders = urls.filter { url in
+            ((try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true)
+                && !existing.contains(url.path)
+        }
+        guard !folders.isEmpty else { return }
+        let newBindings = folders.map {
+            FolderBinding(bookmarkData: DirectoryMirror.makeBookmark(for: $0), path: $0.path)
+        }
+        pendingSelectBindingID = newBindings.last?.id   // 选中最后一个固定的文件夹
+        environment.bindingStore.add(newBindings)        // 批量:一次 persist + 一次重建
     }
 
     private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {

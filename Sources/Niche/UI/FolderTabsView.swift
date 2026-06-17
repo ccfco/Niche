@@ -20,6 +20,8 @@ struct FolderTabsView: View {
     var onPinTemporary: () -> Void = {}
     /// 拖动重排提交:from = 正式 tab 原索引,to = `Array.move(toOffset:)` 语义的落点偏移。
     var onMoveTab: (_ from: Int, _ to: Int) -> Void = { _, _ in }
+    /// 拖文件夹进 tab 栏 → 固定为常驻绑定(内容区子文件夹 / 外部 Finder 同走此路;非文件夹拒绝)。
+    var onDropFolders: (_ urls: [URL]) -> Void = { _ in }
 
     /// 「+」菜单锚点(弹在按钮下方,toolbar 菜单惯例)。
     private let addAnchor = MenuAnchorBox()
@@ -53,12 +55,37 @@ struct FolderTabsView: View {
                     }
                 }
                 addButton
+                if folderDropActive { pinDropHint }
             }
             .padding(.horizontal, edge.panelPadding)
             .padding(.vertical, edge.innerSpacing)
             .coordinateSpace(name: coordSpace)
             .onPreferenceChange(TabFramePreference.self) { tabFrames = $0 }
+            // 拖文件夹进 tab 栏 → 固定为常驻绑定。只接文件夹(非文件夹 forbidden);宿主去重 + 批量 add。
+            .onDrop(of: [.fileURL], delegate: FolderTabDropDelegate(
+                onDropFolders: onDropFolders,
+                onTargeted: { active in
+                    withAnimation(.easeOut(duration: 0.12)) { folderDropActive = active }
+                }
+            ))
         }
+    }
+
+    /// 拖文件夹悬停时的落点提示(虚框 chip,接在「+」后):提示松手即固定为常驻 tab。
+    private var pinDropHint: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "pin")
+            Text("固定到这里")
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, edge.innerSpacing)
+        .padding(.vertical, edge.innerSpacing * 0.5)
+        .overlay(
+            RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
+                .strokeBorder(.secondary, style: StrokeStyle(lineWidth: 1, dash: [4]))
+        )
+        .transition(.opacity)
     }
 
     private func tab(index: Int, mirror: DirectoryMirror) -> some View {
@@ -261,5 +288,57 @@ final class TabReorderNSView: NSView {
         defer { startX = nil }
         if dragging { onDragEnded() } else { onSelect() }
         dragging = false
+    }
+}
+
+/// tab 栏外来拖入:只接文件夹 → 固定为常驻绑定(添加书签语义,`.copy` 角标);纯文件 `.forbidden`
+/// (守 CLAUDE.md「不做暂存盘」定位 —— tab 是书签不是落盘区)。是否含文件夹同步读拖拽剪贴板判定
+/// (`dropUpdated` 高频,异步 `loadObject` 当场拿不到;沿用 FileGridView DropPreflightCache 同款思路)。
+/// 文件夹过滤 + 去重已绑定路径交宿主(NicheController.dropFolders);此处只收集 URL 上报。
+struct FolderTabDropDelegate: DropDelegate {
+    let onDropFolders: ([URL]) -> Void
+    var onTargeted: (Bool) -> Void = { _ in }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func dropEntered(info: DropInfo) { onTargeted(true) }
+    func dropExited(info: DropInfo) { onTargeted(false) }
+
+    /// 含文件夹 → copy(添加书签);纯文件 → forbidden(不做暂存盘)。
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: pasteboardHasFolder() ? .copy : .forbidden)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        onTargeted(false)
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+
+        // loadObject 回调在任意队列;串行队列保护汇总数组(沿用 FileDropDelegate 同款)。
+        let lock = DispatchQueue(label: "com.ccfco.Niche.tabdrop")
+        var collected: [URL] = []
+        let group = DispatchGroup()
+        for provider in providers {
+            group.enter()
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                if let url { lock.sync { collected.append(url) } }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            let urls = lock.sync { collected }
+            guard !urls.isEmpty else { return }
+            onDropFolders(urls)
+        }
+        return true
+    }
+
+    /// 同步读拖拽剪贴板,判断是否含文件夹(决定 copy/forbidden 角标)。
+    private func pasteboardHasFolder() -> Bool {
+        let pb = NSPasteboard(name: .drag)
+        let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
+        return urls.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
     }
 }

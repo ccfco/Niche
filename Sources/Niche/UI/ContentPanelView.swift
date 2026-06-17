@@ -18,7 +18,8 @@ struct ContentPanelView: View {
                 FolderTabsView(model: model, edge: edge,
                                onAddMenu: actions.onAddMenu, onTabMenu: actions.onTabMenu,
                                onPinTemporary: actions.onPinTemporary,
-                               onMoveTab: actions.onMoveTab)
+                               onMoveTab: actions.onMoveTab,
+                               onDropFolders: actions.onDropFolders)
                 viewSwitcher
                     .fixedSize()
                     .padding(.trailing, edge.panelPadding)
