@@ -153,13 +153,17 @@ struct FileCellView: View {
     /// 静态文件名:2 行中间截断(Finder 图标视图同款);全名靠系统 hover tooltip(.help)与进重命名
     /// 时的多行框查看——不在格子里自造展开浮层(那既不原生、又挤布局)。
     private var staticLabel: some View {
-        Text(item.name)
-            .font(.caption)
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .truncationMode(.middle)
-            .frame(maxWidth: .infinity)
-            .help(item.name)
+        // 标签色点放名称左侧(Finder 图标视图惯例);整组居中。
+        HStack(spacing: 3) {
+            if !item.tags.isEmpty { TagDotsView(tags: item.tags, diameter: 9) }
+            Text(item.name)
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .help(item.name)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder private var artwork: some View {

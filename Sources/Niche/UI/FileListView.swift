@@ -141,6 +141,11 @@ struct FileListView: View {
                 Text(item.name).lineLimit(1).truncationMode(.tail).help(item.name)
                     .contentShape(Rectangle())
                     .simultaneousGesture(TapGesture(count: 1).onEnded { scheduleListRename(item) })
+                // 标签色点放名称右侧(Finder 列表视图惯例),Spacer 推到名称列右缘。
+                if !item.tags.isEmpty {
+                    Spacer(minLength: 4)
+                    TagDotsView(tags: item.tags, diameter: 8)
+                }
             }
             if model.downloadingIDs.contains(item.id) {
                 ProgressView().controlSize(.small)   // dataless 按需下载中(#13)
