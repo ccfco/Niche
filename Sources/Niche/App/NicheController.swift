@@ -22,7 +22,11 @@ final class NicheController {
     private lazy var ops = FileOperations(undo: undoManager)
     private lazy var contextMenu = ContextMenuBuilder(
         ops: ops, autoHide: autoHide,
-        onRequestRename: { [weak self] url in self?.beginRenameSafely(url) }
+        onRequestRename: { [weak self] url in self?.beginRenameSafely(url) },
+        presentModal: { [weak self] body in
+            guard let self else { body(); return }
+            self.withModalContext(body)
+        }
     )
 
     /// tab 栏「+」的添加菜单(选择文件夹 / 前往路径)与 tab 右键菜单(移除)。
@@ -380,10 +384,27 @@ final class NicheController {
         presentFailure(title: "无法下载「\(name)」", error: error)
     }
 
+    /// 在瞬态面板可见时呈现任意模态(NSOpenPanel / NSAlert / 冲突弹窗)的**统一**入口:
+    /// ① 挂 `.modalDialog` 抑制(模态成 key + 鼠标移去都会触发收回,不抑制则模态期间面板被挤走);
+    /// ② 把 panel.level 临时降到 `.floating` —— 瞬态级别(`.statusBar`≈25)高于模态级别(≈8),不降则
+    ///    Niche 面板浮在模态上方遮挡它(选目录/冲突确认看不见)。runModal 同步阻塞,body 返回后 defer
+    ///    立即恢复,无竞态。**所有模态点共用此一处**,杜绝"只有 addFolder 配对、其余漏配"的散落 bug。
+    /// 保存/恢复**当前** level(非写死),嵌套(body 内再调本方法或 presentFailure)与 pinned 态都安全。
+    func withModalContext(_ body: () -> Void) {
+        autoHide.begin(.modalDialog)
+        let saved = panelController.panel?.level
+        if saved != nil { panelController.panel?.level = .floating }
+        defer {
+            if let saved { panelController.panel?.level = saved }
+            autoHide.end(.modalDialog)
+        }
+        body()
+    }
+
     /// 用户动作失败的统一可见提示(下载/拖入/文件操作共用,不靠隐形日志吞错)。
-    /// FailureAlert 自带 .modalDialog 抑制:提示期间面板不被挤收回。
+    /// 走 withModalContext:提示期间抑制收回 + 降级面板让 NSAlert 不被遮挡。
     private func presentFailure(title: String, error: Error) {
-        FailureAlert.present(title: title, error: error, autoHide: autoHide)
+        withModalContext { FailureAlert.present(title: title, error: error, autoHide: autoHide) }
     }
 
     /// ⌘Z 撤销:栈空静默(无事可撤不是错误);恢复失败弹提示(记录留栈顶,修正后可重试)。
@@ -442,16 +463,16 @@ final class NicheController {
         }
     }
 
-    /// ⌘V 粘贴:同名冲突会弹 ConflictPrompt 模态 → 挂 .modalDialog 抑制(对话框期间面板不收);
+    /// ⌘V 粘贴:同名冲突会弹 ConflictPrompt 模态 → withModalContext(抑制收回 + 降级面板防遮挡);
     /// 失败弹可见提示(此前只记日志,用户视角"按了没反应")。
     private func paste() {
         guard let dir = model.currentMirror?.currentDirectory else { return }
-        autoHide.begin(.modalDialog)
-        defer { autoHide.end(.modalDialog) }
-        do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
-        catch {
-            Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法粘贴", error: error)
+        withModalContext {
+            do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+            catch {
+                Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法粘贴", error: error)
+            }
         }
     }
 
@@ -558,16 +579,19 @@ final class NicheController {
         let operation = DragSemantics.resolve(sameVolume: sameVolume, modifiers: modifiers)
         autoHide.begin(.dragging)
         defer { autoHide.end(.dragging) }
-        do {
-            switch operation {
-            case .copy: try ops.copy(incoming, to: dir, resolve: ConflictPrompt.ask)
-            case .move: try ops.move(incoming, to: dir, resolve: ConflictPrompt.ask)
+        // 冲突弹窗(ConflictPrompt)同走 withModalContext:否则瞬态模式下 NSAlert 被面板遮挡。
+        withModalContext {
+            do {
+                switch operation {
+                case .copy: try ops.copy(incoming, to: dir, resolve: ConflictPrompt.ask)
+                case .move: try ops.move(incoming, to: dir, resolve: ConflictPrompt.ask)
+                }
+            } catch {
+                // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
+                // 与双击下载失败提示对称,而非只记日志后无声消失。
+                Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法移入文件", error: error)
             }
-        } catch {
-            // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
-            // 与双击下载失败提示对称,而非只记日志后无声消失。
-            Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法移入文件", error: error)
         }
     }
 
@@ -587,26 +611,19 @@ final class NicheController {
     /// 添加文件夹:NSOpenPanel 选目录 → 生成普通 bookmark → 持久化。
     /// 重建由 bindingStore.$bindings 的订阅统一驱动(selecting 新 id),避免双重 rebuild。
     private func addFolder() {
-        // NSOpenPanel 模态期间挂 .modalDialog 抑制:open panel 成 key + 鼠标移去选目录会触发
-        // 收回,不抑制则选完文件夹面板已不见,"添加成功"没有任何可见结果(首次用户以为失败)。
-        autoHide.begin(.modalDialog)
-        defer { autoHide.end(.modalDialog) }
-        // NichePanel 瞬态级别(.statusBar ≈ 25)高于 NSOpenPanel 的 modal 级别(≈ 8),
-        // 不降级则 Niche 面板会浮在选文件夹对话框上方遮挡它。临时降到 .floating(≈ 3)让
-        // modal panel 自然浮到上面;runModal 同步阻塞,返回后 defer 立即恢复,无竞态。
-        panelController.panel?.level = .floating
-        defer { panelController.panel?.level = model.windowMode.level }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "添加"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        withModalContext {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            panel.prompt = "添加"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        let bookmark = DirectoryMirror.makeBookmark(for: url)
-        let binding = FolderBinding(bookmarkData: bookmark, path: url.path)
-        pendingSelectBindingID = binding.id   // 让随后的订阅重建选中这个新文件夹
-        environment.bindingStore.add(binding)
+            let bookmark = DirectoryMirror.makeBookmark(for: url)
+            let binding = FolderBinding(bookmarkData: bookmark, path: url.path)
+            pendingSelectBindingID = binding.id   // 让随后的订阅重建选中这个新文件夹
+            environment.bindingStore.add(binding)
+        }
     }
 
     private func removeFolder(_ id: FolderBinding.ID) {

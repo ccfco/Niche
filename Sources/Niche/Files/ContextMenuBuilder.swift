@@ -16,6 +16,10 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     private let ops: FileOperations
     private let autoHide: AutoHideCoordinator
     private let onRequestRename: (URL) -> Void
+    /// 在瞬态面板可见时呈现模态(NSOpenPanel/NSAlert/冲突弹窗)的统一 bracket —— 宿主注入
+    /// (NicheController.withModalContext):抑制 auto-hide + 临时降级 panel.level 防遮挡。
+    /// 菜单动作里凡跑 runModal 的都经它,杜绝"只有 addFolder 配对、右键模态被面板盖住"。
+    private let presentModal: (() -> Void) -> Void
     private var context: Context?
 
     /// 标准 Finder 标签色(名称 + 圆点色)。此前 symbol 字段恒为 "circle.fill" 且从未用到(死数据);
@@ -32,10 +36,13 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             .withSymbolConfiguration(config)
     }
 
-    init(ops: FileOperations, autoHide: AutoHideCoordinator, onRequestRename: @escaping (URL) -> Void) {
+    init(ops: FileOperations, autoHide: AutoHideCoordinator,
+         onRequestRename: @escaping (URL) -> Void,
+         presentModal: @escaping (() -> Void) -> Void) {
         self.ops = ops
         self.autoHide = autoHide
         self.onRequestRename = onRequestRename
+        self.presentModal = presentModal
     }
 
     /// 构建一个配置好(delegate 已设,驱动抑制)的菜单,交给 NSView.menu(for:) 由 AppKit 弹出。
@@ -155,21 +162,22 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
 
     @objc private func doCopyPath() { if let urls = context?.selection { ops.copyPaths(urls) } }
 
-    /// 「移动到…」:NSOpenPanel 选目标(模态期间抑制 auto-hide,否则选目录时面板被挤收回),
+    /// 「移动到…」:NSOpenPanel 选目标。经 presentModal(withModalContext):模态期间抑制 auto-hide
+    /// + 临时降级 panel.level,否则瞬态面板会盖住选目录对话框(此前漏配,只有 addFolder 做了降级)。
     /// 失败弹可见提示(此前 try? 静默吞错:目标只读/磁盘满时文件原地不动、用户无任何反馈)。
     @objc private func doMoveTo() {
         guard let ctx = context else { return }
-        autoHide.begin(.modalDialog)
-        defer { autoHide.end(.modalDialog) }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.prompt = "移动到此"
-        guard panel.runModal() == .OK, let dest = panel.url else { return }
-        do { try ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
-        catch {
-            Log.files.error("移动到失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法移动到所选位置", error: error)
+        presentModal {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.prompt = "移动到此"
+            guard panel.runModal() == .OK, let dest = panel.url else { return }
+            do { try ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
+            catch {
+                Log.files.error("移动到失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法移动到所选位置", error: error)
+            }
         }
     }
 
@@ -231,20 +239,23 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         }
     }
 
-    /// 粘贴:同名冲突会弹 ConflictPrompt 模态 → 全程挂 .modalDialog 抑制(对话框期间面板不收)。
+    /// 粘贴:同名冲突会弹 ConflictPrompt 模态 → presentModal(抑制收回 + 降级面板防遮挡)。
     @objc private func doPaste() {
         guard let dir = context?.directory else { return }
-        autoHide.begin(.modalDialog)
-        defer { autoHide.end(.modalDialog) }
-        do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
-        catch {
-            Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法粘贴", error: error)
+        presentModal {
+            do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+            catch {
+                Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法粘贴", error: error)
+            }
         }
     }
 
+    /// 失败弹窗同走 presentModal:NSAlert 在瞬态模式下也会被面板遮挡(标签/新建等错误路径)。
+    /// 嵌套调用(doMoveTo/doPaste 的 catch 已在 presentModal 内再调本方法)安全 —— withModalContext
+    /// 保存/恢复当前 level,且 AutoHideCoordinator 抑制源已改引用计数,begin/end 平衡配对。
     private func presentFailure(title: String, error: Error) {
-        FailureAlert.present(title: title, error: error, autoHide: autoHide)
+        presentModal { FailureAlert.present(title: title, error: error, autoHide: autoHide) }
     }
 }
 

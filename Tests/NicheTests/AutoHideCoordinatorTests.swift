@@ -78,6 +78,24 @@ final class AutoHideCoordinatorTests: XCTestCase {
         XCTAssertEqual(hideCount, 1)           // 补隐:拖出即走
     }
 
+    /// 同名抑制源重入:嵌套 begin(集中式 withModalContext 内再调 presentFailure)须 begin/end 平衡
+    /// 配对,内层 end 不得抹掉外层仍需的抑制。Set 实现会在内层 end 处误判 active 空 → 模态期间收回。
+    func testReentrantSuppressorRequiresBalancedRelease() {
+        let c = AutoHideCoordinator()
+        var hideCount = 0
+        c.onShouldHide = { hideCount += 1 }
+
+        c.begin(.modalDialog)                  // 外层(doMoveTo 的 presentModal)
+        c.begin(.modalDialog)                  // 嵌套(catch 里 presentFailure 又一层)
+        c.handleResignKey(newKeyWindow: nil)   // 模态成 key,面板失焦
+        c.end(.modalDialog)                    // 内层结束 —— 外层仍持有
+        drainMainQueue()
+        XCTAssertEqual(hideCount, 0)           // 仍被抑制(Set 实现此处会误隐)
+        c.end(.modalDialog)                    // 外层结束
+        drainMainQueue()
+        XCTAssertEqual(hideCount, 1)           // 全部解除 → 补隐
+    }
+
     /// 补隐兑现推迟一拍(NSMenu 的 didClose 先于 action 派发,给后继抑制留接棒窗口)。
     private func drainMainQueue() {
         let drained = expectation(description: "main queue drained")

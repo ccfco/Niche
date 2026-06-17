@@ -19,7 +19,9 @@ final class AutoHideCoordinator {
                           // 点按都会触发收回,不抑制则"添加文件夹/移动到…/冲突确认"期间面板被挤走
     }
 
-    private var active: Set<Suppressor> = []
+    /// 抑制源 → 嵌套计数(非 Set):同名抑制可重入(如集中式 withModalContext 嵌套 presentFailure),
+    /// begin/end 必须平衡配对——用 Set 时内层 end 会把外层仍需的抑制源整个抹掉,造成模态期间面板被收回。
+    private var active: [Suppressor: Int] = [:]
 
     /// 判定可隐藏后触发(由持有者执行真正的收回动画)。
     var onShouldHide: (() -> Void)?
@@ -32,7 +34,7 @@ final class AutoHideCoordinator {
     var isSuppressed: Bool { !active.isEmpty }
 
     func begin(_ suppressor: Suppressor) {
-        active.insert(suppressor)
+        active[suppressor, default: 0] += 1
     }
 
     /// 结束某抑制源;若全部结束且有待隐藏,**推迟一拍再重新评估**(而非盲目兑现)。
@@ -43,7 +45,8 @@ final class AutoHideCoordinator {
     /// ② 空隙里 handleMouseLeave/ResignKey 直接收回会消费它,排队的块自然失效,不双发
     /// onShouldHide;③ 多次 end 排队多个块,首个消费后其余 guard 短路。
     func end(_ suppressor: Suppressor) {
-        active.remove(suppressor)
+        guard let count = active[suppressor] else { return }   // 未配对的 end:忽略(不下溢)
+        if count <= 1 { active[suppressor] = nil } else { active[suppressor] = count - 1 }
         guard active.isEmpty, pendingHide else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.pendingHide, self.active.isEmpty else { return }
