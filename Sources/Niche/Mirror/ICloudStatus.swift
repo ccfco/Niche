@@ -90,8 +90,11 @@ final class ICloudStatus {
         if !isDataless(url) { return }
         try FileManager.default.startDownloadingUbiquitousItem(at: url)
 
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
+        // 单调时钟:墙钟 Date() 在系统休眠/用户改时间时会失真(deadline 提前或永不到),
+        // ContinuousClock 单调递增、不受影响,与 Task.sleep 同源。
+        let clock = ContinuousClock()
+        let start = clock.now
+        while clock.now - start < .seconds(timeout) {
             if !isDataless(url) { return }
             try await Task.sleep(nanoseconds: 200_000_000)  // 0.2s
         }

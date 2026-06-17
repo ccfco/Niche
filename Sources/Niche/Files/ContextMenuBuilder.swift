@@ -196,8 +196,9 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         guard let tag = sender.representedObject as? String, let urls = context?.selection else { return }
         for url in urls {
             // 读现有标签失败按"无标签"处理(读不到不该挡写入);写入失败必须可见。
-            let existing = (try? url.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
-            let merged = Array(Set(existing + [tag]))
+            // 保留现有标签顺序、新标签追加末尾(仿 Finder 稳定序);Set 去重会打乱且非确定。
+            var merged = (try? url.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
+            if !merged.contains(tag) { merged.append(tag) }
             do { try ops.setTags(merged, on: url) }
             catch {
                 Log.files.error("设置标签失败:\(error.localizedDescription, privacy: .public)")

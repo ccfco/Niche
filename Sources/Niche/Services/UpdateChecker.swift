@@ -24,6 +24,9 @@ final class UpdateChecker: ObservableObject {
     private let releasesURL = URL(string: "https://github.com/ccfco/Niche/releases/latest")!
     private var periodicCheckTimer: Timer?
     private var didStart = false
+    /// 检查进行中又来了强制请求(用户点「立即检查」):记下,当前检查结束后补跑一次 —— 否则被
+    /// `guard !isChecking` 静默丢弃,用户的"现在就查"落空(后台检查恰在网络 await 中时尤甚)。
+    private var pendingForcedCheck = false
 
     private enum Keys {
         static let autoCheckEnabled = "niche.updates.autoCheckEnabled"
@@ -101,11 +104,20 @@ final class UpdateChecker: ObservableObject {
     }
 
     private func performCheck(force: Bool) async {
-        guard !isChecking else { return }
+        if isChecking {
+            if force { pendingForcedCheck = true }   // 检查中:记下强制请求,结束后补跑(不静默丢)
+            return
+        }
         if !force, let last = lastCheckedAt, Date().timeIntervalSince(last) < 12 * 60 * 60 { return }
 
         isChecking = true
-        defer { isChecking = false }
+        defer {
+            isChecking = false
+            if pendingForcedCheck {                  // 兑现被合并的强制请求:重跑一次新检查
+                pendingForcedCheck = false
+                Task { [weak self] in await self?.performCheck(force: true) }
+            }
+        }
 
         do {
             var req = URLRequest(url: apiURL)
