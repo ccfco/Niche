@@ -10,6 +10,7 @@
 - 命令:`xcodegen generate && xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' build`(测试同 `test`)。
 - **Swift 语言模式 5.0 + `SWIFT_STRICT_CONCURRENCY=minimal`**(降低大型 AppKit 从 0 构建期并发噪音);`@MainActor` 仍按需显式标注。`deinit` 是 nonisolated,**不能调 `@MainActor` 方法**(observer 清理放 `close()` 等显式路径,不放 deinit)。
 - 命名避坑:自定义类型勿与系统同名 —— `Edge`(撞 SwiftUI)、`SortOrder`(撞 Foundation)已分别命名 `EdgeMetrics`/`FileSortOrder`。
+- **改完代码主动装机并打开**:构建通过后直接跑 `./scripts/auto-install.sh`——源码比已装 app 新就 Release 构建、`killall` 旧实例、装进 `/Applications`、**自动 `open` 到前台**(源码无变化则只 `open` 已装版本)。用户要的是"改完啥都不点、最新版已经开着",**已明确授权 Niche 这样自动启动**(global「不擅自启动 GUI」红线对本项目 deploy 这一动作放行,仅限 Niche)。不擅自建 Stop hook——用户要 hook 会自己说 / 用 `/hooks`。
 
 ## Obsidian 知识库
 
