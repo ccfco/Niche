@@ -47,14 +47,27 @@ struct SettingsSidebar: View {
             }
 
             Spacer(minLength: 0)
+
+            // 底部版本号:平衡 sidebar 下半空白 + 实用(文档原计划的"底部状态区")。
+            Text("Niche \(appVersion)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, edge.itemSpacing)
+                .padding(.bottom, edge.innerSpacing)
         }
         .padding(edge.itemSpacing)
         .frame(width: 168)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    /// app 版本(Bundle 读;sidebar 装饰用,不耦合 UpdateChecker 服务)。
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
+
     private var brand: some View {
         HStack(spacing: edge.innerSpacing) {
+            // 真 app 图标(Assets.xcassets/AppIcon):品牌区与 Finder/关于面板同一视觉来源。
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 26, height: 26)

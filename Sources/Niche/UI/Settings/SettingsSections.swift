@@ -30,7 +30,7 @@ struct FoldersSettings: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)   // 抹掉系统列表底,露出窗面玻璃
-            .frame(minHeight: 200)
+            .frame(maxHeight: .infinity)         // 吃满内容区剩余高度,文件夹多时在固定窗口内滚动(不撑破窗口)
 
             Button { onAddFolder() } label: {
                 Label("添加文件夹…", systemImage: "plus")
@@ -142,6 +142,11 @@ struct AboutSettings: View {
     @ObservedObject private var checker = UpdateChecker.shared
     private let edge = EdgeMetrics.standard
 
+    /// 版权(读 Info.plist NSHumanReadableCopyright,不在 UI 硬编码年份 —— 年份会过时)。
+    private var copyright: String? {
+        Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String
+    }
+
     var body: some View {
         SettingsPane(title: SettingsSection.about.title) {
             SettingsGroup {
@@ -171,6 +176,19 @@ struct AboutSettings: View {
                         .disabled(checker.isChecking)
                 }
             }
+
+            SettingsGroup(header: "项目") {
+                LabeledContent("开源仓库") {
+                    Link("github.com/ccfco/Niche",
+                         destination: URL(string: "https://github.com/ccfco/Niche")!)
+                }
+                LabeledContent("许可") {
+                    Text("MIT").foregroundStyle(.secondary)
+                }
+            }
+            if let copyright {
+                SettingsFootnote(copyright)
+            }
         }
     }
 
@@ -187,7 +205,7 @@ struct AboutSettings: View {
             Label("检查失败", systemImage: "exclamationmark.circle")
                 .foregroundStyle(.secondary)
         } else if let last = checker.lastCheckedAt {
-            Text("已是最新（\(last.formatted(.relative(presentation: .named)))）")
+            Text("已是最新（\(last.formatted(.relative(presentation: .named).locale(Locale(identifier: "zh_CN"))))）")
                 .foregroundStyle(.secondary)
         } else {
             Text("尚未检查").foregroundStyle(.secondary)

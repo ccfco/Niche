@@ -19,10 +19,16 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selection)
+            // 导航区↔内容区极淡发丝线:只拉层次,不给 sidebar 套独立材质底板(避免"卡片套卡片")。
+            Rectangle()
+                .fill(Color.primary.opacity(0.06))
+                .frame(width: 0.5)
+                .frame(maxHeight: .infinity)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 固定窗口尺寸:不让内容经 NSHostingView fitting 把窗口顶大(见 SettingsChrome.windowHeight)。
+        .frame(width: SettingsChrome.windowWidth, height: SettingsChrome.windowHeight)
     }
 
     @ViewBuilder private var content: some View {
@@ -41,6 +47,13 @@ enum SettingsChrome {
     /// 红绿灯让位:窗口 `.fullSizeContentView` + 透明 titlebar 后内容顶到窗顶,须留标准
     /// titlebar 高度,否则品牌区/标题被红绿灯压住。标准 macOS titlebar 高度稳定为 28pt。
     static let titlebarInset: CGFloat = 28
+
+    /// 设置窗固定尺寸(SettingsView 与 SettingsWindowController 共用一处)。固定是必须的:
+    /// NSGlassEffectView 当 contentView 会把 NSHostingView 的 fitting size 传给窗口,若 SettingsView
+    /// 用 maxHeight:.infinity,内容多的页(文件夹 List 取 8 项 ideal 高度)会把窗口顶大、各页不等高。
+    /// 高度按内容最多的文件夹页定:容下标题/footnote/按钮 + List 滚动区。
+    static let windowWidth: CGFloat = 524
+    static let windowHeight: CGFloat = 492
 }
 
 /// 内容区外壳:统一顶部红绿灯让位 + 区标题 + 内边距,各 section 只填内容。
@@ -56,7 +69,8 @@ struct SettingsPane<Content: View>: View {
                 .font(.system(size: 18, weight: .semibold))
                 .padding(.top, SettingsChrome.titlebarInset)
             content
-            Spacer(minLength: 0)
+            // 不放 Spacer:内容少的页靠 frame topLeading 自然顶对齐;内容多的页(文件夹)
+            // 由其 List 的 maxHeight:.infinity 吃满剩余高度并滚动 —— Spacer 会与 List 抢剩余空间。
         }
         .padding(edge.panelPadding * 1.5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

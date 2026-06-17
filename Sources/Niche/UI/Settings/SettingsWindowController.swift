@@ -31,7 +31,7 @@ final class SettingsWindowController {
 
     private func ensureWindow() -> NSWindow {
         if let window { return window }
-        let size = NSSize(width: 600, height: 440)
+        let size = NSSize(width: SettingsChrome.windowWidth, height: SettingsChrome.windowHeight)
 
         // 内容宿主用面板同款 `NicheGlassHostingView`(透明、safe area 归零):内容透明坐窗面玻璃上,
         // 不再叠任何背景 —— 这正是设置页"像面板"的根:整窗一层玻璃,内容只画选中/hover 填充。
