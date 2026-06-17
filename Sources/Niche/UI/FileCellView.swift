@@ -27,6 +27,10 @@ struct FileCellView: View {
     var onDragEnd: () -> Void = {}
     /// 拖出携带的 URL 集合(多选:拖已选中项 → 整组)。空回退本项。
     var dragURLs: () -> [URL] = { [] }
+    /// 键盘光标项:无 hover 时也展开长名浮层,纯键盘浏览也能读全名。
+    var isCurrent: Bool = false
+    /// hover 变化上报宿主网格:让 hover 的格子 zIndex 抬高,长名浮层向下溢出不被相邻格遮住。
+    var onHoverChange: (Bool) -> Void = { _ in }
 
     @State private var thumbnail: NSImage?
     @State private var isHovered = false
@@ -53,7 +57,10 @@ struct FileCellView: View {
             }
         }
         // hover 高亮:鼠标移入给一层比选中态更淡的底,提示可点(选中态优先)。
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            onHoverChange(hovering)
+        }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
             if isDownloading {
@@ -108,12 +115,10 @@ struct FileCellView: View {
             RenameTextField(initialName: item.name, onCommit: onRenameCommit, onCancel: onRenameCancel)
                 .frame(maxWidth: .infinity)
         } else {
-            Text(item.name)
-                .font(.caption)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            // 长名:静止两行中间截断(Finder 图标视图同款);hover/光标项浮起展开全显(见 FileNameLabel)。
+            // .help 兜底全名 tooltip,与列表模式(#17)统一 —— 触控板/无 hover 路径也能读全名。
+            FileNameLabel(name: item.name, expanded: isHovered || isCurrent, edge: edge)
+                .help(item.name)
         }
     }
 
@@ -129,4 +134,96 @@ struct FileCellView: View {
                 .aspectRatio(contentMode: .fit)
         }
     }
+}
+
+/// 图标模式文件名标签:静止两行中间截断(占位高度稳定,网格对齐不抖);hover 或光标项时
+/// 浮起展开为完整多行 + 玻璃底(Finder 图标视图同款长名呈现 —— 原生正确性 > 功能数量)。
+///
+/// **只在真被截断时浮起**:隐藏的不限行副本测完整高度,大于受限两行态才 `isTruncated`,短名
+/// 不套多余玻璃底。浮层走 `overlay` 不占位(不撑高格子,网格不错位);向下溢出由宿主网格的
+/// zIndex 抬高压住相邻格(见 FileGridView)。玻璃材质/圆角复用既有体系,不引新魔法数(chrome 纪律)。
+private struct FileNameLabel: View {
+    let name: String
+    let expanded: Bool
+    let edge: EdgeMetrics
+    @State private var isTruncated = false
+    @State private var clipHeight: CGFloat = 0
+    @State private var fullHeight: CGFloat = 0
+
+    var body: some View {
+        baseText
+            .lineLimit(2)
+            .truncationMode(.middle)
+            // 受限两行态的实际高度(短名 1 行/长名 2 行)。
+            .background(GeometryReader { clip in
+                Color.clear.preference(key: ClipNameHeightKey.self, value: clip.size.height)
+            })
+            // 隐藏的不限行副本测完整高度,与受限态比较定截断。
+            .background(probe)
+            .overlay(alignment: .top) {
+                if expanded && isTruncated { expandedOverlay }
+            }
+            .onPreferenceChange(ClipNameHeightKey.self) { clipHeight = $0; recomputeTruncation() }
+            .onPreferenceChange(FullNameHeightKey.self) { fullHeight = $0; recomputeTruncation() }
+            .animation(.easeOut(duration: 0.12), value: expanded)
+    }
+
+    private var baseText: some View {
+        Text(name)
+            .font(.caption)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+    }
+
+    /// 展开浮层:不限行完整名 + 厚玻璃底(盖住下方格子保证可读),圆角同格子。
+    private var expandedOverlay: some View {
+        Text(name)
+            .font(.caption)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, edge.innerSpacing)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
+                    .fill(.thickMaterial)
+            )
+    }
+
+    /// 截断测量层(隐藏,只在展开态挂载):同宽渲染「受限两行」与「不限行完整」两份,
+    /// 高度差即被截断。preference 回调也收在此 —— 非展开 cell 不挂载、不刷新。
+    private var truncationMeasurement: some View {
+        ZStack {
+            baseText
+                .lineLimit(2)
+                .background(GeometryReader { clip in
+                    Color.clear.preference(key: ClipNameHeightKey.self, value: clip.size.height)
+                })
+            baseText
+                .fixedSize(horizontal: false, vertical: true)
+                .background(GeometryReader { full in
+                    Color.clear.preference(key: FullNameHeightKey.self, value: full.size.height)
+                })
+        }
+        .hidden()
+        .onPreferenceChange(ClipNameHeightKey.self) { clipHeight = $0; recomputeTruncation() }
+        .onPreferenceChange(FullNameHeightKey.self) { fullHeight = $0; recomputeTruncation() }
+    }
+
+    private func recomputeTruncation() {
+        let truncated = fullHeight > clipHeight + 1
+        if truncated != isTruncated { isTruncated = truncated }
+    }
+}
+
+/// 受限两行态高度(截断判定基准)。
+private struct ClipNameHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// 不限行完整高度(> 受限态即被截断)。
+private struct FullNameHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

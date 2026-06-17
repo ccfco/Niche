@@ -7,6 +7,8 @@ struct FileGridView: View {
     @EnvironmentObject private var motion: MotionPreferences
     let edge: EdgeMetrics
     var actions = PanelActions()
+    /// 当前 hover 的格子索引:驱动该格 zIndex 抬高,长名展开浮层不被相邻格遮住。
+    @State private var hoveredIndex: Int?
 
     var body: some View {
         GeometryReader { geo in
@@ -17,6 +19,8 @@ struct FileGridView: View {
                         ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
                             cell(index: index, item: item)
                                 .id(index)
+                                // hover/光标项抬到上层:长名展开浮层向下溢出时不被相邻格遮住。
+                                .zIndex(cellZIndex(index))
                         }
                     }
                     .padding(edge.panelPadding)
@@ -55,6 +59,11 @@ struct FileGridView: View {
         ))
     }
 
+    /// hover 或键盘光标项抬到上层(其余 0):长名展开浮层向下溢出时压住相邻格。
+    private func cellZIndex(_ index: Int) -> Double {
+        (hoveredIndex == index || model.cursorIndex == index) ? 1 : 0
+    }
+
     private func columnCount(for width: CGFloat) -> Int {
         let usable = width - edge.panelPadding * 2
         let unit = edge.cellWidth + edge.itemSpacing
@@ -69,18 +78,18 @@ struct FileGridView: View {
     /// 同款角标);非目录格子不拦,拖入穿透到外层(落当前目录)。
     @ViewBuilder private func cell(index: Int, item: FileItem) -> some View {
         if item.isDirectory {
-            baseCell(item)
+            baseCell(index: index, item)
                 .onDrop(of: [.fileURL], delegate: FileDropDelegate(
                     onDrop: { actions.onDropURLs($0, $1, item.url) },
                     targetDirectory: { item.url },
                     onTargeted: { model.setDropTarget(item.id, targeted: $0) }
                 ))
         } else {
-            baseCell(item)
+            baseCell(index: index, item)
         }
     }
 
-    private func baseCell(_ item: FileItem) -> some View {
+    private func baseCell(index: Int, _ item: FileItem) -> some View {
         FileCellView(
             item: item,
             isSelected: model.selectedIDs.contains(item.id),
@@ -103,7 +112,11 @@ struct FileGridView: View {
             onDragBegin: actions.onDragBegin,
             onDragEnd: actions.onDragEnd,
             // 拖已选中项 → 拖整组多选;拖未选中项 → 仅该项(Finder 语义)。
-            dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] }
+            dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] },
+            isCurrent: model.cursorIndex == index,
+            onHoverChange: { hovering in
+                hoveredIndex = hovering ? index : (hoveredIndex == index ? nil : hoveredIndex)
+            }
         )
     }
 
