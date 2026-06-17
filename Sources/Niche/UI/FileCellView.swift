@@ -27,6 +27,10 @@ struct FileCellView: View {
     var onDragEnd: () -> Void = {}
     /// 拖出携带的 URL 集合(多选:拖已选中项 → 整组)。空回退本项。
     var dragURLs: () -> [URL] = { [] }
+    /// 本项当前是否为唯一选中项(慢速单击重命名前置条件)。
+    var isSoleSelection: () -> Bool = { false }
+    /// 慢速单击触发就地重命名。
+    var onBeginRename: () -> Void = {}
     /// 键盘光标项:无 hover 时也展开长名浮层,纯键盘浏览也能读全名。
     var isCurrent: Bool = false
     /// hover 变化上报宿主网格:让 hover 的格子 zIndex 抬高,长名浮层向下溢出不被相邻格遮住。
@@ -76,7 +80,8 @@ struct FileCellView: View {
         // NSDraggingSession 起止回调,无法抑制 auto-hide / 实现拖出即走。重命名态不拦截(让 TextField 可编辑)。
         .overlay { if !isRenaming {
             DragSourceView(url: item.url, onClick: onClick, onActivate: onActivate,
-                           onDragBegin: onDragBegin, onDragEnd: onDragEnd, dragURLs: dragURLs)
+                           onDragBegin: onDragBegin, onDragEnd: onDragEnd, dragURLs: dragURLs,
+                           isSoleSelection: isSoleSelection, onBeginRename: onBeginRename)
         } }
 
         // 无障碍:展示态把整格聚合为单一元素(VoiceOver 读"文件名,文件夹/文件,已选中");
@@ -154,17 +159,11 @@ private struct FileNameLabel: View {
         baseText
             .lineLimit(2)
             .truncationMode(.middle)
-            // 受限两行态的实际高度(短名 1 行/长名 2 行)。
-            .background(GeometryReader { clip in
-                Color.clear.preference(key: ClipNameHeightKey.self, value: clip.size.height)
-            })
-            // 隐藏的不限行副本测完整高度,与受限态比较定截断。
-            .background(probe)
+            // 截断检测只在浮起态(hover/光标)挂载 —— 非展开 cell 零额外测量开销(Codex review)。
+            .background { if expanded { truncationMeasurement } }
             .overlay(alignment: .top) {
                 if expanded && isTruncated { expandedOverlay }
             }
-            .onPreferenceChange(ClipNameHeightKey.self) { clipHeight = $0; recomputeTruncation() }
-            .onPreferenceChange(FullNameHeightKey.self) { fullHeight = $0; recomputeTruncation() }
             .animation(.easeOut(duration: 0.12), value: expanded)
     }
 
