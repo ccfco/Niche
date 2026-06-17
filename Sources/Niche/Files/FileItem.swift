@@ -66,6 +66,13 @@ struct FileItem: Identifiable, Equatable {
     static func load(url: URL) -> FileItem {
         let values = try? url.resourceValues(forKeys: resourceKeys)
 
+        // Finder 标签必须清缓存后单独读:`contentsOfDirectory(includingPropertiesForKeys:)` 批量
+        // 预取的 `tagNamesKey` 在返回 URL 的缓存里**不可靠、返回空**(实测 app 内枚举 URL 读到空、
+        // 清缓存重读才得到真实标签)。其余字段(名/大小/日期)预取可靠,照用 values。
+        var tagURL = url
+        tagURL.removeAllCachedResourceValues()
+        let tags = (try? tagURL.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
+
         let isUbiquitous = values?.isUbiquitousItem ?? false
         let downloadingStatus = values?.ubiquitousItemDownloadingStatus
         // dataless = 是 iCloud 项且下载状态不是 .current(尚未下到本地)。
@@ -80,7 +87,7 @@ struct FileItem: Identifiable, Equatable {
             modificationDate: values?.contentModificationDate ?? .distantPast,
             contentType: values?.contentType,
             isDataless: isDataless,
-            tags: values?.tagNames ?? []
+            tags: tags
         )
     }
 }

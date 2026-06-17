@@ -22,20 +22,6 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     private let presentModal: (() -> Void) -> Void
     private var context: Context?
 
-    /// 标准 Finder 标签色(名称 + 圆点色)。此前 symbol 字段恒为 "circle.fill" 且从未用到(死数据);
-    /// 改为携带颜色,菜单项用彩色圆点 image 呈现(#19)。
-    private static let standardTags: [(name: String, color: NSColor)] = [
-        ("红色", .systemRed), ("橙色", .systemOrange), ("黄色", .systemYellow),
-        ("绿色", .systemGreen), ("蓝色", .systemBlue), ("紫色", .systemPurple), ("灰色", .systemGray),
-    ]
-
-    /// 标签彩色圆点:SF Symbol circle.fill 上 paletteColors 染色(与 Finder 标签圆点观感一致)。
-    private static func tagDot(_ color: NSColor) -> NSImage? {
-        let config = NSImage.SymbolConfiguration(paletteColors: [color])
-        return NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(config)
-    }
-
     init(ops: FileOperations, autoHide: AutoHideCoordinator,
          onRequestRename: @escaping (URL) -> Void,
          presentModal: @escaping (() -> Void) -> Void) {
@@ -95,8 +81,10 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         add(menu, "压缩", #selector(doCompress))
-        menu.addItem(tagsSubmenu())
         add(menu, "分享…", #selector(doShare))
+        // 标签色点行自成一段(上下分隔)—— 否则夹在普通项里视觉割裂(对齐 Finder 的独立标签区)。
+        menu.addItem(.separator())
+        menu.addItem(tagRowItem(ctx))
         menu.addItem(.separator())
 
         add(menu, "移到废纸篓", #selector(doTrash))
@@ -124,22 +112,52 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         return parent
     }
 
-    private func tagsSubmenu() -> NSMenuItem {
-        let parent = NSMenuItem(title: "标签", action: nil, keyEquivalent: "")
-        let submenu = NSMenu()
-        for tag in Self.standardTags {
-            let item = NSMenuItem(title: tag.name, action: #selector(doSetTag(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = tag.name
-            item.image = Self.tagDot(tag.color)   // 彩色圆点(#19)
-            submenu.addItem(item)
+    /// 内联标签行(复刻 Finder:主菜单里一排可点彩色圆点,点色即 toggle,已打的画勾)。
+    /// 取代旧「标签」子菜单 —— 用户要"直接点颜色"而非多点一层。
+    private func tagRowItem(_ ctx: Context) -> NSMenuItem {
+        let item = NSMenuItem()
+        let applied = appliedTags(ctx.selection)
+        item.view = TagColorRowView(
+            tags: TagPalette.standard,
+            applied: applied,
+            onToggle: { [weak self] name in self?.toggleTag(name, in: ctx.selection) }
+        )
+        return item
+    }
+
+    /// 读某项当前标签 —— **必须清缓存**:枚举返回的 URL 缓存对 tagNamesKey 不可靠(同 FileItem.load
+    /// 的坑),不清会读到空、把"已有"误判成"无",toggle 永远只加不减。
+    private func currentTags(_ url: URL) -> [String] {
+        var u = url
+        u.removeAllCachedResourceValues()
+        return (try? u.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
+    }
+
+    /// 选区"共有"的标签(交集)→ 决定哪些圆点画勾。
+    private func appliedTags(_ selection: [URL]) -> Set<String> {
+        guard let first = selection.first else { return [] }
+        var common = Set(currentTags(first))
+        for url in selection.dropFirst() { common.formIntersection(currentTags(url)) }
+        return common
+    }
+
+    /// 切换标签:选区全部已有 → 整体移除;否则 → 给缺的补上(保留稳定序,新标签追加末尾)。
+    private func toggleTag(_ name: String, in selection: [URL]) {
+        let allHave = selection.allSatisfy { currentTags($0).contains(name) }
+        for url in selection {
+            var tags = currentTags(url)
+            if allHave {
+                tags.removeAll { $0 == name }
+            } else if !tags.contains(name) {
+                tags.append(name)
+            }
+            do { try ops.setTags(tags, on: url) }
+            catch {
+                Log.files.error("切换标签失败:\(error.localizedDescription, privacy: .public)")
+                presentFailure(title: "无法设置标签", error: error)
+                return   // 多选逐项失败不连环弹窗,首错即止
+            }
         }
-        submenu.addItem(.separator())
-        let clear = NSMenuItem(title: "清除标签", action: #selector(doClearTags), keyEquivalent: "")
-        clear.target = self
-        submenu.addItem(clear)
-        parent.submenu = submenu
-        return parent
     }
 
     // MARK: - 动作(每项调系统 API)
@@ -188,33 +206,6 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             catch {
                 Log.files.error("压缩失败:\(error.localizedDescription, privacy: .public)")
                 presentFailure(title: "无法压缩", error: error)
-            }
-        }
-    }
-
-    @objc private func doSetTag(_ sender: NSMenuItem) {
-        guard let tag = sender.representedObject as? String, let urls = context?.selection else { return }
-        for url in urls {
-            // 读现有标签失败按"无标签"处理(读不到不该挡写入);写入失败必须可见。
-            // 保留现有标签顺序、新标签追加末尾(仿 Finder 稳定序);Set 去重会打乱且非确定。
-            var merged = (try? url.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
-            if !merged.contains(tag) { merged.append(tag) }
-            do { try ops.setTags(merged, on: url) }
-            catch {
-                Log.files.error("设置标签失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法设置标签", error: error)
-                return   // 多选逐项失败不连环弹窗,首错即止
-            }
-        }
-    }
-
-    @objc private func doClearTags() {
-        for url in context?.selection ?? [] {
-            do { try ops.setTags([], on: url) }
-            catch {
-                Log.files.error("清除标签失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法清除标签", error: error)
-                return
             }
         }
     }

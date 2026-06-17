@@ -109,9 +109,7 @@ struct FileListView: View {
 
     @ViewBuilder private func nameCellContent(_ item: FileItem) -> some View {
         HStack(spacing: edge.innerSpacing) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
-                .resizable().frame(width: 16, height: 16)
-                .accessibilityHidden(true)   // 装饰性类型图标,种类列已承载语义
+            ListRowIcon(item: item)   // 有标签 → QL 彩色图标(与图标模式等价),否则系统类型图标
             if model.renamingItemID == item.id {
                 RenameTextField(
                     initialName: item.name,
@@ -228,5 +226,24 @@ struct FileListView: View {
     private func dateLabel(_ item: FileItem) -> String {
         guard item.modificationDate > .distantPast else { return "--" }
         return item.modificationDate.formatted(date: .numeric, time: .shortened)
+    }
+}
+
+/// 列表行 16px 图标:有标签时异步取 QL 彩色图标(与图标模式 FileCellView 等价的标签呈现),
+/// 否则即时系统类型图标。task 用整个 item:打标签不改 url/mtime,只 keyed on url 会刷不出色。
+private struct ListRowIcon: View {
+    let item: FileItem
+    @State private var tagged: NSImage?
+
+    var body: some View {
+        Image(nsImage: tagged ?? NSWorkspace.shared.icon(forFile: item.url.path))
+            .resizable().frame(width: 16, height: 16)
+            .accessibilityHidden(true)   // 装饰性类型图标,种类列已承载语义
+            // id 用图标键(路径+标签+dataless,不含 mtime):仅标签变才重取,内容编辑不白白重生成。
+            // isCancelled 守:防旧 QL 回调晚返回盖掉新态(异步缓存竞态)。
+            .task(id: ThumbnailCache.iconCacheKey(for: item, maxPixel: 32)) {
+                let img = await ThumbnailCache.shared.taggedIcon(for: item, maxPixel: 32)
+                if !Task.isCancelled { tagged = img }
+            }
     }
 }

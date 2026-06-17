@@ -51,8 +51,13 @@ struct FileCellView: View {
         let cell = VStack(spacing: edge.innerSpacing) {
             artwork
                 .frame(width: 48, height: 48)
-                .task(id: item.id) {
-                    thumbnail = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: 96)
+                // id = 图标键(路径+标签+dataless) + mtime(图片缩略图随内容变):打标签不改 url/mtime,
+                // 故必须含 tags 才会重取彩色图标;含 mtime 让图片内容更新也重取。
+                // isCancelled 守:.task(id:) 切换会取消旧任务,但旧 QL 回调晚返回时 await 之后仍会执行,
+                // 不守会用旧图标盖掉新态(异步缓存经典竞态)。
+                .task(id: "\(ThumbnailCache.iconCacheKey(for: item, maxPixel: 96))|\(item.modificationDate.timeIntervalSince1970)") {
+                    let img = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: 96)
+                    if !Task.isCancelled { thumbnail = img }
                 }
             nameArea
                 // 量文字标签 frame(本格坐标系)→ 慢速单击重命名命中判定。
