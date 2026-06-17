@@ -72,6 +72,7 @@ final class NicheController {
         onOpenSettings: { [weak self] in self?.openSettings() },
         onGoToPath: { [weak self] input in self?.goToPath(input) ?? false },
         onPinTemporary: { [weak self] in self?.pinTemporary() },
+        onMoveTab: { [weak self] from, to in self?.moveTab(from: from, to: to) },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
     )
@@ -513,6 +514,13 @@ final class NicheController {
         let binding = FolderBinding(bookmarkData: DirectoryMirror.makeBookmark(for: url), path: url.path)
         pendingSelectBindingID = binding.id
         environment.bindingStore.add(binding)
+    }
+
+    /// 拖动重排正式 tab:保持当前选中文件夹(按 binding.id 重选,不跳 tab),走 BindingStore.move
+    /// 持久化。重建由 bindingStore.$bindings 订阅统一驱动(与增删同路径)。
+    private func moveTab(from: Int, to: Int) {
+        pendingSelectBindingID = model.currentMirror?.binding.id
+        environment.bindingStore.move(from: IndexSet(integer: from), to: to)
     }
 
     private func makeContextMenu(_ urls: [URL], _ anchor: NSView) -> NSMenu? {

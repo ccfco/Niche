@@ -54,6 +54,8 @@ struct PanelActions {
     var onGoToPath: (String) -> Bool = { _ in false }
     /// 把临时 tab 钉成正式绑定(bookmark + 入 BindingStore,临时槽让位)。
     var onPinTemporary: () -> Void = {}
+    /// 拖动重排正式 tab:from = 原索引,to = `Array.move(toOffset:)` 语义落点。宿主走 BindingStore.move 持久化。
+    var onMoveTab: (_ from: Int, _ to: Int) -> Void = { _, _ in }
     /// 拖出(面板作 drag 源)起止 → 宿主抑制/解除 auto-hide(拖出全程不消失 + 拖出即走)。
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}

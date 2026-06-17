@@ -497,7 +497,14 @@ final class NichePanel: NSPanel {
         // NSApp.activate 激活 app。nonactivating 只挡 main(附件 app 不需要 main),不挡 key。
         level = mode.level
         collectionBehavior = mode.collectionBehavior
-        isMovableByWindowBackground = (mode == .pinned)   // 常驻:拖背景移动(detach);瞬态:不可拖
+        // 常驻:可拖动(背景 detach);瞬态:**整窗禁止用户拖动**。
+        // isMovableByWindowBackground 只管内容背景;`.titled+.fullSizeContentView` 顶部那条仍是
+        // 系统**标题栏拖动区**(tab 正铺在其上)。瞬态是 nonactivating panel、app 不激活,macOS 对
+        // "非激活窗口"允许直接拖标题栏移动,这条路径绕过 view 的 mouseDownCanMoveWindow → 拖 tab 时
+        // 窗口跟手移动(拖文件在下半部非标题栏区则无此问题)。isMovable=false 整窗封死用户拖动(不挡
+        // 程序化 setFrame,present/hide 动画照常),根治瞬态拖 tab 打架;Pin 保留可拖动以 detach。
+        isMovable = (mode == .pinned)
+        isMovableByWindowBackground = (mode == .pinned)
         hidesOnDeactivate = false   // 隐藏策略统一交给 AutoHideCoordinator,不靠系统 deactivate
     }
 }
