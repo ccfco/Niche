@@ -144,11 +144,14 @@ final class FileOperations {
     }
 
     /// 复制路径(⌥⌘C):写 POSIX 路径到 utf8 文本,多选换行拼接(与 Finder "Copy as Pathname" 一致)。
+    /// 同 copyToPasteboard 清 pendingCut:本操作已 clearContents 替换剪贴板,先前 ⌘X 的剪切 URL
+    /// 不再在板上,剪切标记必须失效(否则残留污染状态,与 copyToPasteboard 不对称)。
     func copyPaths(_ urls: [URL]) {
         let text = urls.map(\.path).joined(separator: "\n")
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
+        pendingCut = nil
     }
 
     // MARK: - 新建文件夹
