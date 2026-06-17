@@ -86,19 +86,16 @@ struct ContentPanelView: View {
         }
     }
 
-    /// 视图切换 = 两颗玻璃切换按钮(列表/图标),与底栏按钮同一玻璃语言(取代刺眼的蓝色原生 segmented)。
-    /// 当前模式按钮常驻高亮(isActive),不靠蓝色填充。
+    /// 视图切换 = 一块分段玻璃胶囊(列表/图标),仿 Finder 工具栏视图组:互斥单选挤一个胶囊,
+    /// 选中段浮高亮(不靠刺眼的蓝色原生 segmented)。玻璃/高亮语言与底栏按钮同源。
     private var viewSwitcher: some View {
-        HStack(spacing: edge.innerSpacing) {
-            Button { model.viewMode = .list } label: { Image(systemName: "list.bullet") }
-                .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .list, compact: true))
-                .help("列表视图")
-                .accessibilityLabel("列表视图")
-            Button { model.viewMode = .icon } label: { Image(systemName: "square.grid.2x2") }
-                .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.viewMode == .icon, compact: true))
-                .help("图标视图")
-                .accessibilityLabel("图标视图")
-        }
+        NicheSegmentedGlass(
+            selection: Binding(get: { model.viewMode }, set: { model.viewMode = $0 }),
+            segments: [
+                .init(value: .list, systemImage: "list.bullet", help: "列表视图", label: "列表视图"),
+                .init(value: .icon, systemImage: "square.grid.2x2", help: "图标视图", label: "图标视图"),
+            ]
+        )
     }
 
 }

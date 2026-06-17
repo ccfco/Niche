@@ -31,7 +31,6 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
         var body: some View {
             let pressed = configuration.isPressed
             let control = edge.footerControlCornerRadius
-            let inset = edge.footerHoverRimInset
             let hPad = compact ? edge.itemSpacing * 1.25 : edge.sectionSpacing   // 10 / 16
             let vPad = compact ? edge.itemSpacing * 0.75 : edge.itemSpacing       //  6 /  8
             // 三态强度收口到 GlassTokens(chrome 纪律:禁组件硬编码高亮 opacity,#16)。
@@ -44,12 +43,7 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
                 .padding(.vertical, vPad)
                 .glassEffect(.regular.interactive(),
                              in: RoundedRectangle(cornerRadius: control, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: control - inset, style: .continuous)
-                        .fill(Color.primary.opacity(highlight))
-                        .padding(inset)            // 内缩一圈,露出外层玻璃边
-                        .allowsHitTesting(false)   // 高亮层不抢 Button 命中
-                )
+                .glassHighlight(highlight, edge: edge)   // rim-inset 高亮,与分段控件共用同一权威
                 .scaleEffect(pressed ? 0.97 : 1)
                 .contentShape(RoundedRectangle(cornerRadius: control, style: .continuous))
                 .onHover { hovering in
@@ -57,5 +51,22 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
                 }
                 .animation(feedback, value: pressed)
         }
+    }
+}
+
+extension View {
+    /// 玻璃叠加高亮(rim-inset):高亮层圆角比控件小一圈、四边内缩 `footerHoverRimInset`,
+    /// 露出底层玻璃 rim(Raycast 式「内部小一圈块」)。强度三态从 `GlassTokens` 取(#16)。
+    /// 抽出供底栏按钮(`NicheFooterGlassButtonStyle`)与分段控件(`NicheSegmentedGlass`)
+    /// 共用,杜绝 rim 数学两处漂移 —— 高亮长什么样只有这一处权威。
+    func glassHighlight(_ strength: Double, edge: EdgeMetrics) -> some View {
+        let control = edge.footerControlCornerRadius
+        let inset = edge.footerHoverRimInset
+        return overlay(
+            RoundedRectangle(cornerRadius: control - inset, style: .continuous)
+                .fill(Color.primary.opacity(strength))
+                .padding(inset)            // 内缩一圈,露出外层玻璃边
+                .allowsHitTesting(false)   // 高亮层不抢 Button 命中
+        )
     }
 }
