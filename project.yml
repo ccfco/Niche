@@ -34,6 +34,7 @@ targets:
         INFOPLIST_FILE: Sources/Niche/Info.plist
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   NicheTests:
     type: bundle.unit-test
