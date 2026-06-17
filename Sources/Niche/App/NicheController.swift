@@ -312,6 +312,7 @@ final class NicheController {
     private func hideTransient() {
         quickLook.cancelPendingPreview()   // 收面板即作废"下载中未呈现"的预览(防迟到弹出)
         model.endPathInput()               // 路径条随面板收口,否则 .pathInput 抑制源跨次泄漏
+        model.invalidatePendingRename()    // 作废在途的慢速单击延迟重命名,防收起后回调泄漏 .renaming 抑制
         panelController.hide()
         teardownTransientFocusObserver()
     }

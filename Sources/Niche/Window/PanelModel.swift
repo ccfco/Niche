@@ -11,6 +11,10 @@ final class PanelModel: ObservableObject {
     @Published var currentTab: Int = 0
     /// 选中条目 id 集合(多选,#5)。UI 据此画选中态;ops/拖出/QuickLook 用 selectionURLs。
     @Published private(set) var selectedIDs: Set<FileItem.ID> = []
+    /// 最近一次左键按下「之前」的选中集快照(PanelController 的 leftMouseDown monitor 在事件派发前写)。
+    /// 列表模式慢速单击重命名据此判定「点击前就已唯一选中本项」—— SwiftUI 手势晚于 Table 原生选中,
+    /// 读当前 selectedIDs 会把「首次点击选中」误判成「再次点击已选中项」(图标模式靠 mouseUp 前的旧态天然规避)。
+    var selectionAtMouseDown: Set<FileItem.ID> = []
     /// 键盘光标 / Quick Look 预览目标 / 激活(回车·双击)目标。单选时 = 该项;多选时 = 最近一次落点。
     @Published private(set) var cursorID: FileItem.ID?
     /// ⇧ 区间选择的锚点(单选/⌘点重置;⇧ 从锚点拉到光标)。
@@ -291,6 +295,23 @@ final class PanelModel: ObservableObject {
 
     func beginRename(_ url: URL) { renamingItemID = url }
     func endRename() { renamingItemID = nil }
+
+    /// 慢速单击"待触发重命名"的代次:面板收起时自增(NicheController.hideTransient),使在途的延迟
+    /// 重命名回调(图标模式 Timer / 列表模式 DispatchWorkItem)失效 —— 回调触发前比对捕获的代次,
+    /// 不等即放弃。防延迟内鼠标移出令面板自动收起后,回调仍把 renamingItemID 置非 nil,泄漏
+    /// .renaming auto-hide 抑制(面板下次打开永不自动收,Codex review)。isSoleSelection 守卫挡不住
+    /// 此情形:选中没变、只是面板没了。
+    private(set) var renameArmToken = 0
+    func invalidatePendingRename() { renameArmToken &+= 1 }
+
+    /// 按当前排序定位某项的相邻项 URL(Tab/⇧Tab 跳重命名用)。越界返回 nil(首项 ⇧Tab / 末项 Tab
+    /// 不环绕,同 Finder)。须在提交改名**之前**调用——提交会触发重排,提交后顺序已变。
+    func neighborURL(of url: URL, offset: Int) -> URL? {
+        guard let idx = sortedItems.firstIndex(where: { $0.url == url }) else { return nil }
+        let next = idx + offset
+        guard sortedItems.indices.contains(next) else { return nil }
+        return sortedItems[next].url
+    }
 
     /// 选中项 URL 集合(多选;按当前排序顺序)。拷贝 / 拖出 / 废纸篓 / 右键作用于此。
     var selectionURLs: [URL] { selectedItems.map(\.url) }

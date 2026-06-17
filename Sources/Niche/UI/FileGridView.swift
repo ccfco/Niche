@@ -7,8 +7,6 @@ struct FileGridView: View {
     @EnvironmentObject private var motion: MotionPreferences
     let edge: EdgeMetrics
     var actions = PanelActions()
-    /// 当前 hover 的格子索引:驱动该格 zIndex 抬高,长名展开浮层不被相邻格遮住。
-    @State private var hoveredIndex: Int?
 
     var body: some View {
         GeometryReader { geo in
@@ -17,10 +15,10 @@ struct FileGridView: View {
                 ScrollView {
                     LazyVGrid(columns: gridItems(columns), spacing: edge.itemSpacing) {
                         ForEach(Array(model.sortedItems.enumerated()), id: \.element.id) { index, item in
-                            cell(index: index, item: item)
+                            cell(item: item)
                                 .id(index)
-                                // hover/光标项抬到上层:长名展开浮层向下溢出时不被相邻格遮住。
-                                .zIndex(cellZIndex(index))
+                                // 重命名格子抬到上层:多行改名浮层向下溢出时压住下方格子(Finder 同款)。
+                                .zIndex(model.renamingItemID == item.id ? 1 : 0)
                         }
                     }
                     .padding(edge.panelPadding)
@@ -59,11 +57,6 @@ struct FileGridView: View {
         ))
     }
 
-    /// hover 或键盘光标项抬到上层(其余 0):长名展开浮层向下溢出时压住相邻格。
-    private func cellZIndex(_ index: Int) -> Double {
-        (hoveredIndex == index || model.cursorIndex == index) ? 1 : 0
-    }
-
     private func columnCount(for width: CGFloat) -> Int {
         let usable = width - edge.panelPadding * 2
         let unit = edge.cellWidth + edge.itemSpacing
@@ -76,20 +69,20 @@ struct FileGridView: View {
 
     /// 目录格子自带 drop 目标(Finder 语义:拖到文件夹上 = 落进该文件夹,悬停高亮 +
     /// 同款角标);非目录格子不拦,拖入穿透到外层(落当前目录)。
-    @ViewBuilder private func cell(index: Int, item: FileItem) -> some View {
+    @ViewBuilder private func cell(item: FileItem) -> some View {
         if item.isDirectory {
-            baseCell(index: index, item)
+            baseCell(item)
                 .onDrop(of: [.fileURL], delegate: FileDropDelegate(
                     onDrop: { actions.onDropURLs($0, $1, item.url) },
                     targetDirectory: { item.url },
                     onTargeted: { model.setDropTarget(item.id, targeted: $0) }
                 ))
         } else {
-            baseCell(index: index, item)
+            baseCell(item)
         }
     }
 
-    private func baseCell(index: Int, _ item: FileItem) -> some View {
+    private func baseCell(_ item: FileItem) -> some View {
         FileCellView(
             item: item,
             isSelected: model.selectedIDs.contains(item.id),
@@ -101,7 +94,28 @@ struct FileGridView: View {
                 // 失败(空名/非法字符)保持编辑态(Codex review)。
                 if actions.onRename(item.url, newName) { model.endRename() }
             },
-            onRenameCancel: { model.endRename() },
+            // 仅当 renamingItemID 仍是本项才结束:Tab 跳邻项后旧框拆除触发的 onCancel 不误清新目标。
+            onRenameCancel: { if model.renamingItemID == item.url { model.endRename() } },
+            // 失焦提交(点面板内别处):Finder 失焦=保存。守卫仅本项在重命名时才动 —— 提交成功
+            // 落盘,失败(空名/非法)静默还原,总是结束。Enter/Esc/Tab 后的拆除回调因守卫失败 no-op。
+            onRenameEndEditing: { newName in
+                guard model.renamingItemID == item.url else { return }
+                _ = actions.onRename(item.url, newName)
+                model.endRename()
+            },
+            onRenameTab: { newName, offset in
+                // 提交前按当前序定位邻项(提交会重排);提交成功才前进,失败留在原地重试。
+                let neighbor = model.neighborURL(of: item.url, offset: offset)
+                if actions.onRename(item.url, newName) {
+                    model.endRename()
+                    if let neighbor {
+                        // 移动选中+光标到邻项:既匹配 Finder(Tab 同时移选中),又驱动 scrollTo 把
+                        // 邻项滚入视区,使其 cell 在 LazyVGrid 里挂载、改名框可夺焦(#2)。
+                        model.selectSingle(neighbor)
+                        model.beginRename(neighbor)
+                    }
+                }
+            },
             makeContextMenu: { anchor in
                 // 右键未选中的项 → 单选它;已在多选内 → 保留多选(菜单作用于整组)。
                 if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
@@ -113,10 +127,10 @@ struct FileGridView: View {
             onDragEnd: actions.onDragEnd,
             // 拖已选中项 → 拖整组多选;拖未选中项 → 仅该项(Finder 语义)。
             dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] },
-            isCurrent: model.cursorIndex == index,
-            onHoverChange: { hovering in
-                hoveredIndex = hovering ? index : (hoveredIndex == index ? nil : hoveredIndex)
-            }
+            // 慢速单击重命名:点中已是唯一选中项才触发(与 Finder 一致;多选/未选中不触发)。
+            isSoleSelection: { model.selectedIDs == [item.id] },
+            onBeginRename: { model.beginRename(item.url) },
+            armToken: { model.renameArmToken }
         )
     }
 

@@ -10,6 +10,9 @@ struct FileListView: View {
     /// 让 Table 成为第一响应者:PanelController 的 keyDown monitor 把列表方向键**放行**给响应链,
     /// 由原生 NSTableView 做 ∓1 导航 + 自动滚动到可见 + 回写选中 binding(#1)。
     @FocusState private var tableFocused: Bool
+    /// 慢速单击重命名的延迟任务(列表模式无法接管原生选中,只能借 @State + 延迟兜底,与图标模式
+    /// DragSourceNSView 的计时器同义)。双击的第二击会取消它,改走 activate。
+    @State private var pendingRename: DispatchWorkItem?
 
     var body: some View {
         // 显式 rows + TableRow.itemProvider:走 NSTableView 原生行拖拽 —— 拖已选中行 = 拖**整组
@@ -113,11 +116,33 @@ struct FileListView: View {
                 RenameTextField(
                     initialName: item.name,
                     onCommit: { if actions.onRename(item.url, $0) { model.endRename() } },
-                    onCancel: { model.endRename() }
+                    // 仅当 renamingItemID 仍是本项才结束:Tab 跳邻项后旧框拆除的 onCancel 不误清新目标。
+                    onCancel: { if model.renamingItemID == item.url { model.endRename() } },
+                    // 失焦提交(点面板内别处):Finder 失焦=保存;无效名静默还原,总是结束。
+                    onEndEditing: { newName in
+                        guard model.renamingItemID == item.url else { return }
+                        _ = actions.onRename(item.url, newName)
+                        model.endRename()
+                    },
+                    onTab: { newName, offset in
+                        let neighbor = model.neighborURL(of: item.url, offset: offset)
+                        if actions.onRename(item.url, newName) {
+                            model.endRename()
+                            if let neighbor {
+                                // 移动选中到邻项(匹配 Finder + 让原生 Table 把该行带进视区使改名框挂载/夺焦,#2)。
+                                model.selectSingle(neighbor)
+                                model.beginRename(neighbor)
+                            }
+                        }
+                    }
                 )
             } else {
                 // 列表用尾部省略(中间省略在窄列表里读着怪)+ 全名 tooltip(#17)。
+                // 慢速单击重命名只挂在文字上(Finder:点类型图标只选中,点文件名文字才改名);
+                // contentShape 让文字整块可命中。
                 Text(item.name).lineLimit(1).truncationMode(.tail).help(item.name)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(TapGesture(count: 1).onEnded { scheduleListRename(item) })
             }
             if model.downloadingIDs.contains(item.id) {
                 ProgressView().controlSize(.small)   // dataless 按需下载中(#13)
@@ -126,7 +151,8 @@ struct FileListView: View {
             }
         }
         .contentShape(Rectangle())
-        // 双击打开/下钻(Table 原生单击负责选中,叠加双击手势不冲突)。
+        // 双击打开/下钻(Table 原生单击负责选中,叠加双击手势不冲突;activate 内会取消挂起的重命名)。
+        // 慢速单击重命名不挂整行,只挂上面的 Text(Finder:点文件名文字才改名,点图标只选中)。
         .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
         // 拖出由 TableRow.itemProvider 承担(原生多选拖整组);拖拽 session 中 .mouseMoved 静默,
         // 面板不收;松手后在外才收(拖出即走)。
@@ -158,12 +184,36 @@ struct FileListView: View {
     }
 
     private func activate(_ item: FileItem) {
+        pendingRename?.cancel(); pendingRename = nil   // 双击打开 = 放弃慢速单击重命名(任意列双击都经此)
         if item.isDirectory {
             model.currentMirror?.enter(item.url)
             model.clearSelection()
         } else {
             actions.onOpen(item)
         }
+    }
+
+    /// 慢速单击重命名:仅当点中"已是唯一选中行"才触发(Finder 语义;首次点击选中、再点才重命名)。
+    /// 延迟一个双击间隔,期间来双击则被 count:2 取消,无双击且仍唯一选中才真正进重命名。
+    private func scheduleListRename(_ item: FileItem) {
+        // 双击的第二击 clickCount=2 直接拦掉(借系统 clickCount,与图标模式同源):否则双击已选中
+        // 文件时第二击的单击手势可能晚于 activate 重新排期 → 打开后又进重命名。
+        guard (NSApp.currentEvent?.clickCount ?? 1) == 1 else { return }
+        // 必须「点击前就已唯一选中本项」(快照),否则首次点击选中行会被误判成再次点击进重命名。
+        guard model.selectionAtMouseDown == [item.id],
+              model.selectedIDs == [item.id], model.renamingItemID == nil else { return }
+        pendingRename?.cancel()
+        let token = model.renameArmToken   // 捕获代次:面板收起会自增,触发时比对失效(防泄漏 .renaming 抑制)
+        let work = DispatchWorkItem {
+            pendingRename = nil
+            // 触发时二次确认仍是唯一选中本项(期间双击/切走 → 放弃),与图标模式的二次校验对称;
+            // 并比对代次——面板已收起则放弃,不在隐藏后置 renamingItemID(Codex review)。
+            if model.renameArmToken == token, model.selectedIDs == [item.id], model.renamingItemID == nil {
+                model.beginRename(item.url)
+            }
+        }
+        pendingRename = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
     }
 
     private func sizeLabel(_ item: FileItem) -> String {

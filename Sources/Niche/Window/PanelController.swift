@@ -25,6 +25,10 @@ final class PanelController {
     /// 取代旧的 SwiftUI 面板级 `.onKeyPress` —— 后者在「父视图聚焦 vs Table 抢焦点」两态行为不一致
     /// (列表 ↑↓ 跳行 #1、空格被 Table 吞 #2/#22)。monitor 与 SwiftUI 焦点无关,行为确定。
     private var keyMonitor: Any?
+    /// 重命名「点外部提交」权威:本地 leftMouseDown monitor(键盘 monitor 的鼠标镜像)。重命名进行
+    /// 中点输入框之外 → 先让输入框失焦(makeFirstResponder(nil) → 提交),事件继续走选中。与 keyMonitor
+    /// 同生命周期(面板可见即装,收回即卸)。只看 app 本地事件:点真正面板外由窗口 resignKey 自动提交。
+    private var renameClickMonitor: Any?
     /// type-ahead 键入跳选缓冲(键盘单一权威持有;吃掉可见字符,避免列表态原生 NSTableView
     /// 的 type-select 与之双权威打架)。
     private var typeAhead = TypeAheadBuffer()
@@ -52,6 +56,7 @@ final class PanelController {
     /// removeMonitor,不触碰 @MainActor 方法 —— 守 CLAUDE.md deinit 红线)。
     deinit {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        if let renameClickMonitor { NSEvent.removeMonitor(renameClickMonitor) }
         mouseMonitors.forEach { NSEvent.removeMonitor($0) }
     }
 
@@ -320,9 +325,37 @@ final class PanelController {
             guard let self else { return event }
             return self.handlePanelKey(event)
         }
+        renameClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self else { return event }
+            self.commitRenameIfClickedOutsideField(event)
+            // 在事件派发(Table 原生选中)前快照旧选中态,供列表慢速单击重命名判定(见 PanelModel)。
+            self.model.selectionAtMouseDown = self.model.selectedIDs
+            return event   // 不吞事件:提交后点击继续走,该选中谁选中谁(点另一项=提交+选中它)
+        }
+    }
+
+    /// 重命名进行中、点击落在输入框之外 → 让输入框失焦(触发 RenameTextField 的 didEndEditing 提交)。
+    /// 与 keyMonitor「重命名态放行所有键给字段编辑器」对称:鼠标侧的「点外部=提交」单一权威。
+    private func commitRenameIfClickedOutsideField(_ event: NSEvent) {
+        guard let panel, panel.isVisible,
+              let responder = panel.firstResponder as? NSView, responder is NSText else { return }
+        // 点击落在本 app 其它窗口(如自管设置窗)→ 必在改名框外:其坐标系与 panel 不同,不能拿
+        // panel 的 frame 比(会误判),直接提交(Codex review)。
+        guard event.window === panel else { panel.makeFirstResponder(nil); return }
+        // field editor(NSText)是 NSTextField 内部的私有视图,其 bounds/坐标偶发错位 —— 旧实现
+        // 用 editor.superview.bounds 判定,会把"框外点击"误判成"框内"→ 不失焦 → 重命名卡住、
+        // 且绑在 renamingItemID 上的 .renaming auto-hide 抑制永不解除(面板永久不收)。改为顺
+        // superview 链上溯到真正的 NSTextField 控件,用它在窗口坐标系的 frame 判定,几何稳定可靠。
+        var control: NSView? = responder
+        while let cur = control, !(cur is NSTextField) { control = cur.superview }
+        guard let field = control else { panel.makeFirstResponder(nil); return }
+        let frameInWindow = field.convert(field.bounds, to: nil)
+        guard !frameInWindow.contains(event.locationInWindow) else { return }
+        panel.makeFirstResponder(nil)
     }
 
     private func stopKeyMonitor() {
+        if let renameClickMonitor { NSEvent.removeMonitor(renameClickMonitor); self.renameClickMonitor = nil }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
     }
 

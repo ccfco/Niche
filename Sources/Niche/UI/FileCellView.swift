@@ -17,6 +17,10 @@ struct FileCellView: View {
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
+    /// 失焦提交(点面板内别处)。透传给 RenameTextField。
+    var onRenameEndEditing: (String) -> Void = { _ in }
+    /// Tab / ⇧Tab 提交并跳邻项(透传给 RenameTextField)。
+    var onRenameTab: (String, Int) -> Void = { _, _ in }
     var makeContextMenu: (NSView) -> NSMenu? = { _ in nil }
     /// 单击选中(带修饰键:⌘ 离散 / ⇧ 区间 / 普通单选)。
     var onClick: (NSEvent.ModifierFlags) -> Void = { _ in }
@@ -31,13 +35,17 @@ struct FileCellView: View {
     var isSoleSelection: () -> Bool = { false }
     /// 慢速单击触发就地重命名。
     var onBeginRename: () -> Void = {}
-    /// 键盘光标项:无 hover 时也展开长名浮层,纯键盘浏览也能读全名。
-    var isCurrent: Bool = false
-    /// hover 变化上报宿主网格:让 hover 的格子 zIndex 抬高,长名浮层向下溢出不被相邻格遮住。
-    var onHoverChange: (Bool) -> Void = { _ in }
+    /// 待触发重命名代次:透传给 DragSourceView,面板收起后作废在途延迟重命名(防 .renaming 抑制泄漏)。
+    var armToken: () -> Int = { 0 }
 
     @State private var thumbnail: NSImage?
     @State private var isHovered = false
+    /// 文件名文字在本格坐标系内的 frame —— 慢速单击重命名只在命中此区域才触发(Finder:点图标
+    /// 图片只选中,点文字才改名)。零值(未测量)= 不触发,安全默认。
+    @State private var nameLabelRect: CGRect = .zero
+
+    /// 本格私有坐标空间名:量 label frame 与 DragSourceView overlay 共用同一原点(格子左上)。
+    private static let cellSpace = "fileCell"
 
     var body: some View {
         let cell = VStack(spacing: edge.innerSpacing) {
@@ -46,7 +54,12 @@ struct FileCellView: View {
                 .task(id: item.id) {
                     thumbnail = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: 96)
                 }
-            label
+            nameArea
+                // 量文字标签 frame(本格坐标系)→ 慢速单击重命名命中判定。
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: NameRectKey.self,
+                                           value: geo.frame(in: .named(Self.cellSpace)))
+                })
         }
         .padding(edge.innerSpacing)
         .background(
@@ -61,10 +74,7 @@ struct FileCellView: View {
             }
         }
         // hover 高亮:鼠标移入给一层比选中态更淡的底,提示可点(选中态优先)。
-        .onHover { hovering in
-            isHovered = hovering
-            onHoverChange(hovering)
-        }
+        .onHover { hovering in isHovered = hovering }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
             if isDownloading {
@@ -81,8 +91,11 @@ struct FileCellView: View {
         .overlay { if !isRenaming {
             DragSourceView(url: item.url, onClick: onClick, onActivate: onActivate,
                            onDragBegin: onDragBegin, onDragEnd: onDragEnd, dragURLs: dragURLs,
-                           isSoleSelection: isSoleSelection, onBeginRename: onBeginRename)
+                           isSoleSelection: isSoleSelection, onBeginRename: onBeginRename,
+                           renameHitRect: { nameLabelRect }, armToken: armToken)
         } }
+        .coordinateSpace(name: Self.cellSpace)
+        .onPreferenceChange(NameRectKey.self) { nameLabelRect = $0 }
 
         // 无障碍:展示态把整格聚合为单一元素(VoiceOver 读"文件名,文件夹/文件,已选中");
         // 重命名态保留 children 可达,否则输入框对 VoiceOver 不可编辑。
@@ -114,17 +127,34 @@ struct FileCellView: View {
         return Color.clear
     }
 
-    @ViewBuilder private var label: some View {
-        if isRenaming {
-            // Finder 语义:聚焦即选中文件名主干(不含扩展名),Enter 提交 / Esc 取消(见 RenameTextField)。
-            RenameTextField(initialName: item.name, onCommit: onRenameCommit, onCancel: onRenameCancel)
-                .frame(maxWidth: .infinity)
-        } else {
-            // 长名:静止两行中间截断(Finder 图标视图同款);hover/光标项浮起展开全显(见 FileNameLabel)。
-            // .help 兜底全名 tooltip,与列表模式(#17)统一 —— 触控板/无 hover 路径也能读全名。
-            FileNameLabel(name: item.name, expanded: isHovered || isCurrent, edge: edge)
-                .help(item.name)
-        }
+    /// 名称区:静态名(2 行中间截断,占位稳定)。重命名时静态名隐藏但保留占位,改名框走 overlay
+    /// **不占位**浮在其上、向下溢出压住下方格子(由宿主网格抬该格 zIndex)→ 格子高度不变,不挤压
+    /// 网格布局(Finder 图标视图重命名同款:框浮于上方,不顶开其它图标)。
+    @ViewBuilder private var nameArea: some View {
+        staticLabel
+            .opacity(isRenaming ? 0 : 1)
+            .overlay(alignment: .top) {
+                if isRenaming {
+                    // Finder 语义:聚焦即选中文件名主干,Enter 提交 / Esc 取消(见 RenameTextField)。
+                    // multiline:多行换行,限高(~5 行)不无限撑;borderless 圆角框。
+                    RenameTextField(initialName: item.name, onCommit: onRenameCommit,
+                                    onCancel: onRenameCancel, onEndEditing: onRenameEndEditing,
+                                    onTab: onRenameTab, multiline: true,
+                                    cornerRadius: edge.itemCornerRadius)
+                }
+            }
+    }
+
+    /// 静态文件名:2 行中间截断(Finder 图标视图同款);全名靠系统 hover tooltip(.help)与进重命名
+    /// 时的多行框查看——不在格子里自造展开浮层(那既不原生、又挤布局)。
+    private var staticLabel: some View {
+        Text(item.name)
+            .font(.caption)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .frame(maxWidth: .infinity)
+            .help(item.name)
     }
 
     @ViewBuilder private var artwork: some View {
@@ -141,88 +171,11 @@ struct FileCellView: View {
     }
 }
 
-/// 图标模式文件名标签:静止两行中间截断(占位高度稳定,网格对齐不抖);hover 或光标项时
-/// 浮起展开为完整多行 + 玻璃底(Finder 图标视图同款长名呈现 —— 原生正确性 > 功能数量)。
-///
-/// **只在真被截断时浮起**:隐藏的不限行副本测完整高度,大于受限两行态才 `isTruncated`,短名
-/// 不套多余玻璃底。浮层走 `overlay` 不占位(不撑高格子,网格不错位);向下溢出由宿主网格的
-/// zIndex 抬高压住相邻格(见 FileGridView)。玻璃材质/圆角复用既有体系,不引新魔法数(chrome 纪律)。
-private struct FileNameLabel: View {
-    let name: String
-    let expanded: Bool
-    let edge: EdgeMetrics
-    @State private var isTruncated = false
-    @State private var clipHeight: CGFloat = 0
-    @State private var fullHeight: CGFloat = 0
-
-    var body: some View {
-        baseText
-            .lineLimit(2)
-            .truncationMode(.middle)
-            // 截断检测只在浮起态(hover/光标)挂载 —— 非展开 cell 零额外测量开销(Codex review)。
-            .background { if expanded { truncationMeasurement } }
-            .overlay(alignment: .top) {
-                if expanded && isTruncated { expandedOverlay }
-            }
-            .animation(.easeOut(duration: 0.12), value: expanded)
+/// 文件名文字 frame(本格坐标系)—— 慢速单击重命名命中区。多 cell 各自独立,取最后(唯一)值。
+private struct NameRectKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
     }
-
-    private var baseText: some View {
-        Text(name)
-            .font(.caption)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-    }
-
-    /// 展开浮层:不限行完整名 + 厚玻璃底(盖住下方格子保证可读),圆角同格子。
-    private var expandedOverlay: some View {
-        Text(name)
-            .font(.caption)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, edge.innerSpacing)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
-                    .fill(.thickMaterial)
-            )
-    }
-
-    /// 截断测量层(隐藏,只在展开态挂载):同宽渲染「受限两行」与「不限行完整」两份,
-    /// 高度差即被截断。preference 回调也收在此 —— 非展开 cell 不挂载、不刷新。
-    private var truncationMeasurement: some View {
-        ZStack {
-            baseText
-                .lineLimit(2)
-                .background(GeometryReader { clip in
-                    Color.clear.preference(key: ClipNameHeightKey.self, value: clip.size.height)
-                })
-            baseText
-                .fixedSize(horizontal: false, vertical: true)
-                .background(GeometryReader { full in
-                    Color.clear.preference(key: FullNameHeightKey.self, value: full.size.height)
-                })
-        }
-        .hidden()
-        .onPreferenceChange(ClipNameHeightKey.self) { clipHeight = $0; recomputeTruncation() }
-        .onPreferenceChange(FullNameHeightKey.self) { fullHeight = $0; recomputeTruncation() }
-    }
-
-    private func recomputeTruncation() {
-        let truncated = fullHeight > clipHeight + 1
-        if truncated != isTruncated { isTruncated = truncated }
-    }
-}
-
-/// 受限两行态高度(截断判定基准)。
-private struct ClipNameHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-/// 不限行完整高度(> 受限态即被截断)。
-private struct FullNameHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
