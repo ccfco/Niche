@@ -31,14 +31,32 @@ final class SettingsWindowController {
 
     private func ensureWindow() -> NSWindow {
         if let window { return window }
-        let host = NSHostingController(
+        let size = NSSize(width: 600, height: 440)
+
+        // 内容宿主用面板同款 `NicheGlassHostingView`(透明、safe area 归零):内容透明坐窗面玻璃上,
+        // 不再叠任何背景 —— 这正是设置页"像面板"的根:整窗一层玻璃,内容只画选中/hover 填充。
+        let host = NicheGlassHostingView(
             rootView: SettingsView(model: model, triggerPrefs: triggerPrefs, onAddFolder: onAddFolder)
                 .environmentObject(environment)
         )
-        let w = NSWindow(contentViewController: host)
+
+        // 窗面 = macOS 26 原生整窗 Liquid Glass(NSGlassEffectView),与面板(PanelController)同源。
+        // 面板因呼出逐帧 resize 会触发玻璃液态 morph,才不把玻璃直接当 contentView;设置页固定尺寸、
+        // 无生长动画,直接当 contentView 即可,省掉 container+snap 中介。
+        let glass = NSGlassEffectView()
+        glass.contentView = host
+
+        let w = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
+        w.contentView = glass
         w.title = "Niche 设置"
-        w.styleMask = [.titled, .closable, .miniaturizable]   // 设置页固定尺寸,不可 resize
-        w.isReleasedWhenClosed = false   // 关闭只是 orderOut,实例复用
+        w.titleVisibility = .hidden            // 隐藏标题文字,红绿灯仍保留、浮在玻璃左上
+        w.titlebarAppearsTransparent = true    // 内容延伸进 titlebar,整窗才是一块连续玻璃
+        w.isMovableByWindowBackground = true   // 无可见标题栏文字,允许直接拖玻璃移动窗口
+        w.isReleasedWhenClosed = false         // 关闭只是 orderOut,实例复用
         w.center()
         window = w
         return w

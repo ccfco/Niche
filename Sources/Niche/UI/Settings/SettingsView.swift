@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// 设置页(spec §M5):绑定文件夹管理(增删/排序)、触发与快捷键、隐藏文件默认。
-/// 宿主是自管 NSWindow(SettingsWindowController),注入面板同一个 PanelModel ——
-/// showHidden 等偏好只有一个真相源,设置页改了面板立即生效,面板切了设置页同步显示。
+/// 设置页(spec §M5):绑定文件夹管理(增删/排序)、触发与快捷键、隐藏文件默认、关于/更新。
+///
+/// 结构 = 左 sidebar(书签语义)+ 右内容区,整窗坐在窗面 Liquid Glass 上(SettingsWindowController
+/// 的 NSGlassEffectView),内容透明、不再叠系统 Form 灰卡 —— 与面板同一套视觉语言,不再"像两个 App"。
+/// 宿主注入面板同一个 PanelModel/TriggerPreferences:showHidden、热区等偏好只有一个真相源。
 struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @ObservedObject var model: PanelModel
@@ -12,179 +14,82 @@ struct SettingsView: View {
     /// 添加文件夹走 NicheController 统一路径(与面板「+」一致:自动选中新 tab)。
     var onAddFolder: () -> Void = {}
 
+    @State private var selection: SettingsSection = .folders
+
     var body: some View {
-        TabView {
-            FoldersSettings(onAddFolder: onAddFolder)
-                .tabItem { Label("文件夹", systemImage: "folder") }
-            GeneralSettings(model: model, triggerPrefs: triggerPrefs)
-                .tabItem { Label("通用", systemImage: "gearshape") }
-            AboutSettings()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+        HStack(spacing: 0) {
+            SettingsSidebar(selection: $selection)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 480, height: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
-private struct FoldersSettings: View {
-    @EnvironmentObject private var environment: AppEnvironment
-    var onAddFolder: () -> Void = {}
-    /// 待确认移除的绑定(误点 minus 无 undo,弹确认而非立即删)。
-    @State private var pendingRemoval: FolderBinding?
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text("绑定文件夹").font(.headline)
-            Text("从刘海滑出后,每个绑定文件夹是一个 tab。拖动可调整顺序。")
-                .font(.caption).foregroundStyle(.secondary)
-
-            List {
-                ForEach(environment.bindingStore.bindings) { binding in
-                    HStack {
-                        Image(systemName: "folder")
-                        VStack(alignment: .leading) {
-                            Text(binding.displayName)
-                            Text(binding.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        Button(role: .destructive) {
-                            pendingRemoval = binding
-                        } label: { Image(systemName: "minus.circle") }
-                            .buttonStyle(.borderless)
-                            .help("移除此文件夹")
-                            .accessibilityLabel("移除「\(binding.displayName)」")
-                    }
-                }
-                .onMove { source, dest in
-                    environment.bindingStore.move(from: source, to: dest)
-                }
-            }
-            .frame(minHeight: 180)
-
-            Button { onAddFolder() } label: { Label("添加文件夹…", systemImage: "plus") }
-        }
-        .padding()
-        .confirmationDialog(
-            "移除「\(pendingRemoval?.displayName ?? "")」?",
-            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
-        ) {
-            Button("移除", role: .destructive) {
-                if let binding = pendingRemoval { environment.bindingStore.remove(id: binding.id) }
-                pendingRemoval = nil
-            }
-        } message: {
-            Text("只解除绑定,不会动磁盘上的文件夹。")
+    @ViewBuilder private var content: some View {
+        switch selection {
+        case .folders: FoldersSettings(onAddFolder: onAddFolder)
+        case .trigger: TriggerSettings(triggerPrefs: triggerPrefs)
+        case .general: GeneralSettings(model: model)
+        case .about: AboutSettings()
         }
     }
 }
 
-private struct AboutSettings: View {
-    @ObservedObject private var checker = UpdateChecker.shared
+/// 设置窗特有的 chrome 常量(不属于通用 EdgeMetrics 单旋钮:这是窗口/titlebar 维度,
+/// 不随面板间距旋钮缩放)。收口一处,sidebar 与内容区共用,避免红绿灯让位魔法数两处漂移。
+enum SettingsChrome {
+    /// 红绿灯让位:窗口 `.fullSizeContentView` + 透明 titlebar 后内容顶到窗顶,须留标准
+    /// titlebar 高度,否则品牌区/标题被红绿灯压住。标准 macOS titlebar 高度稳定为 28pt。
+    static let titlebarInset: CGFloat = 28
+}
+
+/// 内容区外壳:统一顶部红绿灯让位 + 区标题 + 内边距,各 section 只填内容。
+/// 标题左对齐大字(像 macOS 系统设置每页顶部),与 sidebar 同源单旋钮派生间距。
+struct SettingsPane<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    private let edge = EdgeMetrics.standard
 
     var body: some View {
-        Form {
-            Section {
-                LabeledContent("当前版本") {
-                    Text("Niche \(checker.currentVersion)")
-                        .foregroundStyle(.secondary)
-                }
-                Toggle("自动检查更新", isOn: Binding(
-                    get: { checker.autoCheckEnabled },
-                    set: { checker.setAutoCheckEnabled($0) }
-                ))
-            }
-            Section("更新") {
-                LabeledContent("状态") {
-                    updateStatusView
-                }
-                if let release = checker.latestRelease {
-                    HStack(spacing: 8) {
-                        Button("下载最新版…") { checker.downloadLatest() }
-                        Button("查看 Release") { checker.openReleasePage() }
-                            .buttonStyle(.borderless)
-                    }
-                    .padding(.top, 2)
-                    Text("Niche \(release.displayVersion) 已可用。")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Button("立即检查") { checker.checkNow() }
-                        .disabled(checker.isChecking)
-                }
-            }
+        VStack(alignment: .leading, spacing: edge.sectionSpacing) {
+            Text(title)
+                .font(.system(size: 18, weight: .semibold))
+                .padding(.top, SettingsChrome.titlebarInset)
+            content
+            Spacer(minLength: 0)
         }
-        .formStyle(.grouped)
-        .padding()
+        .padding(edge.panelPadding * 1.5)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
 
-    @ViewBuilder private var updateStatusView: some View {
-        if checker.isChecking {
-            HStack(spacing: 4) {
-                ProgressView().controlSize(.small)
-                Text("正在检查…").foregroundStyle(.secondary)
+/// 设置项分组小标题(替代 Form 的 Section header):内容透明坐玻璃上,只用文字层级分组,
+/// 不画灰卡背景(禁卡片套卡片)。
+struct SettingsGroup<Content: View>: View {
+    var header: String?
+    @ViewBuilder var content: Content
+    private let edge = EdgeMetrics.standard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: edge.itemSpacing) {
+            if let header {
+                Text(header)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
-        } else if checker.latestRelease != nil {
-            Label("发现新版本", systemImage: "arrow.down.circle.fill")
-                .foregroundStyle(.green)
-        } else if checker.didLastCheckFail {
-            Label("检查失败", systemImage: "exclamationmark.circle")
-                .foregroundStyle(.secondary)
-        } else if let last = checker.lastCheckedAt {
-            Text("已是最新（\(last.formatted(.relative(presentation: .named)))）")
-                .foregroundStyle(.secondary)
-        } else {
-            Text("尚未检查").foregroundStyle(.secondary)
+            content
         }
     }
 }
 
-private struct GeneralSettings: View {
-    /// 直接绑面板的 PanelModel:showHidden 单真相源(模型持久化到 UserDefaults),
-    /// 不再用 @AppStorage 另起一份 —— 那会与面板 eye 按钮互相看不见(双真相源撕裂)。
-    @ObservedObject var model: PanelModel
-    @ObservedObject var triggerPrefs: TriggerPreferences
-    /// SMAppService 状态是系统侧真相,本地只留 UI 镜像;失败弹提示并回读真实状态(不静默)。
-    @State private var launchAtLogin = LaunchAtLogin.isEnabled
-    @State private var launchError: String?
-
+/// 说明性脚注(权限提示等):统一 caption 二级灰,各 section 复用。
+struct SettingsFootnote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
     var body: some View {
-        Form {
-            Section {
-                // 与面板 eye 按钮同一真相源,改了立即生效 —— 不是"默认值",别写"默认"误导。
-                Toggle("显示隐藏文件", isOn: $model.showHidden)
-                Toggle("开机自启", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        guard enabled != LaunchAtLogin.isEnabled else { return }
-                        do { try LaunchAtLogin.set(enabled) }
-                        catch {
-                            launchError = error.localizedDescription
-                            launchAtLogin = LaunchAtLogin.isEnabled   // 回读系统真相
-                        }
-                    }
-            }
-            Section("触发") {
-                Toggle("刘海热区触发", isOn: $triggerPrefs.hotZoneEnabled)
-                Picker("触发灵敏度", selection: $triggerPrefs.hoverDelay) {
-                    ForEach(TriggerPreferences.hoverDelayPresets, id: \.value) { preset in
-                        Text(preset.label).tag(preset.value)
-                    }
-                }
-                .disabled(!triggerPrefs.hotZoneEnabled)
-                LabeledContent("呼出快捷键") {
-                    HotkeyRecorderView(hotkey: $triggerPrefs.hotkey)
-                }
-                Text("关闭热区后仍可用菜单栏图标或快捷键呼出。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Text("提示:首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权请求;允许后镜像才会实时同步。")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .formStyle(.grouped)
-        .padding()
-        .alert("无法更改开机自启", isPresented: Binding(
-            get: { launchError != nil }, set: { if !$0 { launchError = nil } }
-        )) {
-            Button("好") { launchError = nil }
-        } message: {
-            Text(launchError ?? "")
-        }
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
