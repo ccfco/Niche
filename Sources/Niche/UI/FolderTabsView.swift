@@ -21,7 +21,8 @@ struct FolderTabsView: View {
     /// 拖动重排提交:from = 正式 tab 原索引,to = `Array.move(toOffset:)` 语义的落点偏移。
     var onMoveTab: (_ from: Int, _ to: Int) -> Void = { _, _ in }
     /// 拖文件夹进 tab 栏 → 固定为常驻绑定(内容区子文件夹 / 外部 Finder 同走此路;非文件夹拒绝)。
-    var onDropFolders: (_ urls: [URL]) -> Void = { _ in }
+    /// index = 插入光标落点(正式 tab 序);nil = 几何未就绪,宿主末尾追加兜底。
+    var onDropFolders: (_ urls: [URL], _ index: Int?) -> Void = { _, _ in }
 
     /// 「+」菜单锚点(弹在按钮下方,toolbar 菜单惯例)。
     private let addAnchor = MenuAnchorBox()
@@ -35,6 +36,12 @@ struct FolderTabsView: View {
     @State private var dragTarget: Int?
     /// 各正式 tab 的静息 frame(bar 坐标系);`.offset` 不改它,故拖动中稳定。
     @State private var tabFrames: [FolderBinding.ID: CGRect] = [:]
+    /// 外部拖文件夹悬停 tab 栏:落点 index(正式 tab 序,0...count);nil = 无拖入 → 此 index 及其后的
+    /// 正式 tab 整体右让一个空槽示意将插入到此(见 dropShift),像内部排序一样"挤出位置"。
+    @State private var dropInsertIndex: Int?
+    /// 拖入是否进行中的引用型闸:drop/exit 即置 false。SwiftUI 在 drop 后偶发再补 dropUpdated 会重新
+    /// 点亮空槽(竞态),闸关后一律忽略 —— 引用类型保证 delegate 闭包读到的是实时值(@State 值快照赢不了 race)。
+    @State private var dropGate = DropGate()
 
     private let coordSpace = "nicheTabBar"
     private let reorderAnim = Animation.spring(response: 0.28, dampingFraction: 0.82)
@@ -55,37 +62,27 @@ struct FolderTabsView: View {
                     }
                 }
                 addButton
-                if folderDropActive { pinDropHint }
             }
             .padding(.horizontal, edge.panelPadding)
             .padding(.vertical, edge.innerSpacing)
             .coordinateSpace(name: coordSpace)
             .onPreferenceChange(TabFramePreference.self) { tabFrames = $0 }
-            // 拖文件夹进 tab 栏 → 固定为常驻绑定。只接文件夹(非文件夹 forbidden);宿主去重 + 批量 add。
+            // 拖文件夹进 tab 栏 → 定位固定为常驻绑定。只接文件夹(非文件夹 forbidden);落点 index 处
+            // 及其后的 tab 整体让位腾出空槽示意插入(见 dropShift);宿主去重 + 按 index 插入。
             .onDrop(of: [.fileURL], delegate: FolderTabDropDelegate(
                 onDropFolders: onDropFolders,
-                onTargeted: { active in
-                    withAnimation(.easeOut(duration: 0.12)) { folderDropActive = active }
+                insertionIndex: { point in computeInsertIndex(at: point) },
+                setActive: { active in
+                    dropGate.active = active
+                    if !active { withAnimation(reorderAnim) { dropInsertIndex = nil } }
+                },
+                updateIndex: { point in
+                    guard dropGate.active else { return }   // 闸关(drop 后的残余 dropUpdated)一律忽略
+                    let idx = computeInsertIndex(at: point)
+                    if idx != dropInsertIndex { withAnimation(reorderAnim) { dropInsertIndex = idx } }
                 }
             ))
         }
-    }
-
-    /// 拖文件夹悬停时的落点提示(虚框 chip,接在「+」后):提示松手即固定为常驻 tab。
-    private var pinDropHint: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "pin")
-            Text("固定到这里")
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, edge.innerSpacing)
-        .padding(.vertical, edge.innerSpacing * 0.5)
-        .overlay(
-            RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
-                .strokeBorder(.secondary, style: StrokeStyle(lineWidth: 1, dash: [4]))
-        )
-        .transition(.opacity)
     }
 
     private func tab(index: Int, mirror: DirectoryMirror) -> some View {
@@ -125,7 +122,7 @@ struct FolderTabsView: View {
         // 抬起跟手 + 让位:offset/scale 放在 overlay 之外,使接管层与可见 tab 一起移动。
         .scaleEffect(isDragging ? 1.04 : 1)
         .shadow(color: .black.opacity(isDragging ? 0.18 : 0), radius: isDragging ? 6 : 0, y: isDragging ? 2 : 0)
-        .offset(x: reorderOffset(id: id))
+        .offset(x: reorderOffset(id: id) + dropShift(id: id))
         .zIndex(isDragging ? 1 : 0)
         // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
         .accessibilityLabel(title)
@@ -175,6 +172,39 @@ struct FolderTabsView: View {
         }
     }
 
+    // MARK: 拖文件夹定位插入几何
+
+    /// 鼠标 x 落点 → 正式 tab 序的插入 index(0...count):光标左边有几个 tab 中点即第几位。
+    /// frames 未就绪 → 返回 count(末尾),宿主据 nil/越界兜底。坐标系与 DropInfo.location 同 coordSpace。
+    private func computeInsertIndex(at point: CGPoint) -> Int? {
+        let order = normalOrder
+        guard !order.isEmpty else { return 0 }
+        let mids = order.compactMap { tabFrames[$0]?.midX }
+        guard mids.count == order.count else { return order.count }
+        return mids.filter { $0 < point.x }.count
+    }
+
+    /// 空槽宽度:腾出"一个 tab"的位置示意(平均 tab 宽 + 间距,够明显又不突兀)。frames 未就绪给兜底。
+    private var dropSlotWidth: CGFloat {
+        let widths = normalOrder.compactMap { tabFrames[$0]?.width }
+        guard !widths.isEmpty else { return 64 }
+        return widths.reduce(0, +) / CGFloat(widths.count) + edge.innerSpacing
+    }
+
+    /// 拖文件夹悬停时,落点 index 及其后的正式 tab 整体右让一个空槽宽 —— 像内部排序一样"挤出位置",
+    /// 直接展示将插入到此(比插入线更自然)。无拖入(dropInsertIndex == nil)时为 0。
+    private func dropShift(id: FolderBinding.ID) -> CGFloat {
+        guard let insert = dropInsertIndex,
+              let idx = normalOrder.firstIndex(of: id) else { return 0 }
+        return idx >= insert ? dropSlotWidth : 0
+    }
+
+    /// 拖入期间「+」始终右让一个空槽宽:无论中间还是末尾插入,落点之后的正式 tab(含最后一个)
+    /// 都右移了一个空槽,「+」须同步右让,否则尾部 tab 会戳进「+」重叠(`.offset` 不改布局占位)。
+    private var addButtonDropShift: CGFloat {
+        dropInsertIndex != nil ? dropSlotWidth : 0
+    }
+
     /// 临时 tab(前往根外目录):前往图标点出身份,内联 📌 钉住(转正式绑定)与 ✕ 关闭。
     /// 不用 .contextMenu 挂动作:SwiftUI 菜单不接 AutoHideCoordinator 抑制,菜单开着面板
     /// 可能被收走(文件右键走 RightClickCatcher+NSMenu 正是为此)。
@@ -209,6 +239,7 @@ struct FolderTabsView: View {
         }
         .buttonStyle(NicheFooterGlassButtonStyle(compact: true))   // 与视图切换/底栏同一玻璃语言
         .background(MenuAnchor(box: addAnchor))
+        .offset(x: addButtonDropShift)   // 末尾插入时右让,空槽落在最后一个 tab 之后
         .help("添加文件夹或前往路径")
         .accessibilityLabel("添加文件夹或前往路径")
     }
@@ -291,54 +322,59 @@ final class TabReorderNSView: NSView {
     }
 }
 
-/// tab 栏外来拖入:只接文件夹 → 固定为常驻绑定(添加书签语义,`.copy` 角标);纯文件 `.forbidden`
-/// (守 CLAUDE.md「不做暂存盘」定位 —— tab 是书签不是落盘区)。是否含文件夹同步读拖拽剪贴板判定
-/// (`dropUpdated` 高频,异步 `loadObject` 当场拿不到;沿用 FileGridView DropPreflightCache 同款思路)。
-/// 文件夹过滤 + 去重已绑定路径交宿主(NicheController.dropFolders);此处只收集 URL 上报。
+/// tab 栏外来拖入:只接文件夹 → 固定为常驻绑定(添加书签语义,`.copy` 角标);非文件夹 `.forbidden`
+/// (守 CLAUDE.md「不做暂存盘」定位 —— tab 是书签不是落盘区)。
+/// 关键:文件夹判定与 URL 收集都走「`.drag` 剪贴板 + FileManager 命中真实文件系统」——
+/// - 不用 `resourceValues(.isDirectoryKey)`:跨进程(Finder)拖入取不到 → 误判非文件夹 → 无让位。
+/// - 不用 `loadObject(ofClass: URL.self)`:对文件夹拖入回 path 为空的 URL → 固定成空白「未命名」。
+///   剪贴板里是 Finder / 内部拖拽源写入的真实 URL,path 完整、同步可读(无需异步 loadObject)。
+/// 去重已绑定路径交宿主(NicheController.dropFolders)。
 struct FolderTabDropDelegate: DropDelegate {
-    let onDropFolders: ([URL]) -> Void
-    var onTargeted: (Bool) -> Void = { _ in }
+    let onDropFolders: ([URL], Int?) -> Void
+    /// 鼠标落点 → 正式 tab 序的插入 index(由 View 提供,捕获当前 tabFrames)。
+    var insertionIndex: (CGPoint) -> Int? = { _ in nil }
+    /// 拖入进/出闸:true=进入(开始接受落点更新),false=移出/落地(收空槽 + 关闸)。
+    var setActive: (Bool) -> Void = { _ in }
+    /// 落点更新(含文件夹时跟随鼠标刷新空槽位置;闸关时 View 侧忽略,根治 drop 后残余更新点亮空槽)。
+    var updateIndex: (CGPoint) -> Void = { _ in }
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.fileURL])
     }
 
-    func dropEntered(info: DropInfo) { onTargeted(true) }
-    func dropExited(info: DropInfo) { onTargeted(false) }
+    func dropEntered(info: DropInfo) { setActive(true) }
+    func dropExited(info: DropInfo) { setActive(false) }
 
-    /// 含文件夹 → copy(添加书签);纯文件 → forbidden(不做暂存盘)。
+    /// 含文件夹 → copy(添加书签)+ 空槽跟随落点;否则 forbidden(不做暂存盘)+ 关闸收槽。
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: pasteboardHasFolder() ? .copy : .forbidden)
+        let hasFolder = !folderURLs().isEmpty
+        if hasFolder { updateIndex(info.location) } else { setActive(false) }
+        return DropProposal(operation: hasFolder ? .copy : .forbidden)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        onTargeted(false)
-        let providers = info.itemProviders(for: [.fileURL])
-        guard !providers.isEmpty else { return false }
-
-        // loadObject 回调在任意队列;串行队列保护汇总数组(沿用 FileDropDelegate 同款)。
-        let lock = DispatchQueue(label: "com.ccfco.Niche.tabdrop")
-        var collected: [URL] = []
-        let group = DispatchGroup()
-        for provider in providers {
-            group.enter()
-            _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                if let url { lock.sync { collected.append(url) } }
-                group.leave()
-            }
-        }
-        group.notify(queue: .main) {
-            let urls = lock.sync { collected }
-            guard !urls.isEmpty else { return }
-            onDropFolders(urls)
-        }
+        let index = insertionIndex(info.location)
+        setActive(false)               // 先关闸:drop 后残余 dropUpdated 不再点亮空槽(根治空白卡住)
+        let urls = folderURLs()
+        guard !urls.isEmpty else { return false }
+        onDropFolders(urls, index)
         return true
     }
 
-    /// 同步读拖拽剪贴板,判断是否含文件夹(决定 copy/forbidden 角标)。
-    private func pasteboardHasFolder() -> Bool {
+    /// 从拖拽专用剪贴板**同步**取真实 file URL,过滤为「存在的目录」(同步可读,无需异步 loadObject)。
+    private func folderURLs() -> [URL] {
         let pb = NSPasteboard(name: .drag)
-        let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []
-        return urls.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        let urls = pb.readObjects(forClasses: [NSURL.self],
+                                  options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.filter { url in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+        }
     }
+}
+
+/// 拖入进行中的引用型闸(见 FolderTabsView.dropGate)。引用类型保证 delegate 闭包读到实时值,
+/// drop 后残余 dropUpdated 的竞态从构造上消除(值类型 @State 快照赢不了这场 race)。
+final class DropGate {
+    var active = false
 }

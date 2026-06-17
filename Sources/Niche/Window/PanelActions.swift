@@ -56,6 +56,9 @@ struct PanelActions {
     var onPinTemporary: () -> Void = {}
     /// 拖动重排正式 tab:from = 原索引,to = `Array.move(toOffset:)` 语义落点。宿主走 BindingStore.move 持久化。
     var onMoveTab: (_ from: Int, _ to: Int) -> Void = { _, _ in }
+    /// 拖文件夹进 tab 栏 → 固定为常驻绑定(只接文件夹,宿主去重已绑定路径;内容区子文件夹 / 外部 Finder 同路)。
+    /// index = 插入光标算出的落点(正式 tab 序);nil = 几何未就绪,末尾追加兜底。
+    var onDropFolders: (_ urls: [URL], _ index: Int?) -> Void = { _, _ in }
     /// 拖出(面板作 drag 源)起止 → 宿主抑制/解除 auto-hide(拖出全程不消失 + 拖出即走)。
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}

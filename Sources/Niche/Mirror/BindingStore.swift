@@ -45,6 +45,14 @@ final class BindingStore: ObservableObject {
         persist()
     }
 
+    /// 在指定 index 插入(拖文件夹「定位固定」):落点由 tab 栏插入光标算出。index 越界夹到
+    /// 合法区间(末尾追加),不崩。空数组为 no-op。
+    func insert(_ newBindings: [FolderBinding], at index: Int) {
+        guard !newBindings.isEmpty else { return }
+        bindings.insert(contentsOf: newBindings, at: min(max(index, 0), bindings.count))
+        persist()
+    }
+
     func remove(id: FolderBinding.ID) {
         bindings.removeAll { $0.id == id }
         persist()
