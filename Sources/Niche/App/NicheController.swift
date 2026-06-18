@@ -286,6 +286,7 @@ final class NicheController {
             if panelController.isVisible {
                 quickLook.cancelPendingPreview()
                 model.endPathInput()
+                autoHide.end(.iconSizeSlider)   // 同 hideTransient:防 pinned 拖滑块中途隐藏致抑制泄漏,unpin 后瞬态永不收
                 panelController.hide()
             } else {
                 panelController.revealPinned()
@@ -316,6 +317,8 @@ final class NicheController {
         quickLook.cancelPendingPreview()   // 收面板即作废"下载中未呈现"的预览(防迟到弹出)
         model.endPathInput()               // 路径条随面板收口,否则 .pathInput 抑制源跨次泄漏
         model.invalidatePendingRename()    // 作废在途的慢速单击延迟重命名,防收起后回调泄漏 .renaming 抑制
+        autoHide.end(.iconSizeSlider)      // 拖滑块中途被强关 → onEditingChanged(false) 不触发,在此收口
+                                           // 防 .iconSizeSlider 跨次泄漏(end 对未配对调用幂等);松手再 end 也短路
         panelController.hide()
         teardownTransientFocusObserver()
     }
