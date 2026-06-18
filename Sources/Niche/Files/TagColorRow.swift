@@ -4,8 +4,8 @@ import AppKit
 ///
 /// 复刻的细节(对齐访达):
 /// - 已打标签:圆点画白勾。
-/// - hover 未打的:圆点**放大** + 画白 `+`,底部文字「添加 "绿色"」。
-/// - hover 已打的:圆点**放大** + 白勾转白 `×`,底部文字「移除 "红色"」。
+/// - hover 未打的:圆点**放大** + 画白 `+`。
+/// - hover 已打的:圆点**放大** + 白勾转白 `×`。
 /// - 点击即 toggle 并收起菜单。
 ///
 /// 为何自绘 NSView:NSMenu 没有"内联多按钮行"的现成项,Finder 也是用自定义视图项实现这排圆点。
@@ -19,16 +19,13 @@ final class TagColorRowView: NSView {
 
     private var hovered: Int?
 
-    // 几何。圆点居上半,底部留一行 hover 提示文字(同 Finder)。
+    // 几何。只有一行圆点(已去掉 hover 文字行),行高 = 圆点 + 上下留白。
     private let inset: CGFloat = 17
     private let diameter: CGFloat = 16
     private let gap: CGFloat = 11
     private let hoverGrow: CGFloat = 3      // hover 时直径增量(放大感)
-    private let dotsCenterY: CGFloat = 30   // 圆点中心 y(自底,留出底部文字行)
-    private let totalHeight: CGFloat = 46
-
-    /// 底部 hover 提示(「添加 "X"」/「移除 "X"」)—— 用 label 子视图而非手绘,字体/抗锯齿交系统。
-    private let hint = NSTextField(labelWithString: "")
+    private let dotsCenterY: CGFloat = 14   // 圆点中心 y(自底),行内垂直居中
+    private let totalHeight: CGFloat = 28   // 仅一行圆点 + 上下留白
 
     /// 系统字形染白(applied 标记 / hover 的 +、×)—— 用系统字形而非手画,边缘才干净、和 Finder 一致。
     private static func whiteGlyph(_ symbol: String, pointSize: CGFloat) -> NSImage? {
@@ -52,13 +49,6 @@ final class TagColorRowView: NSView {
         self.onToggle = onToggle
         let width = inset * 2 + CGFloat(tags.count) * diameter + CGFloat(max(0, tags.count - 1)) * gap
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: totalHeight))
-
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
-        hint.alignment = .center
-        hint.frame = NSRect(x: 0, y: 5, width: width, height: 16)
-        hint.autoresizingMask = [.width]
-        addSubview(hint)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
@@ -104,13 +94,6 @@ final class TagColorRowView: NSView {
         }
     }
 
-    /// 更新底部提示文字(随 hover 切换;移出清空)。
-    private func updateHint() {
-        guard let i = hovered else { hint.stringValue = ""; return }
-        let name = tags[i].name
-        hint.stringValue = "\(applied.contains(name) ? "移除" : "添加") \u{201C}\(name)\u{201D}"
-    }
-
     // MARK: hover
 
     override func updateTrackingAreas() {
@@ -124,11 +107,11 @@ final class TagColorRowView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let i = index(at: convert(event.locationInWindow, from: nil))
-        if i != hovered { hovered = i; updateHint(); needsDisplay = true }
+        if i != hovered { hovered = i; needsDisplay = true }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if hovered != nil { hovered = nil; updateHint(); needsDisplay = true }
+        if hovered != nil { hovered = nil; needsDisplay = true }
     }
 
     // MARK: 点击
