@@ -112,6 +112,8 @@ struct GeneralSettings: View {
             SettingsGroup {
                 // 与面板 eye 按钮同一真相源,改了立即生效 —— 不是"默认值",别写"默认"误导。
                 Toggle("显示隐藏文件", isOn: $model.showHidden)
+                // 图标视图名称下显副信息(分辨率/时长/项目数/大小),同访达「显示项目简介」。
+                Toggle("显示项目简介(分辨率 / 时长 / 项目数)", isOn: $model.showItemInfo)
                 Toggle("开机自启", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         guard enabled != LaunchAtLogin.isEnabled else { return }

@@ -19,6 +19,31 @@ enum TCCAccess {
         }
     }
 
+    /// 受 TCC「文件与文件夹」保护的标准目录(列其内容会弹授权)。各自独立授权 —— 授权家目录
+    /// **不**连带授权它们。用于非用户动作路径(如 cell 渲染统计项目数)**跳过**这些目录,避免
+    /// 偷偷触发弹窗;只在用户显式 arm 进入(当前目录已授权)后,其子项才安全访问。
+    static let protectedDirectories: Set<URL> = {
+        let fm = FileManager.default
+        let dirs: [FileManager.SearchPathDirectory] =
+            [.desktopDirectory, .documentDirectory, .downloadsDirectory,
+             .moviesDirectory, .musicDirectory, .picturesDirectory]
+        var set = Set(dirs.compactMap {
+            try? fm.url(for: $0, in: .userDomainMask, appropriateFor: nil, create: false)
+                .resolvingSymlinksInPath()
+        })
+        // iCloud Drive(CLAUDE.md 列入受保护域):SearchPathDirectory 无对应项,固定在 Mobile Documents
+        // 容器,按路径补 —— 漏了它,iCloud 目录作为子项被统计时仍会偷偷弹 TCC 授权。
+        set.insert(fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
+            .resolvingSymlinksInPath())
+        return set
+    }()
+
+    /// 该 URL 是否是受保护标准目录本身(列其内容会触发 TCC)。
+    static func isProtected(_ url: URL) -> Bool {
+        protectedDirectories.contains(url.resolvingSymlinksInPath())
+    }
+
     /// 首次被拒后,系统不会再次弹窗,需引导用户去"系统设置 › 隐私与安全性 › 文件与文件夹"
     /// 手动开启。由用户点"授权"按钮触发(非自动)。
     static func openPrivacySettings() {

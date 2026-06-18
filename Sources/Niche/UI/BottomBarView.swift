@@ -18,12 +18,30 @@ struct BottomBarView: View {
             sortButton
             hiddenToggle
             Spacer()
+            if model.viewMode == .icon { iconSizeSlider }
             pinButton
         }
         // 横/底边距 = gap(itemSpacing 8):按钮外缘距面板边 8,使按钮圆角(16)与外壳(24)同心。
         .padding(.horizontal, edge.itemSpacing)
         .padding(.bottom, edge.itemSpacing)
         .padding(.top, edge.innerSpacing)
+    }
+
+    /// 图标缩放滑块(仅图标视图)—— 对齐访达底部缩放条:无极调图标大小,两端小/大图标提示。
+    /// 拖动只改 model.iconSize(→ cell frame 缩放 + 列数),缩略图按最大尺寸生成一次不重取,丝滑。
+    private var iconSizeSlider: some View {
+        // HStack 手放两端小/大图标 + 纯 Slider:init 简单确定,两端提示不依赖 labelsHidden 行为。
+        // 拖动实时缩放(iconSize @Published),松手(onEditingChanged false)才持久化,不逐帧写盘。
+        HStack(spacing: edge.innerSpacing) {
+            Image(systemName: "photo").font(.system(size: 8)).foregroundStyle(.secondary)
+            Slider(value: $model.iconSize, in: PanelModel.iconSizeRange,
+                   onEditingChanged: { editing in if !editing { model.persistIconSize() } })
+                .controlSize(.mini)
+                .frame(width: edge.base * 9)   // ~72pt 轨道,两端图标另算,不挤占底栏
+            Image(systemName: "photo").font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+        .help("图标大小")
+        .accessibilityLabel("图标大小")
     }
 
     private var sortButton: some View {

@@ -31,8 +31,25 @@ final class PanelModel: ObservableObject {
             UserDefaults.standard.set(showHidden, forKey: "niche.showHidden")
         }
     }
+    /// 图标视图「显示项目简介」(名称下副行:分辨率/时长/项目数/大小),持久化。纯显示态,不动 mirror。
+    @Published var showItemInfo: Bool = UserDefaults.standard.bool(forKey: "niche.showItemInfo") {
+        didSet { UserDefaults.standard.set(showItemInfo, forKey: "niche.showItemInfo") }
+    }
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4
+    /// 图标视图图标边长(pt),底栏滑块无极调节(对齐访达缩放条:面板尺寸不变,只改图标大小+列数)。
+    /// 默认 64 = 访达图标视图默认 iconSize。**不在 didSet 持久化** —— 拖动会逐中间值狂写 UserDefaults;
+    /// 改由 Slider 松手(onEditingChanged)调 persistIconSize 写一次。拖动中 @Published 实时驱动缩放。
+    @Published var iconSize: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "niche.iconSize")
+        return saved > 0 ? CGFloat(saved) : 64
+    }()
+    static let iconSizeRange: ClosedRange<CGFloat> = 40...128
+
+    /// 持久化当前图标大小(Slider 拖动松手时调)。
+    func persistIconSize() {
+        UserDefaults.standard.set(Double(iconSize), forKey: "niche.iconSize")
+    }
     /// 视图模式(列表/图标),持久化。列表=原生 Table(像访达);图标=网格。
     @Published var viewMode: FileViewMode = FileViewMode.load() {
         didSet { viewMode.save() }

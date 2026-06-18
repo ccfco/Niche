@@ -59,7 +59,9 @@ struct FileGridView: View {
 
     private func columnCount(for width: CGFloat) -> Int {
         let usable = width - edge.panelPadding * 2
-        let unit = edge.cellWidth + edge.itemSpacing
+        // 列宽随 iconSize 派生(图标 + 左右余量容文字)→ 拖大图标列数自然变少,面板宽度不变(同访达)。
+        // 注:面板「标准宽度」仍用 edge.cellWidth 基准(PanelController),此处只决定内容区列数。
+        let unit = (model.iconSize + edge.base * 4) + edge.itemSpacing
         return max(1, Int((usable + edge.itemSpacing) / unit))
     }
 
@@ -89,6 +91,8 @@ struct FileGridView: View {
             isRenaming: model.renamingItemID == item.id,
             isDownloading: model.downloadingIDs.contains(item.id),
             isDropTarget: model.dropTargetID == item.id,
+            showItemInfo: model.showItemInfo,
+            iconSize: model.iconSize,
             edge: edge,
             onRenameCommit: { newName in
                 // 失败(空名/非法字符)保持编辑态(Codex review)。

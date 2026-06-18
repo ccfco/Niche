@@ -14,6 +14,10 @@ struct FileCellView: View {
     var isDownloading: Bool = false
     /// 拖入悬停目标(目录格子,Finder 语义"会落进这个文件夹"):高亮环 + 底色。
     var isDropTarget: Bool = false
+    /// 「显示项目简介」开关(名称下副行:分辨率/时长/项目数/大小)。
+    var showItemInfo: Bool = false
+    /// 图标边长(pt),由 model.iconSize 注入(底栏滑块可调)。缩略图按 ×2 取像素(Retina)。
+    var iconSize: CGFloat = 64
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
@@ -39,6 +43,8 @@ struct FileCellView: View {
     var armToken: () -> Int = { 0 }
 
     @State private var thumbnail: NSImage?
+    /// 项目简介副行文本(后台异步算,见 ItemInfoCache)。开关关时恒为 nil。
+    @State private var itemInfo: String?
     @State private var isHovered = false
     /// 文件名文字在本格坐标系内的 frame —— 慢速单击重命名只在命中此区域才触发(Finder:点图标
     /// 图片只选中,点文字才改名)。零值(未测量)= 不触发,安全默认。
@@ -47,16 +53,21 @@ struct FileCellView: View {
     /// 本格私有坐标空间名:量 label frame 与 DragSourceView overlay 共用同一原点(格子左上)。
     private static let cellSpace = "fileCell"
 
+    /// 缩略图统一生成尺寸(最大图标 @2x):一次到位,拖滑块只缩放显示、不按 iconSize 重取(防卡顿)。
+    private static let thumbnailPixel = PanelModel.iconSizeRange.upperBound * 2
+
     var body: some View {
         let cell = VStack(spacing: edge.innerSpacing) {
             artwork
-                .frame(width: 48, height: 48)
+                .frame(width: iconSize, height: iconSize)
                 // id = 图标键(路径+标签+dataless) + mtime(图片缩略图随内容变):打标签不改 url/mtime,
                 // 故必须含 tags 才会重取彩色图标;含 mtime 让图片内容更新也重取。
                 // isCancelled 守:.task(id:) 切换会取消旧任务,但旧 QL 回调晚返回时 await 之后仍会执行,
                 // 不守会用旧图标盖掉新态(异步缓存经典竞态)。
-                .task(id: "\(ThumbnailCache.iconCacheKey(for: item, maxPixel: 96))|\(item.modificationDate.timeIntervalSince1970)") {
-                    let img = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: 96)
+                // 缩略图按最大图标尺寸@2x 生成一次,显示交 artwork 的 aspectRatio 缩放到 iconSize ——
+                // 拖滑块改的是 frame 不是 maxPixel,缓存键不变 → 不重取缩略图,缩放丝滑(同访达拖缩放条)。
+                .task(id: "\(ThumbnailCache.iconCacheKey(for: item, maxPixel: Self.thumbnailPixel))|\(item.modificationDate.timeIntervalSince1970)") {
+                    let img = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: Self.thumbnailPixel)
                     if !Task.isCancelled { thumbnail = img }
                 }
             nameArea
@@ -65,6 +76,25 @@ struct FileCellView: View {
                     Color.clear.preference(key: NameRectKey.self,
                                            value: geo.frame(in: .named(Self.cellSpace)))
                 })
+            // 项目简介副行(访达图标视图同款):分辨率/时长/项目数/大小。重命名态不显。
+            // 对齐访达项目简介行:强调色蓝(非灰 secondary)+ 10pt regular —— 比文件名(12pt)小 2pt,
+            // 层级与访达一致,副行自然显小而细。
+            // 始终占位(itemInfo 为 nil 时空串):异步算好前先占一行高,避免同屏 cell 高度跳动/错落。
+            if showItemInfo, !isRenaming {
+                Text(itemInfo ?? " ")
+                    // 字重 light:访达项目简介笔画比文件名(regular)更细 —— "细"是字重不是大小,
+                    // 之前一直用默认 regular 所以对不上。10pt + light 复刻那种纤细感。
+                    .font(.system(size: 10, weight: .light))
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+            }
+        }
+        // 后台取项目简介:开关关 → 清空不算(省 I/O);键复用 ItemInfoCache.cacheKey(含 mtime/size,
+        // 内容变即重取),避免手拼漂移。
+        .task(id: "\(showItemInfo)|\(ItemInfoCache.cacheKey(for: item))") {
+            guard showItemInfo else { itemInfo = nil; return }
+            let info = await ItemInfoCache.shared.info(for: item)
+            if !Task.isCancelled { itemInfo = info }
         }
         .padding(edge.innerSpacing)
         .background(
@@ -157,7 +187,10 @@ struct FileCellView: View {
         HStack(spacing: 3) {
             if !item.tags.isEmpty { TagDotsView(tags: item.tags, diameter: 9) }
             Text(item.name)
-                .font(.caption)
+                // 文件名 12pt = 访达图标视图 textSize 实测值(读自 Finder plist IconViewSettings);
+                // 此前用 .caption 实测仅 10pt。图标尺寸交由 iconSize 滑块,字号固定按访达(同访达:缩放
+                // 图标不改文字大小)。
+                .font(.system(size: 12))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.middle)
