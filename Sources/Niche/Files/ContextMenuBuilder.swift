@@ -125,27 +125,19 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// 读某项当前标签 —— **必须清缓存**:枚举返回的 URL 缓存对 tagNamesKey 不可靠(同 FileItem.load
-    /// 的坑),不清会读到空、把"已有"误判成"无",toggle 永远只加不减。
-    private func currentTags(_ url: URL) -> [String] {
-        var u = url
-        u.removeAllCachedResourceValues()
-        return (try? u.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
-    }
-
-    /// 选区"共有"的标签(交集)→ 决定哪些圆点画勾。
+    /// 选区"共有"的标签(交集)→ 决定哪些圆点画勾。标签读取走 FileItem.tags(of:)(清缓存单一权威)。
     private func appliedTags(_ selection: [URL]) -> Set<String> {
         guard let first = selection.first else { return [] }
-        var common = Set(currentTags(first))
-        for url in selection.dropFirst() { common.formIntersection(currentTags(url)) }
+        var common = Set(FileItem.tags(of: first))
+        for url in selection.dropFirst() { common.formIntersection(FileItem.tags(of: url)) }
         return common
     }
 
     /// 切换标签:选区全部已有 → 整体移除;否则 → 给缺的补上(保留稳定序,新标签追加末尾)。
     private func toggleTag(_ name: String, in selection: [URL]) {
-        let allHave = selection.allSatisfy { currentTags($0).contains(name) }
+        let allHave = selection.allSatisfy { FileItem.tags(of: $0).contains(name) }
         for url in selection {
-            var tags = currentTags(url)
+            var tags = FileItem.tags(of: url)
             if allHave {
                 tags.removeAll { $0 == name }
             } else if !tags.contains(name) {

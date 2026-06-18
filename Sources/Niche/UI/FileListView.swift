@@ -220,7 +220,7 @@ struct FileListView: View {
     }
 
     private func sizeLabel(_ item: FileItem) -> String {
-        item.isDirectory ? "--" : ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file)
+        item.isDirectory ? "--" : item.sizeLabel
     }
 
     private func kindLabel(_ item: FileItem) -> String {

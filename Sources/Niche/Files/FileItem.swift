@@ -25,6 +25,19 @@ struct FileItem: Identifiable, Equatable {
     /// Table 表头排序只用它来生成 KeyPathComparator,真实顺序仍由 FileSortOrder.comparator 决定。
     var kindSortKey: String { contentType?.identifier ?? "" }
 
+    /// 字节大小展示串(访达同款 ByteCountFormatter .file)。目录无意义,由调用方决定是否显示。
+    var sizeLabel: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+
+    /// 读 Finder 彩色标签 —— **必须清缓存**:`contentsOfDirectory(includingPropertiesForKeys:)`
+    /// 批量预取的 `tagNamesKey` 在返回 URL 的缓存里**不可靠、返回空**(实测枚举读空、清缓存重读才得
+    /// 真实标签)。单一权威:`load` 与右键菜单(ContextMenuBuilder)共用,任一处忘清缓存就读到空 →
+    /// toggle 只增不减的 bug 复发。
+    static func tags(of url: URL) -> [String] {
+        var u = url
+        u.removeAllCachedResourceValues()
+        return (try? u.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
+    }
+
     /// 资源键集合 —— 一次性批量取,喂给 `load(url:)`。
     static let resourceKeys: Set<URLResourceKey> = [
         .nameKey,
@@ -66,12 +79,8 @@ struct FileItem: Identifiable, Equatable {
     static func load(url: URL) -> FileItem {
         let values = try? url.resourceValues(forKeys: resourceKeys)
 
-        // Finder 标签必须清缓存后单独读:`contentsOfDirectory(includingPropertiesForKeys:)` 批量
-        // 预取的 `tagNamesKey` 在返回 URL 的缓存里**不可靠、返回空**(实测 app 内枚举 URL 读到空、
-        // 清缓存重读才得到真实标签)。其余字段(名/大小/日期)预取可靠,照用 values。
-        var tagURL = url
-        tagURL.removeAllCachedResourceValues()
-        let tags = (try? tagURL.resourceValues(forKeys: [.tagNamesKey]))?.tagNames ?? []
+        // 标签清缓存单独读(其余字段预取可靠,照用 values);WHY 见 tags(of:)。
+        let tags = Self.tags(of: url)
 
         let isUbiquitous = values?.isUbiquitousItem ?? false
         let downloadingStatus = values?.ubiquitousItemDownloadingStatus
