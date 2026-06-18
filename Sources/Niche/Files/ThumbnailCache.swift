@@ -25,12 +25,11 @@ final class ThumbnailCache {
         cache.countLimit = countLimit
     }
 
-    /// 图标键:路径 + **标签** + dataless + 尺寸。**标签必须进键** —— 打 Finder 标签不改 mtime
-    /// (标签写在扩展属性,非内容修改时间),不含 tags 会在换标签后命中旧(无色)缓存。
-    /// **不含 mtime**:图标只随类型/标签/自定义图标变,内容编辑不该使其失效。
-    /// 标签用控制字符 `\u{1F}`(Unit Separator,Finder 标签名不含它)分隔,避免 "a,b" vs "a","b" 碰撞。
+    /// 图标键:路径 + **标签** + **文件夹外观指纹** + dataless + 尺寸。标签/外观都写在 xattr、
+    /// **不改 mtime** —— 不进键会在换标签/换外观后命中旧缓存。**不含 mtime**:图标只随
+    /// 类型/标签/外观变,内容编辑不该使其失效。用 `\u{1F}`(Unit Separator)分隔,避免拼接碰撞。
     static func iconCacheKey(for item: FileItem, maxPixel: CGFloat) -> String {
-        "icon:\(item.url.path)\u{1F}\(item.tags.joined(separator: "\u{1F}"))\u{1F}\(item.isDataless)\u{1F}\(Int(maxPixel))"
+        "icon:\(item.url.path)\u{1F}\(item.tags.joined(separator: "\u{1F}"))\u{1F}\(item.folderIconSignature)\u{1F}\(item.isDataless)\u{1F}\(Int(maxPixel))"
     }
 
     /// 图片内容缩略图键:路径 + **mtime** + 尺寸 → 内容被改即失效。与图标键前缀不同,二者不碰撞。
@@ -42,8 +41,10 @@ final class ThumbnailCache {
     /// 无标签图片 → ImageIO 内容缩略图;其余 → nil(调用方退系统图标)。dataless 一律 nil。
     func thumbnail(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
         guard !item.isDataless else { return nil }
-        // 有标签:整项交给 Finder 渲染器(图片也走它 → 缩略图自带圆点,与 Finder 一致)。
-        if !item.tags.isEmpty { return await finderIcon(for: item, maxPixel: maxPixel) }
+        // 有标签或有文件夹自定义外观:整项交给 Finder 渲染器。QL `.icon` 是唯一渲染 macOS 26
+        // 文件夹外观(emoji/符号/颜色)的途径(NSWorkspace.icon 对纯 xattr 外观出普通文件夹);
+        // 有标签的图片也走它 → 缩略图自带圆点,与 Finder 一致。
+        if !item.tags.isEmpty || !item.folderIconSignature.isEmpty { return await finderIcon(for: item, maxPixel: maxPixel) }
         // 无标签:仅图片走 ImageIO 内容缩略图,其余退系统图标。
         guard item.contentType?.conforms(to: .image) == true else { return nil }
         return await imageThumbnail(for: item, maxPixel: maxPixel)
@@ -52,7 +53,7 @@ final class ThumbnailCache {
     /// 小图标 / 列表用:仅"有标签"返回 QL `.icon`(访达彩色图标);否则 nil(退系统类型图标,
     /// 不给列表引入内容缩略图,保持列表"类型图标"现状不变)。dataless 一律 nil。
     func taggedIcon(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
-        guard !item.isDataless, !item.tags.isEmpty else { return nil }
+        guard !item.isDataless, !item.tags.isEmpty || !item.folderIconSignature.isEmpty else { return nil }
         return await finderIcon(for: item, maxPixel: maxPixel)
     }
 

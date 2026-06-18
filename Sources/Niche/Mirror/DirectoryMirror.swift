@@ -291,7 +291,8 @@ final class DirectoryMirror: ObservableObject {
             return FileItem(
                 url: item.url, name: item.name, isDirectory: item.isDirectory,
                 isHidden: item.isHidden, size: item.size, modificationDate: item.modificationDate,
-                contentType: item.contentType, isDataless: override, tags: item.tags
+                contentType: item.contentType, isDataless: override, tags: item.tags,
+                folderIconSignature: item.folderIconSignature
             )
         }
         // 内容没变不重赋值:FSEvents 重扫常是无关事件(同目录元数据抖动),原样赋值会

@@ -12,7 +12,8 @@ enum TestSupport {
         date: Date = Date(timeIntervalSince1970: 0),
         type: UTType? = .plainText,
         dataless: Bool = false,
-        tags: [String] = []
+        tags: [String] = [],
+        sig: String = ""
     ) -> FileItem {
         FileItem(
             url: URL(fileURLWithPath: "/tmp/niche-test/\(name)"),
@@ -23,7 +24,8 @@ enum TestSupport {
             modificationDate: date,
             contentType: type,
             isDataless: dataless,
-            tags: tags
+            tags: tags,
+            folderIconSignature: sig
         )
     }
 
