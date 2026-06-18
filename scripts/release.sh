@@ -3,8 +3,10 @@
 # Niche 发布脚本:构建 → 签名 → zip → tag → GitHub release
 # ─────────────────────────────────────────────────────────────
 # 用法:
-#   ./scripts/release.sh              # 版本号从 project.yml 读
-#   ./scripts/release.sh 0.1.1        # 覆盖版本号(同步写回 project.yml)
+#   ./scripts/release.sh                              # 版本号从 project.yml 读,notes 用自动初稿
+#   ./scripts/release.sh 0.1.1                         # 覆盖版本号(同步写回 project.yml)
+#   ./scripts/release.sh --notes-file notes.md         # 用现成 notes 文件(推荐:先综合好再发)
+#   ./scripts/release.sh 0.1.1 --notes-file notes.md   # 两者可组合
 #
 # 前置:gh CLI 已登录;git remote = ccfco/Niche
 #
@@ -18,9 +20,32 @@ BUNDLE_ID="com.ccfco.Niche"
 DERIVED="$ROOT/build/release"
 DIST="$ROOT/build/dist"
 
+# ── 参数:版本号(可选,位置)+ --notes-file(可选)─────────
+VER_ARG=""
+NOTES_FILE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --notes-file)
+            NOTES_FILE="${2:-}"
+            [ -n "$NOTES_FILE" ] || { echo "✘ --notes-file 需要一个路径参数" >&2; exit 1; }
+            shift 2 ;;
+        --notes-file=*)
+            NOTES_FILE="${1#*=}"
+            [ -n "$NOTES_FILE" ] || { echo "✘ --notes-file 需要一个路径参数" >&2; exit 1; }
+            shift ;;
+        -*)
+            echo "✘ 未知参数:$1" >&2; exit 1 ;;
+        *)
+            VER_ARG="$1"; shift ;;
+    esac
+done
+if [ -n "$NOTES_FILE" ] && [ ! -f "$NOTES_FILE" ]; then
+    echo "✘ notes 文件不存在:$NOTES_FILE" >&2; exit 1
+fi
+
 # ── 版本 ────────────────────────────────────────────────────
-if [ -n "${1:-}" ]; then
-    VER="$1"
+if [ -n "$VER_ARG" ]; then
+    VER="$VER_ARG"
     # 写回 project.yml(MARKETING_VERSION)
     sed -i '' "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"$VER\"/" project.yml
     echo "▸ 版本号更新为 $VER(已写回 project.yml)"
@@ -77,7 +102,13 @@ git push origin "$TAG"
 
 # ── GitHub release ───────────────────────────────────────────
 echo "▸ [6/6] 创建 GitHub release…"
-NOTES="$(bash "$ROOT/scripts/release-notes.sh" 2>/dev/null || echo "## $APP_NAME $TAG")"
+if [ -n "$NOTES_FILE" ]; then
+    NOTES="$(cat "$NOTES_FILE")"
+    echo "  notes 来源:$NOTES_FILE"
+else
+    NOTES="$(bash "$ROOT/scripts/release-notes.sh" 2>/dev/null || echo "## $APP_NAME $TAG")"
+    echo "  notes 来源:release-notes.sh 自动初稿(含 meta 文字,建议用 --notes-file 传综合稿)"
+fi
 gh release create "$TAG" "$ZIP" \
     --title "${APP_NAME} ${TAG}" \
     --notes "$(cat <<NOTES
