@@ -2,8 +2,8 @@ import SwiftUI
 
 /// 面板内容根视图:顶部文件夹 tab + 网格(或空态)+ 底栏。
 ///
-/// 键盘导航(spec §4.7)在此统一处理:↑↓←→ 选择 / Space Quick Look / Return 打开 /
-/// ⌘↓ 进子目录 / ⌘↑ 回上级。竞品几乎纯鼠标,这是差异化优势。
+/// 键盘导航(spec §4.7)在此统一处理:↑↓←→ 选择 / Space Quick Look / Return 重命名(对齐 Finder) /
+/// ⌘O / ⌘↓ 打开(目录下钻) / ⌘↑ 回上级。竞品几乎纯鼠标,这是差异化优势。
 struct ContentPanelView: View {
     @ObservedObject var model: PanelModel
     @ObservedObject var motion: MotionPreferences

@@ -368,6 +368,13 @@ final class PanelController {
         return nil
     }
 
+    /// 打开光标项:目录下钻、文件交系统打开(⌘↓ / ⌘O 共用,Finder 同款)。
+    private func openOrEnterCursor() {
+        guard let item = model.cursorItem else { return }
+        if item.isDirectory { model.currentMirror?.enter(item.url); model.clearSelection() }
+        else { actions.onOpen(item) }
+    }
+
     /// 返回 nil 吃掉事件,返回 event 放行给响应链(交原生控件,如 Table 原生方向键导航)。
     private func handlePanelKey(_ event: NSEvent) -> NSEvent? {
         // Quick Look 活跃:键盘单一权威接管预览态。必须在 isKeyWindow 守卫之前 —— QL becomeKey 后
@@ -404,13 +411,8 @@ final class PanelController {
             model.moveCursor(.up, extend: shift); return nil
         case 125: // ↓
             if cmd {
-                // Finder 语义:⌘↓ = 打开所选(目录下钻,文件交系统打开)。此前只对目录生效,
-                // 文件按了没反应 —— 与 Finder 不一致的无声死区。
-                if let item = model.cursorItem {
-                    if item.isDirectory { model.currentMirror?.enter(item.url); model.clearSelection() }
-                    else { actions.onOpen(item) }
-                }
-                return nil
+                // Finder 语义:⌘↓ = 打开所选(目录下钻,文件交系统打开)。
+                openOrEnterCursor(); return nil
             }
             if isList { return listArrow(.down, extend: shift, event) }
             model.moveCursor(.down, extend: shift); return nil
@@ -425,19 +427,13 @@ final class PanelController {
                 actions.onQuickLook(model.sortedItems.map(\.url), idx)
             }
             return nil
-        case 36, 76: // Return / Enter → 打开 / 下钻;⇧Return → 就地重命名
-            // Return=打开是 spec §4.7 的有意取舍(非 Finder 的 Return=重命名),但重命名必须留
-            // 键盘路径(否则只剩右键菜单一条路,Finder 用户两头落空)。⇧Return:离 Finder 习惯
-            // 最近的空位(重命名态本身的 Return/Esc 由字段编辑器在 monitor 之前接管,不冲突)。
+        case 36, 76: // Return / Enter → 就地重命名(对齐 Finder;打开走 ⌘O / ⌘↓)
+            // 翻 spec §4.7 旧取舍「Return=打开」:Finder 用户最深的肌肉记忆是「选中→Return→改名」,
+            // 「Return=打开」会在想改名时误打开文件。修饰键一律走重命名 —— ⇧Return / ⌘Return 都不冒
+            // 「按了改名键却打开」的意外(重命名态本身的 Return/Esc 由字段编辑器在 monitor 之前接管)。
             if let item = model.cursorItem {
-                if shift {
-                    model.selectSingle(item.id)
-                    model.beginRename(item.url)
-                } else if item.isDirectory {
-                    model.currentMirror?.enter(item.url); model.clearSelection()
-                } else {
-                    actions.onOpen(item)
-                }
+                model.selectSingle(item.id)
+                model.beginRename(item.url)
             }
             return nil
         case 53: // Esc → 收回(未 pin)/ 隐藏常驻
@@ -466,6 +462,7 @@ final class PanelController {
             case "z" where shift: actions.onRedo(); return nil
             case "z": actions.onUndo(); return nil
             case "n" where shift: actions.onNewFolder(); return nil
+            case "o": openOrEnterCursor(); return nil   // ⌘O 打开(Return 让给重命名后的键盘打开入口,Finder 同款)
             case "w": actions.onClose(); return nil
             case ",": actions.onOpenSettings(); return nil
             default: break
