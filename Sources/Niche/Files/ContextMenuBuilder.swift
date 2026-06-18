@@ -85,6 +85,10 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         // 标签色点行自成一段(上下分隔)—— 否则夹在普通项里视觉割裂(对齐 Finder 的独立标签区)。
         menu.addItem(.separator())
         menu.addItem(tagRowItem(ctx))
+        // 「自定义文件夹…」与标签色同属「外观」区,紧随其后;仅单个文件夹有意义(文件无此外观)。
+        if !multiple, let only = ctx.selection.first, Self.isDirectory(only) {
+            add(menu, "自定义文件夹…", #selector(doCustomizeFolder))
+        }
         menu.addItem(.separator())
 
         add(menu, "移到废纸篓", #selector(doTrash))
@@ -163,6 +167,43 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     }
 
     @objc private func doReveal() { if let urls = context?.selection { ops.revealInFinder(urls) } }
+
+    /// 「不再提示」自定义文件夹引导的持久化键(系统 suppressionButton 状态)。
+    private static let customizeHintSuppressedKey = "customizeFolderHintSuppressed"
+
+    /// 选区首项是否目录(决定「自定义文件夹…」是否出现)。右键单次调用,同步读可接受。
+    private static func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+    }
+
+    /// 「自定义文件夹…」:macOS 26 文件夹外观(符号/emoji/颜色)是 Finder 私有面板 —— 既非
+    /// NSService,AppleScript 字典也无对应命令(实测 26.5),**无法编程弹起**。故把文件夹在访达
+    /// 中选中,由用户在访达右键用系统「自定义文件夹」完成。首次弹一次带「不再提示」的引导(系统
+    /// 原生 suppressionButton),消除"只是选中、没弹面板"的落差;勾选后此后静默 reveal。
+    /// alert 在 reveal 前弹(Niche 仍前台),经 presentModal 防瞬态面板遮挡。
+    @objc private func doCustomizeFolder() {
+        guard let url = context?.selection.first else { return }
+        if UserDefaults.standard.bool(forKey: Self.customizeHintSuppressedKey) {
+            ops.revealInFinder([url])
+            return
+        }
+        presentModal {
+            let alert = NSAlert()
+            alert.messageText = "在访达中自定义文件夹"
+            alert.informativeText = "Niche 会在访达中选中此文件夹。在访达里右键选择「自定义文件夹」,即可设置符号、emoji 或颜色。"
+            alert.addButton(withTitle: "打开访达")
+            alert.addButton(withTitle: "取消")
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = "不再提示"
+            let response = alert.runModal()
+            // 勾了「不再提示」即记住意图(无论本次去不去访达),下次直接 reveal。
+            if alert.suppressionButton?.state == .on {
+                UserDefaults.standard.set(true, forKey: Self.customizeHintSuppressedKey)
+            }
+            guard response == .alertFirstButtonReturn else { return }
+            ops.revealInFinder([url])
+        }
+    }
 
     @objc private func doRename() {
         if let url = context?.selection.first { onRequestRename(url) }
