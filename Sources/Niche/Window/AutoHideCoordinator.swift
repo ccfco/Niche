@@ -17,6 +17,8 @@ final class AutoHideCoordinator {
         case pathInput    // 路径输入条(前往)展开中:输入路径常要对照别处,鼠标离开不该把面板抽走
         case modalDialog  // 模态对话框(NSOpenPanel/NSAlert)展示中:对话框成 key + 鼠标移去
                           // 点按都会触发收回,不抑制则"添加文件夹/移动到…/冲突确认"期间面板被挤走
+        case iconSizeSlider // 底栏图标缩放滑块拖动中:鼠标可能甩出面板边界,不抑制则 handleMouseLeave
+                            // 把面板收回、拖动中断;松手解除后重评鼠标位置
     }
 
     /// 抑制源 → 嵌套计数(非 Set):同名抑制可重入(如集中式 withModalContext 嵌套 presentFailure),

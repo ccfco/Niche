@@ -62,4 +62,7 @@ struct PanelActions {
     /// 拖出(面板作 drag 源)起止 → 宿主抑制/解除 auto-hide(拖出全程不消失 + 拖出即走)。
     var onDragBegin: () -> Void = {}
     var onDragEnd: () -> Void = {}
+    /// 底栏图标缩放滑块拖动起止(true=开始/false=松手)→ 宿主抑制/解除 auto-hide,防拖动时鼠标
+    /// 甩出面板边界致收回、中断拖动(同拖出语义)。
+    var onIconSizeEditing: (Bool) -> Void = { _ in }
 }

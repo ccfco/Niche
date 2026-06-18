@@ -79,7 +79,10 @@ final class NicheController {
         onMoveTab: { [weak self] from, to in self?.moveTab(from: from, to: to) },
         onDropFolders: { [weak self] urls, index in self?.dropFolders(urls, at: index) },
         onDragBegin: { [weak self] in self?.autoHide.begin(.draggingOut) },
-        onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) }
+        onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) },
+        onIconSizeEditing: { [weak self] editing in
+            editing ? self?.autoHide.begin(.iconSizeSlider) : self?.autoHide.end(.iconSizeSlider)
+        }
     )
     private lazy var panelController = PanelController(
         model: model, motion: motion, actions: actions

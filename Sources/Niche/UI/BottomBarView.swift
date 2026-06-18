@@ -9,6 +9,8 @@ struct BottomBarView: View {
     /// 那会抢 key 焦点让瞬态面板 didResignKey 即收回(鼠标移到排序按钮上面板就消失的根因)。
     var onSortMenu: (_ anchor: NSView?) -> Void = { _ in }
     var onTogglePin: () -> Void = {}
+    /// 图标缩放滑块拖动起止(true=开始/false=松手)→ 宿主抑制/解除 auto-hide。
+    var onIconSizeEditing: (Bool) -> Void = { _ in }
 
     /// 排序菜单锚点(弹在按钮下方,toolbar 菜单惯例)。
     private let sortAnchor = MenuAnchorBox()
@@ -35,7 +37,10 @@ struct BottomBarView: View {
         HStack(spacing: edge.innerSpacing) {
             Image(systemName: "photo").font(.system(size: 8)).foregroundStyle(.secondary)
             Slider(value: $model.iconSize, in: PanelModel.iconSizeRange,
-                   onEditingChanged: { editing in if !editing { model.persistIconSize() } })
+                   onEditingChanged: { editing in
+                       onIconSizeEditing(editing)            // 拖动期间抑制 auto-hide(防鼠标甩出收面板)
+                       if !editing { model.persistIconSize() }   // 松手才落盘
+                   })
                 .controlSize(.mini)
                 .frame(width: edge.base * 9)   // ~72pt 轨道,两端图标另算,不挤占底栏
             Image(systemName: "photo").font(.system(size: 12)).foregroundStyle(.secondary)

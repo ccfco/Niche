@@ -31,7 +31,8 @@ struct ContentPanelView: View {
             breadcrumb
             content
             BottomBarView(model: model, edge: edge,
-                          onSortMenu: actions.onSortMenu, onTogglePin: actions.onTogglePin)
+                          onSortMenu: actions.onSortMenu, onTogglePin: actions.onTogglePin,
+                          onIconSizeEditing: actions.onIconSizeEditing)
         }
         .frame(minWidth: 360, minHeight: 240)
         .panelBackground()
