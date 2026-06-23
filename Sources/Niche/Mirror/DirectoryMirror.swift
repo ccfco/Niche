@@ -103,8 +103,14 @@ final class DirectoryMirror: ObservableObject {
         // 越界判定用「未解析软链」的路径前缀(containsUnresolved),而非会解析叶子/中段软链跳出
         // 真实树的共享 contains —— 使指向越界目标的软链仍以「父级之下」表示参与面包屑/回上级,
         // 真实内容由文件系统跟随软链列出。
+        // 越界放行 = 未解析体系命中 ‖ 解析体系命中:前者是软链就地下钻常路(标准化路径在根内);
+        // 后者兜「前往」(NicheController) 传入 root 软链形态的真实路径——host 用 contains(解析)选
+        // 中本 tab,enter 须与之同源放行,否则 host 命中 enter 拒、selectTab 切过去却停在根。
+        // 真越界 URL 两形态都不在根内 → 仍被拒。其它调用方传入与 root 同形态的 item.url,
+        // containsUnresolved 已命中,不受 contains 影响。
         guard Self.isNavigableDirectory(target),
-              Self.containsUnresolved(ancestor: rootURL, descendant: target) else { return }
+              Self.containsUnresolved(ancestor: rootURL, descendant: target)
+                || Self.contains(ancestor: rootURL, descendant: target) else { return }
         currentDirectory = target
         rearmCurrentDirectory()
     }
