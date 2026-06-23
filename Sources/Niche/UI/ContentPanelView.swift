@@ -81,6 +81,10 @@ struct ContentPanelView: View {
             // 从废纸篓恢复后点「重试」即可;不再要可右键 tab 移除绑定。
             EmptyStateView(kind: .missing(model.currentMirror?.binding.displayName ?? "此文件夹"),
                            onAuthorize: { model.currentMirror?.retryIfPossible() })
+        case .accessFailed:
+            // 非权限的列目录失败:暴露"无法读取"而非误导去授权,按钮走重列(retryIfPossible)。
+            EmptyStateView(kind: .accessFailed(model.currentMirror?.binding.displayName ?? "此文件夹"),
+                           onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .ready:
             switch model.viewMode {
             case .list: FileListView(model: model, edge: edge, actions: actions)

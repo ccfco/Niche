@@ -20,6 +20,8 @@ final class DirectoryMirror: ObservableObject {
         case volumeUnmounted(String)
         case missing            // 绑定目录已被删除/移动且 bookmark 追踪不到(≠权限被拒,
                                 // 误报成 denied 会引导用户去系统设置白授权一通)
+        case accessFailed       // 列目录失败但非权限/卷/缺失(并发删除中、磁盘 IO 错等):
+                                // 不伪装成 TCC 被拒(引导授权无意义),暴露真实错误 + 留重试入口
     }
 
     @Published private(set) var state: State = .idle
@@ -158,6 +160,9 @@ final class DirectoryMirror: ObservableObject {
     func retryIfPossible() {
         switch state {
         case .volumeUnmounted, .missing: armAttempt()
+        // 非权限 IO 错:直接重列,不走 armAttempt 的 TCC 探针 —— probe 是 URL 版,对软链等会
+        // 误失败再翻回 permissionDenied(captureAndPublish 已能跟随软链)。
+        case .accessFailed: _ = captureAndPublish()
         default: return
         }
     }
@@ -249,12 +254,13 @@ final class DirectoryMirror: ObservableObject {
     @discardableResult
     private func captureAndPublish() -> Bool {
         scanGeneration &+= 1
-        guard let fresh = try? DirectorySnapshot.capture(directory: resolvedURL, showHidden: showHidden) else {
-            applyCaptureFailure()
+        do {
+            apply(try DirectorySnapshot.capture(directory: resolvedURL, showHidden: showHidden))
+            return true
+        } catch {
+            applyCaptureFailure(error)
             return false
         }
-        apply(fresh)
-        return true
     }
 
     /// 后台重扫(FSEvents 事件路径):capture 移到后台,回主线程后代次未变才发布。
@@ -266,13 +272,12 @@ final class DirectoryMirror: ObservableObject {
         scanTask?.cancel()
         scanTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard !Task.isCancelled else { return }   // 已被更新事件取代,省一次全量列目录
-            let fresh = try? DirectorySnapshot.capture(directory: dir, showHidden: hidden)
+            let result = Result { try DirectorySnapshot.capture(directory: dir, showHidden: hidden) }
             await MainActor.run {
                 guard let self, self.scanGeneration == generation else { return }
-                if let fresh {
-                    self.apply(fresh)
-                } else {
-                    self.applyCaptureFailure()
+                switch result {
+                case .success(let fresh): self.apply(fresh)
+                case .failure(let error): self.applyCaptureFailure(error)
                 }
             }
         }
@@ -284,16 +289,33 @@ final class DirectoryMirror: ObservableObject {
         if case .ready = state {} else { state = .ready }
     }
 
-    /// 列目录失败的统一归因:按"卷消失 → 目录被删 → 授权被撤销"顺序(误报 denied 会
-    /// 引导用户去系统设置白授权;stat 不受 TCC 限,可与 denied 区分)。
-    private func applyCaptureFailure() {
+    /// 列目录失败的统一归因:按"卷消失 → 目录被删 → 权限被拒 → 其它 IO 错"顺序。
+    /// **关键:不再兜底把任何失败都当 permissionDenied** —— 误报会把用户引去 TCC 设置白跑
+    /// (实测:软链 256/ENOTDIR、并发删除、磁盘错都非权限问题)。stat 不受 TCC 限,先据它分出
+    /// 卷/缺失;再据 error 精确分出真权限错(isPermissionError),剩下归 accessFailed 暴露真因。
+    private func applyCaptureFailure(_ error: Error?) {
         if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
             state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
         } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
             state = .missing
-        } else {
+        } else if let error, Self.isPermissionError(error) {
             state = .permissionDenied
+        } else {
+            Log.files.error("列目录失败(非权限):\(error?.localizedDescription ?? "未知", privacy: .public)")
+            state = .accessFailed
         }
+    }
+
+    /// 列目录错误是否真为权限拒绝(TCC / POSIX)。实测样本:权限拒绝 = NSCocoaError 257
+    /// (NSFileReadNoPermissionError),底层 POSIX EPERM(TCC) 或 EACCES(chmod);其它 IO 错
+    /// (软链 256/ENOTDIR、不存在 260/ENOENT)均不算 —— 据此把"该引导授权"与"该暴露真因"分开。
+    static func isPermissionError(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if ns.domain == NSCocoaErrorDomain, ns.code == NSFileReadNoPermissionError { return true }
+        let posix = ns.domain == NSPOSIXErrorDomain ? ns : (ns.userInfo[NSUnderlyingErrorKey] as? NSError)
+        if let posix, posix.domain == NSPOSIXErrorDomain,
+           posix.code == Int(EPERM) || posix.code == Int(EACCES) { return true }
+        return false
     }
 
     func refresh() { captureAndPublish() }

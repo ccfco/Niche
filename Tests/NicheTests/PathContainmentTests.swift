@@ -81,4 +81,26 @@ final class PathContainmentTests: XCTestCase {
         XCTAssertTrue(DirectoryMirror.isNavigableDirectory(dirLink))
         XCTAssertFalse(DirectoryMirror.isNavigableDirectory(fileLink))
     }
+
+    // MARK: - isPermissionError(列目录失败归因:只有真权限错才引导授权)
+
+    /// 真权限拒绝 = NSCocoaError 257,底层 POSIX EPERM(TCC)/EACCES(chmod):应判 true。
+    func testPermissionErrorTrueForNoPermission() {
+        for posix in [EPERM, EACCES] {
+            let underlying = NSError(domain: NSPOSIXErrorDomain, code: Int(posix))
+            let e = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError,
+                            userInfo: [NSUnderlyingErrorKey: underlying])
+            XCTAssertTrue(DirectoryMirror.isPermissionError(e), "EPERM/EACCES=\(posix) 应判权限错")
+        }
+    }
+
+    /// 软链不跟随报 256/ENOTDIR、不存在报 260/ENOENT:都非权限错,不得误导去 TCC。
+    func testPermissionErrorFalseForOtherIOErrors() {
+        let symlink = NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                              userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR))])
+        let missing = NSError(domain: NSCocoaErrorDomain, code: 260,
+                              userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))])
+        XCTAssertFalse(DirectoryMirror.isPermissionError(symlink))
+        XCTAssertFalse(DirectoryMirror.isPermissionError(missing))
+    }
 }
