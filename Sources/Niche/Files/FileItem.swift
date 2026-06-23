@@ -90,6 +90,7 @@ struct FileItem: Identifiable, Equatable {
     static let resourceKeys: Set<URLResourceKey> = [
         .nameKey,
         .isDirectoryKey,
+        .isSymbolicLinkKey,
         .isHiddenKey,
         .fileSizeKey,
         .totalFileSizeKey,
@@ -132,7 +133,15 @@ struct FileItem: Identifiable, Equatable {
         // 标签清缓存单独读(其余字段预取可靠,照用 values);WHY 见 tags(of:)。
         let tags = Self.tags(of: url)
         // 外观仅文件夹有意义:只对目录读 xattr,省去对每个文件的 listxattr 开销。
-        let isDirectory = values?.isDirectory ?? false
+        // 软链指向文件夹时 .isDirectoryKey 报 false(软链本身不是目录)——按 Finder 语义解析
+        // 目标再判:指向文件夹的软链当文件夹(双击下钻 / 排在文件夹组 / 可作拖入目标)。只有软链
+        // 才多付一次解析 I/O,普通文件/目录走首两个分支零额外开销(守 row 渲染路径不逐属性 I/O)。
+        let isDirectory: Bool = {
+            if values?.isDirectory == true { return true }
+            guard values?.isSymbolicLink == true else { return false }
+            return (try? url.resolvingSymlinksInPath()
+                .resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        }()
         let folderIconSignature = isDirectory ? Self.folderIconSignature(of: url) : ""
 
         let isUbiquitous = values?.isUbiquitousItem ?? false

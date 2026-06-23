@@ -55,11 +55,10 @@ final class DirectoryMirror: ObservableObject {
         let rootStd = rootURL.standardizedFileURL
         let curStd = currentDirectory.standardizedFileURL
         var result: [(name: String, url: URL)] = [(binding.displayName, rootStd)]
-        // 下钻深度用「解析符号链接后」的组件算(与 contains 同源,home 等符号链接根也不塌);
-        // 但展示/跳转 url 用未解析当前路径的尾部组件 —— 名称友好,且与 canGoUp/currentDirectory
-        // 的表示一致(若 url 改解析形,点根段后 canGoUp 比未解析 rootURL 会误判 true)。
-        let depth = curStd.resolvingSymlinksInPath().pathComponents.count
-                  - rootStd.resolvingSymlinksInPath().pathComponents.count
+        // 下钻深度用「未解析符号链接」的标准化组件算:currentDirectory 始终由 rootURL 追加得到,
+        // 同形相减即真实深度;解析对深度本就冗余(cur 与 root 同获相同符号链接展开),且软链就地
+        // 下钻时解析会把 cur 跳到真实越界树、深度算错 —— 故与 canGoUp/containsUnresolved 同源用标准化形。
+        let depth = curStd.pathComponents.count - rootStd.pathComponents.count
         let curComps = curStd.pathComponents
         guard depth > 0, curComps.count >= depth else { return result }
         var url = rootStd
@@ -98,10 +97,26 @@ final class DirectoryMirror: ObservableObject {
     /// 校验目标确是目录且仍在 rootURL 之内(防外部/拖拽传入越界 URL 跳出绑定根)。
     func enter(_ subdirectory: URL) {
         let target = subdirectory.standardizedFileURL
-        let isDir = (try? target.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? target.hasDirectoryPath
-        guard isDir, Self.contains(ancestor: rootURL, descendant: target) else { return }
+        // 软链就地下钻:目录判定软链感知(.isDirectoryKey 对软链本身报 false,需解析目标);
+        // 越界判定用「未解析软链」的路径前缀(containsUnresolved),而非会解析叶子/中段软链跳出
+        // 真实树的共享 contains —— 使指向越界目标的软链仍以「父级之下」表示参与面包屑/回上级,
+        // 真实内容由文件系统跟随软链列出。
+        guard Self.isNavigableDirectory(target),
+              Self.containsUnresolved(ancestor: rootURL, descendant: target) else { return }
         currentDirectory = target
         rearmCurrentDirectory()
+    }
+
+    /// 是否「可下钻的目录」:普通目录,或指向目录的软链(Finder 双击进入语义)。
+    /// `.isDirectoryKey` 对软链本身报 false,故软链须解析目标再判;指向文件的软链 → false(走打开)。
+    static func isNavigableDirectory(_ url: URL) -> Bool {
+        let v = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        if v?.isDirectory == true { return true }
+        if v?.isSymbolicLink == true {
+            return (try? url.resolvingSymlinksInPath()
+                .resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+        }
+        return url.hasDirectoryPath
     }
 
     /// 回上级(不越过 rootURL)。
@@ -335,6 +350,17 @@ final class DirectoryMirror: ObservableObject {
     static func contains(ancestor: URL, descendant: URL) -> Bool {
         let a = ancestor.standardizedFileURL.resolvingSymlinksInPath().pathComponents
         let d = descendant.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+        guard d.count >= a.count else { return false }
+        return Array(d.prefix(a.count)) == a
+    }
+
+    /// 下钻越界判定:用「**未解析符号链接**」的标准化路径组件前缀。`currentDirectory` 始终由
+    /// `rootURL` 追加组件得到、同形比较精确;软链就地下钻时(叶子/中段为软链)不因解析跳出真实树
+    /// 而误判越界 —— 面包屑/回上级统一以 root 体系表示,真实内容由文件系统跟随软链列出。
+    /// **与 `contains` 不可混用**:后者解析符号链接,服务拖拽环路防护/卷判定(需防 `..`/软链逃逸)。
+    static func containsUnresolved(ancestor: URL, descendant: URL) -> Bool {
+        let a = ancestor.standardizedFileURL.pathComponents
+        let d = descendant.standardizedFileURL.pathComponents
         guard d.count >= a.count else { return false }
         return Array(d.prefix(a.count)) == a
     }
