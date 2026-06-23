@@ -45,9 +45,10 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         self.context = Context(selection: [], directory: directory, anchorView: anchorView)
         let menu = NSMenu()
         menu.autoenablesItems = false   // 自行控制「粘贴」启用态(否则只要 target 响应就恒启用)
-        add(menu, "新建文件夹", #selector(doNewFolder))
+        add(menu, "新建文件夹", #selector(doNewFolder), symbol: "folder.badge.plus")
         let paste = NSMenuItem(title: "粘贴", action: #selector(doPaste), keyEquivalent: "")
         paste.target = self
+        paste.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
         paste.isEnabled = ops.canPaste
         menu.addItem(paste)
         menu.delegate = self
@@ -65,39 +66,39 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         let multiple = ctx.selection.count > 1
 
-        add(menu, "打开", #selector(doOpen))
+        add(menu, "打开", #selector(doOpen), symbol: "arrow.up.forward.app")
         if !multiple, let first = ctx.selection.first {
             menu.addItem(openWithSubmenu(for: first))
         }
-        add(menu, "在 Finder 中显示", #selector(doReveal))
+        add(menu, "在 Finder 中显示", #selector(doReveal), symbol: "folder")
         menu.addItem(.separator())
 
         if !multiple {
-            add(menu, "重命名", #selector(doRename))
+            add(menu, "重命名", #selector(doRename), symbol: "pencil")
         }
-        add(menu, "拷贝", #selector(doCopy))
-        add(menu, "复制路径", #selector(doCopyPath))
-        add(menu, "移动到…", #selector(doMoveTo))
+        add(menu, "拷贝", #selector(doCopy), symbol: "square.on.square")
+        add(menu, "复制路径", #selector(doCopyPath), symbol: "doc.on.clipboard")
+        add(menu, "移动到…", #selector(doMoveTo), symbol: "arrowshape.turn.up.right")
         menu.addItem(.separator())
 
-        add(menu, "压缩", #selector(doCompress))
-        add(menu, "分享…", #selector(doShare))
-        // 标签色点行自成一段(上下分隔)—— 否则夹在普通项里视觉割裂(对齐 Finder 的独立标签区)。
+        add(menu, "压缩", #selector(doCompress), symbol: "doc.zipper")
+        add(menu, "分享…", #selector(doShare), symbol: "square.and.arrow.up")
+        // 外观行(自绘 TagColorRowView):一排标签色圆点;文件夹再带一行「自定义文件夹」。整体一个 NSView,
+        // 圆点与文字共用左缘、不经 NSMenuItem 标题 —— 避免借标题触发的菜单宽度抖动/文字跑位。
         menu.addItem(.separator())
-        menu.addItem(tagRowItem(ctx))
-        // 「自定义文件夹…」与标签色同属「外观」区,紧随其后;仅单个文件夹有意义(文件无此外观)。
-        if !multiple, let only = ctx.selection.first, Self.isDirectory(only) {
-            add(menu, "自定义文件夹…", #selector(doCustomizeFolder))
-        }
+        let canCustomize = !multiple && ctx.selection.first.map(Self.isDirectory) == true
+        menu.addItem(tagRowItem(ctx, canCustomize: canCustomize))
         menu.addItem(.separator())
 
-        add(menu, "移到废纸篓", #selector(doTrash))
+        add(menu, "移到废纸篓", #selector(doTrash), symbol: "trash")
         return menu
     }
 
-    private func add(_ menu: NSMenu, _ title: String, _ action: Selector) {
+    /// symbol 非空时给该项配前置 SF Symbol(模板图像,自动跟随菜单文字色/选中高亮;对齐访达右键图标化)。
+    private func add(_ menu: NSMenu, _ title: String, _ action: Selector, symbol: String? = nil) {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
+        if let symbol { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
         menu.addItem(item)
     }
 
@@ -110,21 +111,27 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             let item = NSMenuItem(title: name, action: #selector(doOpenWith(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = appURL
+            // 子项用 App 自己的图标(对齐访达「打开方式」),缩到菜单图标尺寸,否则按原始大图显示。
+            let icon = NSWorkspace.shared.icon(forFile: appURL.path)
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
             submenu.addItem(item)
         }
         parent.submenu = submenu
         return parent
     }
 
-    /// 内联标签行(复刻 Finder:主菜单里一排可点彩色圆点,点色即 toggle,已打的画勾)。
-    /// 取代旧「标签」子菜单 —— 用户要"直接点颜色"而非多点一层。
-    private func tagRowItem(_ ctx: Context) -> NSMenuItem {
+    /// 外观行(自绘 TagColorRowView):一排标签色圆点 + (文件夹)一行「自定义文件夹」。
+    /// canCustomize=true(单个文件夹)时画并接管「自定义文件夹」行的点击,hover 圆点时该行显示灰色
+    /// 「添加/移除 "X"」。整体自绘,圆点与文字共用左缘、不经 NSMenuItem 标题 → 无抖动/跑位。
+    private func tagRowItem(_ ctx: Context, canCustomize: Bool) -> NSMenuItem {
         let item = NSMenuItem()
         let applied = appliedTags(ctx.selection)
         item.view = TagColorRowView(
             tags: TagPalette.standard,
             applied: applied,
-            onToggle: { [weak self] name in self?.toggleTag(name, in: ctx.selection) }
+            onToggle: { [weak self] name in self?.toggleTag(name, in: ctx.selection) },
+            customize: canCustomize ? { [weak self] in self?.doCustomizeFolder() } : nil
         )
         return item
     }
