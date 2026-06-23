@@ -17,15 +17,26 @@ struct DirectorySnapshot: Equatable {
 
     /// 列目录得到快照。`showHidden=false` 时跳过隐藏项(spec §4.4 隐藏文件开关)。
     /// 列目录本身就是一次访问 —— 受保护目录会触发 TCC(由调用方绑定用户动作,见 §4.1.1)。
+    ///
+    /// **软链目录**:`contentsOfDirectory(at:)`(URL 版)按 isDirectoryKey 预判,指向目录的软链
+    /// 被当非目录直接拒(报 NSCocoaError 256,**非权限错**;`atPath:` 版才跟随)。故 directory 经由
+    /// 软链时,用解析后的真实目录列举,再把子项 URL **重建回 directory(软链路径)体系** —— 保持
+    /// 下钻/面包屑坐标一致(containsUnresolved 不越界),真实属性由 FileItem.load 跟随中段软链读取。
+    /// 普通目录解析后与 directory 相等,沿用原 URL(保留 contentsOfDirectory 的属性预取)。
     static func capture(directory: URL, showHidden: Bool) throws -> DirectorySnapshot {
         let options: FileManager.DirectoryEnumerationOptions =
             showHidden ? [] : [.skipsHiddenFiles]
+        let listDir = directory.resolvingSymlinksInPath()
         let urls = try FileManager.default.contentsOfDirectory(
-            at: directory,
+            at: listDir,
             includingPropertiesForKeys: Array(FileItem.resourceKeys),
             options: options
         )
-        return DirectorySnapshot(items: urls.map(FileItem.load(url:)))
+        let needsRebase = listDir != directory
+        let items = urls.map { child -> FileItem in
+            FileItem.load(url: needsRebase ? directory.appendingPathComponent(child.lastPathComponent) : child)
+        }
+        return DirectorySnapshot(items: items)
     }
 }
 

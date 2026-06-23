@@ -55,4 +55,30 @@ final class DirectorySnapshotTests: XCTestCase {
         let all = try DirectorySnapshot.capture(directory: dir, showHidden: true)
         XCTAssertEqual(all.fileItems.map(\.name).sorted(), [".hidden", "visible.txt"])
     }
+
+    /// 指向目录的软链:URL 版 contentsOfDirectory 不跟随(报 256,非权限错),capture 须解析真实
+    /// 目录列举、子项 URL 重建回软链路径体系 —— 否则软链文件夹进去就「列目录失败」被误判 TCC。
+    func testCaptureFollowsDirectorySymlink() throws {
+        let root = try TestSupport.makeTempDir()
+        defer { TestSupport.cleanup(root) }
+
+        let realDir = root.appendingPathComponent("real", isDirectory: true)
+        try FileManager.default.createDirectory(at: realDir, withIntermediateDirectories: false)
+        try TestSupport.touch(realDir.appendingPathComponent("a.txt"))
+        try FileManager.default.createDirectory(
+            at: realDir.appendingPathComponent("subdir"), withIntermediateDirectories: false)
+
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: realDir)
+
+        let snap = try DirectorySnapshot.capture(directory: link.standardizedFileURL, showHidden: false)
+        XCTAssertEqual(Set(snap.fileItems.map(\.name)), ["a.txt", "subdir"])
+
+        // 子项 URL 必须重建回软链路径体系(在 link 之下),保证下钻坐标一致、不越界。
+        let linkPrefix = link.standardizedFileURL.path
+        for item in snap.fileItems {
+            XCTAssertTrue(item.url.standardizedFileURL.path.hasPrefix(linkPrefix),
+                          "子项 \(item.url.path) 应在软链路径 \(linkPrefix) 之下,而非真实路径")
+        }
+    }
 }
