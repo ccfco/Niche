@@ -36,6 +36,9 @@
 	<string>Niche 需要访问"文稿"以镜像你绑定的文件夹,方便从刘海快速取用。</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Niche 需要访问"下载"以镜像你绑定的文件夹,方便从刘海快速取用。</string>
+	<!-- 「显示简介」经 Apple Events 驱动访达弹原生 Get Info 窗口(FinderGetInfo);首次发送会弹此文案授权 -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Niche 需要控制"访达"来为所选文件显示简介(调起访达原生的"显示简介"窗口)。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Niche. Open source under MIT.</string>
 </dict>

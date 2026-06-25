@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 经 Apple Events 驱动访达弹「显示简介」窗口(FinderGetInfo)。hardened runtime 下发送
+	     Apple Events 必须声明此 entitlement,否则连 TCC 授权弹窗都不出、直接 errAEEventNotPermitted。
+	     本地 ad-hoc + 非 hardened 时被忽略(无副作用);现在配好,GitHub Release 公证开 hardened
+	     runtime 时不漏。不沙盒(spec),故不含 app-sandbox。 -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

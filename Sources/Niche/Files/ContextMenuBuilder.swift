@@ -16,6 +16,8 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     private let ops: FileOperations
     private let autoHide: AutoHideCoordinator
     private let onRequestRename: (URL) -> Void
+    /// 「显示简介」入口:把选区交宿主经 FinderGetInfo 调起访达原生 Get Info 窗(右键与 ⌘I 共用此一处)。
+    private let onShowInfo: ([URL]) -> Void
     /// 在瞬态面板可见时呈现模态(NSOpenPanel/NSAlert/冲突弹窗)的统一 bracket —— 宿主注入
     /// (NicheController.withModalContext):抑制 auto-hide + 临时降级 panel.level 防遮挡。
     /// 菜单动作里凡跑 runModal 的都经它,杜绝"只有 addFolder 配对、右键模态被面板盖住"。
@@ -24,10 +26,12 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
 
     init(ops: FileOperations, autoHide: AutoHideCoordinator,
          onRequestRename: @escaping (URL) -> Void,
+         onShowInfo: @escaping ([URL]) -> Void,
          presentModal: @escaping (() -> Void) -> Void) {
         self.ops = ops
         self.autoHide = autoHide
         self.onRequestRename = onRequestRename
+        self.onShowInfo = onShowInfo
         self.presentModal = presentModal
     }
 
@@ -71,6 +75,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             menu.addItem(openWithSubmenu(for: first))
         }
         add(menu, "在 Finder 中显示", #selector(doReveal), symbol: "folder")
+        add(menu, "显示简介", #selector(doShowInfo), symbol: "info.circle")
         menu.addItem(.separator())
 
         if !multiple {
@@ -174,6 +179,9 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     }
 
     @objc private func doReveal() { if let urls = context?.selection { ops.revealInFinder(urls) } }
+
+    /// 「显示简介」:把选区交宿主(onShowInfo)经 FinderGetInfo 驱动访达弹原生 Get Info 窗。
+    @objc private func doShowInfo() { if let urls = context?.selection { onShowInfo(urls) } }
 
     /// 「不再提示」自定义文件夹引导的持久化键(系统 suppressionButton 状态)。
     private static let customizeHintSuppressedKey = "customizeFolderHintSuppressed"

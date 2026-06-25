@@ -23,6 +23,7 @@ final class NicheController {
     private lazy var contextMenu = ContextMenuBuilder(
         ops: ops, autoHide: autoHide,
         onRequestRename: { [weak self] url in self?.beginRenameSafely(url) },
+        onShowInfo: { [weak self] urls in self?.showGetInfo(urls) },
         presentModal: { [weak self] body in
             guard let self else { body(); return }
             self.withModalContext(body)
@@ -582,6 +583,25 @@ final class NicheController {
     private func makeBackgroundMenu(_ anchor: NSView) -> NSMenu? {
         guard let dir = model.currentMirror?.currentDirectory else { return nil }
         return contextMenu.makeBackgroundMenu(directory: dir, anchorView: anchor)
+    }
+
+    /// 「显示简介」:经 FinderGetInfo 驱动访达弹原生 Get Info 窗(右键菜单注入此处)。
+    /// 走 withModalContext —— 首发 Apple Events 会同步弹 TCC「自动化」授权窗,不抑制收回 +
+    /// 降级面板则瞬态面板会被收回 / 被授权窗遮挡。被拒(.notAuthorized)引导去系统设置;
+    /// 其他失败正面弹错(不静默吞)。
+    private func showGetInfo(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        withModalContext {
+            switch FinderGetInfo.show(urls) {
+            case .shown:
+                break
+            case .notAuthorized:
+                FinderGetInfo.presentAuthorizationAlert(autoHide: autoHide)
+            case .failed(let error):
+                Log.files.error("显示简介失败:\(error.localizedDescription, privacy: .public)")
+                FailureAlert.present(title: "无法显示简介", error: error, autoHide: autoHide)
+            }
+        }
     }
 
     /// 拖入落地:Niche 自己执行 copy/move(spec §4.5 注②)。按目标目录与**每个源**的卷 +

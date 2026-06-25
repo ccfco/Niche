@@ -18,6 +18,9 @@ settings:
     CODE_SIGN_STYLE: Manual
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: NO
+    # 「显示简介」经 Apple Events 驱动访达(FinderGetInfo)需 automation entitlement;本地非 hardened
+    # 被忽略,公证开 hardened runtime 时生效。放 sources 外(仓库根),不被当资源打包。
+    CODE_SIGN_ENTITLEMENTS: Niche.entitlements
     SWIFT_STRICT_CONCURRENCY: minimal
 
 targets:
