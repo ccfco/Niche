@@ -14,8 +14,13 @@ struct FolderTabsView: View {
     let edge: EdgeMetrics
     /// 「+」:弹添加菜单(选择文件夹 / 前往路径,由宿主以 NSMenu+抑制呈现,锚定按钮)。
     var onAddMenu: (_ anchor: NSView?) -> Void = { _ in }
-    /// tab 右键:宿主构建带抑制的 NSMenu(移除此文件夹);nil 不弹。
+    /// tab 右键:宿主构建带抑制的 NSMenu(复制路径 / 在 Finder 中显示 / 显示简介 / 重命名标签 / 移除);nil 不弹。
     var onTabMenu: (_ id: FolderBinding.ID) -> NSMenu? = { _ in nil }
+    /// tab 标签就地改名提交(改 displayName);空名视为取消。
+    var onRenameTabCommit: (_ id: FolderBinding.ID, _ newName: String) -> Void = { _, _ in }
+    /// 某文件夹的引用菜单(复制路径 / 在 Finder 中显示 / 显示简介)。临时 tab 用它 —— 它不是
+    /// 持久书签,只配文件夹引用操作(无重命名标签/移除,关闭走内联 ✕);与面包屑段同源。
+    var onPathSegmentMenu: (_ url: URL) -> NSMenu? = { _ in nil }
     /// 把临时 tab(前往)钉成正式绑定。
     var onPinTemporary: () -> Void = {}
     /// 拖动重排提交:from = 正式 tab 原索引,to = `Array.move(toOffset:)` 语义的落点偏移。
@@ -87,15 +92,22 @@ struct FolderTabsView: View {
 
     private func tab(index: Int, mirror: DirectoryMirror) -> some View {
         let id = mirror.binding.id
+        // 就地改名标签:渲染编辑框取代玻璃 tab(无 TabReorderView 接管,左键落进字段;
+        // firstResponder is NSText 时面板键盘 monitor 整体放行,不吞输入)。
+        if model.renamingTabID == id {
+            return AnyView(renameTabField(id: id, initial: mirror.binding.displayName))
+        }
         let isCurrent = index == model.currentTab
         let title = mirror.binding.displayName
         let isDragging = draggingID == id
         // 与 +/视图切换/底栏统一玻璃语言:当前 tab 用 isActive 常驻高亮,去掉裸 accent 方块(#15)。
         // Button 仅作玻璃外壳;点选/拖动由 TabReorderView 接管(它消费左键,Button 的 action 不触发)。
-        return Button {} label: {
+        return AnyView(Button {} label: {
             Text(title).lineLimit(1)
         }
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
+        // hover 即见完整磁盘路径(站在根目录看不到层级时的零空间兜底)。
+        .help(mirror.binding.path)
         // 静息 frame 上报(bar 坐标系);`.offset` 不影响它,拖动中保持稳定。
         .background(
             GeometryReader { geo in
@@ -126,7 +138,27 @@ struct FolderTabsView: View {
         .zIndex(isDragging ? 1 : 0)
         // 无障碍:作为可切换标签项暴露,带当前选中态(Button 已是 .isButton,补 .isSelected)。
         .accessibilityLabel(title)
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .accessibilityAddTraits(isCurrent ? .isSelected : []))
+    }
+
+    /// tab 标签就地改名框(复用 RenameTextField:Enter 提交 / Esc 取消 / 失焦提交,Finder 语义)。
+    /// 提交与失焦都经 `renamingTabID == id` 守卫,避免 teardown 二次提交(对齐文件改名)。
+    private func renameTabField(id: FolderBinding.ID, initial: String) -> some View {
+        RenameTextField(
+            initialName: initial,
+            onCommit: { name in
+                onRenameTabCommit(id, name)
+                model.endRenameTab()
+            },
+            onCancel: { if model.renamingTabID == id { model.endRenameTab() } },
+            onEndEditing: { name in
+                guard model.renamingTabID == id else { return }
+                onRenameTabCommit(id, name)
+                model.endRenameTab()
+            }
+        )
+        .frame(width: 120)
+        .padding(.vertical, 1)
     }
 
     // MARK: 拖动重排几何
@@ -218,6 +250,9 @@ struct FolderTabsView: View {
                 }
             }
             .buttonStyle(NicheFooterGlassButtonStyle(isActive: isCurrent, compact: true))
+            .help(mirror.binding.path)
+            // 右键:文件夹引用操作(临时 tab 非书签,只配引用项;同面包屑段)。
+            .overlay(RightClickCatcher { _ in onPathSegmentMenu(mirror.rootURL) })
             .accessibilityLabel("临时:\(mirror.binding.displayName)")
             .accessibilityAddTraits(isCurrent ? .isSelected : [])
             Button(action: onPinTemporary) { Image(systemName: "pin") }

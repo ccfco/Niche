@@ -61,37 +61,84 @@ final class AddFolderMenuPresenter: NSObject, NSMenuDelegate {
     @objc private func doGoToPath() { onGoToPath() }
 }
 
-/// 正式 tab 的右键菜单(目前仅「移除此文件夹」)。取代 SwiftUI .contextMenu:那接不上
-/// 抑制,右键菜单开着鼠标移出走廊面板会被收走(Codex review)。
+/// 「路径脊柱」右键菜单:tab(根段)与面包屑(子级段)是同一条路径脊柱,共用一套"文件夹引用
+/// 操作"(复制路径 / 在 Finder 中显示 / 显示简介);tab 段额外多两项书签身份操作(重命名标签 /
+/// 移除此文件夹)。书签 ≠ 文件夹:刻意不含会真改磁盘的项(废纸篓/移动/压缩/分享),对齐 Finder
+/// 边栏收藏项的克制(导航+身份+查看)。
+///
+/// 用 NSMenu 而非 SwiftUI .contextMenu:菜单展开必须驱动 AutoHideCoordinator 的 .contextMenu
+/// 抑制,否则菜单开着鼠标移出走廊瞬态面板会被收走(与文件右键同一根因)。
 @MainActor
-final class TabContextMenuPresenter: NSObject, NSMenuDelegate {
+final class PathContextMenu: NSObject, NSMenuDelegate {
     private let autoHide: AutoHideCoordinator
+    private let onCopyPath: ([URL]) -> Void
+    private let onReveal: ([URL]) -> Void
+    private let onShowInfo: ([URL]) -> Void
+    private let onRenameTab: (FolderBinding.ID) -> Void
     private let onRemove: (FolderBinding.ID) -> Void
-    /// 当前菜单作用的绑定(makeMenu 时记下,action 派发时读)。
+    /// 当前菜单作用的目标(makeMenu 时记下,action 派发时读)。tab 段两者皆有;面包屑段仅 url。
+    private var pendingURL: URL?
     private var pendingID: FolderBinding.ID?
 
-    init(autoHide: AutoHideCoordinator, onRemove: @escaping (FolderBinding.ID) -> Void) {
+    init(autoHide: AutoHideCoordinator,
+         onCopyPath: @escaping ([URL]) -> Void,
+         onReveal: @escaping ([URL]) -> Void,
+         onShowInfo: @escaping ([URL]) -> Void,
+         onRenameTab: @escaping (FolderBinding.ID) -> Void,
+         onRemove: @escaping (FolderBinding.ID) -> Void) {
         self.autoHide = autoHide
+        self.onCopyPath = onCopyPath
+        self.onReveal = onReveal
+        self.onShowInfo = onShowInfo
+        self.onRenameTab = onRenameTab
         self.onRemove = onRemove
     }
 
-    func makeMenu(for id: FolderBinding.ID) -> NSMenu {
+    /// tab(根段)菜单:文件夹引用操作 + 书签身份操作。
+    func makeTabMenu(id: FolderBinding.ID, url: URL) -> NSMenu {
+        pendingURL = url
         pendingID = id
         let menu = NSMenu()
-        let remove = NSMenuItem(title: "移除此文件夹", action: #selector(doRemove), keyEquivalent: "")
-        remove.target = self
-        menu.addItem(remove)
+        appendFolderRefItems(menu)
+        menu.addItem(.separator())
+        add(menu, "重命名标签…", #selector(doRenameTab), symbol: "pencil")
+        add(menu, "移除此文件夹", #selector(doRemove), symbol: "minus.circle")
         menu.delegate = self
         return menu
+    }
+
+    /// 面包屑(子级段)菜单:仅文件夹引用操作(无书签身份操作 —— 它不是书签)。
+    func makeSegmentMenu(url: URL) -> NSMenu {
+        pendingURL = url
+        pendingID = nil
+        let menu = NSMenu()
+        appendFolderRefItems(menu)
+        menu.delegate = self
+        return menu
+    }
+
+    /// 脊柱任意段共用的三项文件夹引用操作。
+    private func appendFolderRefItems(_ menu: NSMenu) {
+        add(menu, "在 Finder 中显示", #selector(doReveal), symbol: "folder")
+        add(menu, "复制路径", #selector(doCopyPath), symbol: "doc.on.clipboard")
+        add(menu, "显示简介", #selector(doShowInfo), symbol: "info.circle")
+    }
+
+    private func add(_ menu: NSMenu, _ title: String, _ action: Selector, symbol: String) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        menu.addItem(item)
     }
 
     func menuWillOpen(_ menu: NSMenu) { autoHide.begin(.contextMenu) }
     func menuDidClose(_ menu: NSMenu) { autoHide.end(.contextMenu) }
 
-    @objc private func doRemove() {
-        if let id = pendingID { onRemove(id) }
-        pendingID = nil
-    }
+    @objc private func doCopyPath() { if let url = pendingURL { onCopyPath([url]) } }
+    @objc private func doReveal() { if let url = pendingURL { onReveal([url]) } }
+    @objc private func doShowInfo() { if let url = pendingURL { onShowInfo([url]) } }
+    @objc private func doRenameTab() { if let id = pendingID { onRenameTab(id) } }
+    @objc private func doRemove() { if let id = pendingID { onRemove(id) } }
 }
 
 /// 把宿主 NSView 暴露给 SwiftUI 按钮做菜单锚点(类引用盒,makeNSView 里赋值不触发

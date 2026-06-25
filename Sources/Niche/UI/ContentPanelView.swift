@@ -17,6 +17,8 @@ struct ContentPanelView: View {
             HStack(spacing: edge.itemSpacing) {
                 FolderTabsView(model: model, edge: edge,
                                onAddMenu: actions.onAddMenu, onTabMenu: actions.onTabMenu,
+                               onRenameTabCommit: actions.onRenameTabCommit,
+                               onPathSegmentMenu: actions.onPathSegmentMenu,
                                onPinTemporary: actions.onPinTemporary,
                                onMoveTab: actions.onMoveTab,
                                onDropFolders: actions.onDropFolders)
@@ -51,7 +53,8 @@ struct ContentPanelView: View {
                 components: mirror.breadcrumb,
                 edge: edge,
                 onUp: { model.currentMirror?.goUp(); model.clearSelection() },
-                onSelect: { url in model.currentMirror?.enter(url); model.clearSelection() }
+                onSelect: { url in model.currentMirror?.enter(url); model.clearSelection() },
+                onSegmentMenu: actions.onPathSegmentMenu
             )
         }
     }

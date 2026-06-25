@@ -37,8 +37,14 @@ final class NicheController {
         onChooseFolder: { [weak self] in self?.addFolder() },
         onGoToPath: { [weak self] in self?.model.beginPathInput() }
     )
-    private lazy var tabMenu = TabContextMenuPresenter(
+    /// 「路径脊柱」右键菜单(tab 根段 + 面包屑子级段共用):复制路径 / 在 Finder 中显示 / 显示简介,
+    /// tab 段另加重命名标签 / 移除。见 FolderTabMenus.swift。
+    private lazy var pathMenu = PathContextMenu(
         autoHide: autoHide,
+        onCopyPath: { [weak self] urls in self?.ops.copyPaths(urls) },
+        onReveal: { [weak self] urls in self?.ops.revealInFinder(urls) },
+        onShowInfo: { [weak self] urls in self?.showGetInfo(urls) },
+        onRenameTab: { [weak self] id in self?.model.beginRenameTab(id) },
         onRemove: { [weak self] id in self?.removeFolder(id) }
     )
     /// 底栏排序菜单(NSMenu+抑制),见 SortMenuPresenter.swift。
@@ -49,7 +55,14 @@ final class NicheController {
         onTogglePin: { [weak self] in self?.togglePin() },
         onAddFolder: { [weak self] in self?.addFolder() },
         onAddMenu: { [weak self] anchor in self?.addMenu.present(from: anchor) },
-        onTabMenu: { [weak self] id in self?.tabMenu.makeMenu(for: id) },
+        onTabMenu: { [weak self] id in
+            guard let self,
+                  let url = self.model.mirrors.first(where: { $0.binding.id == id })?.rootURL
+            else { return nil }
+            return self.pathMenu.makeTabMenu(id: id, url: url)
+        },
+        onRenameTabCommit: { [weak self] id, newName in self?.renameTab(id, to: newName) },
+        onPathSegmentMenu: { [weak self] url in self?.pathMenu.makeSegmentMenu(url: url) },
         onSortMenu: { [weak self] anchor in self?.sortMenu.present(from: anchor) },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in self?.quickLook.preview(urls: urls, at: index) },
@@ -103,6 +116,7 @@ final class NicheController {
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
+    private var renameTabCancellable: AnyCancellable?
     private var pathInputCancellable: AnyCancellable?
     private var renameSweepCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
@@ -253,6 +267,17 @@ final class NicheController {
                 guard let self else { return }
                 if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
             }
+        // tab 标签就地改名同走 .renaming 抑制(引用计数,与文件改名各自平衡配对):编辑标签时
+        // 鼠标移出走廊不该把面板抽走。收口在 hideTransient(防抑制源泄漏,面板永不收的老坑)。
+        // 映射成 bool 活跃态再去重:改名中右键另一 tab 改名时 renamingTabID 可能 A→B 不经 nil,
+        // 直接对 id 去重会多走一次 begin 而只 end 一次,泄漏抑制(Codex review)。
+        renameTabCancellable = model.$renamingTabID
+            .map { $0 != nil }
+            .removeDuplicates()
+            .sink { [weak self] active in
+                guard let self else { return }
+                if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+            }
         // 重命名残留清扫:编辑期间条目被外部删除/改名(FSEvents 重扫后 id 消失),重命名框随
         // cell 一起卸载但 renamingItemID 还在 → .renaming 抑制源泄漏,面板永不自动收回。
         // 条目不在当前列表即结束重命名(endRename 触发上方 sink 解除抑制)。
@@ -318,6 +343,7 @@ final class NicheController {
         quickLook.cancelPendingPreview()   // 收面板即作废"下载中未呈现"的预览(防迟到弹出)
         model.endPathInput()               // 路径条随面板收口,否则 .pathInput 抑制源跨次泄漏
         model.invalidatePendingRename()    // 作废在途的慢速单击延迟重命名,防收起后回调泄漏 .renaming 抑制
+        model.endRenameTab()               // tab 标签改名进行中被强关 → 收口,防 .renaming 抑制源跨次泄漏
         autoHide.end(.iconSizeSlider)      // 拖滑块中途被强关 → onEditingChanged(false) 不触发,在此收口
                                            // 防 .iconSizeSlider 跨次泄漏(end 对未配对调用幂等);松手再 end 也短路
         panelController.hide()
@@ -677,6 +703,19 @@ final class NicheController {
 
     private func removeFolder(_ id: FolderBinding.ID) {
         environment.bindingStore.remove(id: id)
+    }
+
+    /// 提交 tab 标签改名(改 displayName 书签别名,不碰磁盘)。空名/未变视为取消。
+    /// 走 BindingStore.update → $bindings 订阅统一重建(与 moveTab 同款),pendingSelectBindingID
+    /// 保住当前选中的 tab(改名非当前 tab 时不跳走)。
+    private func renameTab(_ id: FolderBinding.ID, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              var binding = environment.bindingStore.bindings.first(where: { $0.id == id }),
+              trimmed != binding.displayName else { return }
+        binding.displayName = trimmed
+        pendingSelectBindingID = model.currentMirror?.binding.id
+        environment.bindingStore.update(binding)
     }
 
     private var pendingSelectBindingID: FolderBinding.ID?

@@ -9,8 +9,12 @@ struct PanelActions {
     var onAddFolder: () -> Void = {}
     /// tab 栏「+」:弹添加菜单(选择文件夹 / 前往路径),非直开 NSOpenPanel;锚定按钮下方。
     var onAddMenu: (_ anchor: NSView?) -> Void = { _ in }
-    /// tab 右键:构建带抑制的 NSMenu(移除此文件夹);nil 不弹。
+    /// tab 右键:构建带抑制的 NSMenu(复制路径 / 在 Finder 中显示 / 显示简介 / 重命名标签 / 移除);nil 不弹。
     var onTabMenu: (_ id: FolderBinding.ID) -> NSMenu? = { _ in nil }
+    /// tab 标签就地改名提交(改 displayName 书签别名):空名视为取消,不写入。
+    var onRenameTabCommit: (_ id: FolderBinding.ID, _ newName: String) -> Void = { _, _ in }
+    /// 面包屑某段右键:对该祖先目录构建文件夹引用菜单(复制路径 / 在 Finder 中显示 / 显示简介);nil 不弹。
+    var onPathSegmentMenu: (_ url: URL) -> NSMenu? = { _ in nil }
     /// 底栏排序按钮:弹排序菜单(NSMenu+抑制,锚定按钮下方);不用 SwiftUI Menu(会抢焦点收面板)。
     var onSortMenu: (_ anchor: NSView?) -> Void = { _ in }
     var onRemoveFolder: (FolderBinding.ID) -> Void = { _ in }

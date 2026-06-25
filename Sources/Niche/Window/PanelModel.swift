@@ -56,6 +56,8 @@ final class PanelModel: ObservableObject {
     }
     /// 正在就地重命名的条目(spec §4.5 就地编辑 UI;§4.6 .renaming 抑制隐藏)。
     @Published var renamingItemID: FileItem.ID?
+    /// 正在就地重命名「标签」的 tab(改 displayName 书签别名,不碰磁盘;与文件重命名同走 .renaming 抑制)。
+    @Published var renamingTabID: FolderBinding.ID?
     /// 正在按需下载(dataless 双击打开)的条目:cell 显 spinner,不把未下载 URL 直接丢系统(#13)。
     @Published private(set) var downloadingIDs: Set<FileItem.ID> = []
 
@@ -176,6 +178,12 @@ final class PanelModel: ObservableObject {
             currentTab = min(currentTab, max(0, mirrors.count - 1))
         }
         subscribeToCurrent()
+        // 改名中的 tab 若已被删(Settings 删除等)→ 收口:其 rename field 随 tab 消失,
+        // onEndEditing/endRenameTab 不再触发,.renaming 抑制源会残留(面板永不自动收的老坑,Codex review)。
+        if let id = renamingTabID,
+           !mirrors.contains(where: { !$0.isTemporary && $0.binding.id == id }) {
+            endRenameTab()
+        }
         // 不在此 arm:rebuild 可能发生在启动期,arm 会列目录触发 TCC,违反"权限按需触发、
         // 不启动弹"(spec §4.1.1)。arm 由调用方(面板可见时)或 selectTab/present 驱动。
     }
@@ -312,6 +320,10 @@ final class PanelModel: ObservableObject {
 
     func beginRename(_ url: URL) { renamingItemID = url }
     func endRename() { renamingItemID = nil }
+
+    /// tab 标签就地改名(右键「重命名标签…」触发);提交/取消/失焦后 endRenameTab 收口。
+    func beginRenameTab(_ id: FolderBinding.ID) { renamingTabID = id }
+    func endRenameTab() { renamingTabID = nil }
 
     /// 慢速单击"待触发重命名"的代次:面板收起时自增(NicheController.hideTransient),使在途的延迟
     /// 重命名回调(图标模式 Timer / 列表模式 DispatchWorkItem)失效 —— 回调触发前比对捕获的代次,
