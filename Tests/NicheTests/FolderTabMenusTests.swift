@@ -27,19 +27,51 @@ final class FolderTabMenusTests: XCTestCase {
         XCTAssertTrue(wentToPath)
     }
 
-    func testTabMenuRemovesCorrectBinding() {
-        var removed: FolderBinding.ID?
+    /// tab(根段)菜单:文件夹引用三项 + 分隔 + 书签身份两项;各动作派发正确载荷。
+    func testTabMenuStructureAndDispatch() {
         let binding = FolderBinding(path: "/tmp")
-        let presenter = TabContextMenuPresenter(
+        let url = URL(fileURLWithPath: "/tmp")
+        var copied: [URL]?, revealed: [URL]?, info: [URL]?
+        var renamed: FolderBinding.ID?, removed: FolderBinding.ID?
+        let presenter = PathContextMenu(
             autoHide: AutoHideCoordinator(),
+            onCopyPath: { copied = $0 },
+            onReveal: { revealed = $0 },
+            onShowInfo: { info = $0 },
+            onRenameTab: { renamed = $0 },
             onRemove: { removed = $0 }
         )
-        let menu = presenter.makeMenu(for: binding.id)
+        let menu = presenter.makeTabMenu(id: binding.id, url: url)
 
-        XCTAssertEqual(menu.items.map(\.title), ["移除此文件夹"])
-        let item = menu.items[0]
-        _ = item.target.map { NSApp.sendAction(item.action!, to: $0, from: item) }
+        XCTAssertEqual(menu.items.map(\.title),
+                       ["在 Finder 中显示", "复制路径", "显示简介", "", "重命名标签…", "移除此文件夹"])
+        dispatchAll(menu)
+        XCTAssertEqual(revealed, [url])
+        XCTAssertEqual(copied, [url])
+        XCTAssertEqual(info, [url])
+        XCTAssertEqual(renamed, binding.id)
         XCTAssertEqual(removed, binding.id)
+    }
+
+    /// 面包屑(子级段)菜单:仅文件夹引用三项,无书签身份操作(它不是书签)。
+    func testSegmentMenuHasOnlyFolderRefItems() {
+        let url = URL(fileURLWithPath: "/tmp/sub")
+        var copied: [URL]?, revealed: [URL]?, info: [URL]?
+        let presenter = PathContextMenu(
+            autoHide: AutoHideCoordinator(),
+            onCopyPath: { copied = $0 },
+            onReveal: { revealed = $0 },
+            onShowInfo: { info = $0 },
+            onRenameTab: { _ in XCTFail("段菜单不应含「重命名标签」") },
+            onRemove: { _ in XCTFail("段菜单不应含「移除此文件夹」") }
+        )
+        let menu = presenter.makeSegmentMenu(url: url)
+
+        XCTAssertEqual(menu.items.map(\.title), ["在 Finder 中显示", "复制路径", "显示简介"])
+        dispatchAll(menu)
+        XCTAssertEqual(revealed, [url])
+        XCTAssertEqual(copied, [url])
+        XCTAssertEqual(info, [url])
     }
 
     /// 关菜单解除抑制 → 补隐推迟一拍兑现(菜单开着移出走廊不收,关了才收)。
@@ -93,6 +125,14 @@ final class FolderTabMenusTests: XCTestCase {
         XCTAssertEqual(hideCount, 1)
         drainMainQueue()
         XCTAssertEqual(hideCount, 1)         // 排队块短路,不双发
+    }
+
+    /// 派发菜单里所有非分隔项的 action(分隔项 action==nil 自动跳过)。target 是 weak,
+    /// 故调用方须自留 presenter 强引用,否则 target 已释放、sendAction 静默无效。
+    private func dispatchAll(_ menu: NSMenu) {
+        for item in menu.items where item.action != nil {
+            _ = item.target.map { NSApp.sendAction(item.action!, to: $0, from: item) }
+        }
     }
 
     private func drainMainQueue() {

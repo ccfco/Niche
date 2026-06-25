@@ -261,11 +261,15 @@ final class NicheController {
             }
 
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
+        // 映射成 bool 活跃态再去重(与下方 tab 改名同款):图标模式下"改名 A 时右键另一条目选重命名"
+        // 会让 renamingItemID 直接 A→B 不经 nil(RightClickCatcher 只建菜单、不 resign 旧框),
+        // 按 raw id 去重会多走一次 begin 而只 end 一次 → .renaming 计数器卡 ≥1、面板永不自动收(老坑)。
         renameCancellable = model.$renamingItemID
+            .map { $0 != nil }
             .removeDuplicates()
-            .sink { [weak self] id in
+            .sink { [weak self] active in
                 guard let self else { return }
-                if id != nil { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+                if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
             }
         // tab 标签就地改名同走 .renaming 抑制(引用计数,与文件改名各自平衡配对):编辑标签时
         // 鼠标移出走廊不该把面板抽走。收口在 hideTransient(防抑制源泄漏,面板永不收的老坑)。

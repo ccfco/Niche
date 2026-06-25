@@ -38,15 +38,20 @@ struct BreadcrumbBar: View {
     }
 
     private func segment(name: String, url: URL, isLast: Bool) -> some View {
-        Button { onSelect(url) } label: {
-            Text(name)
-                .font(.caption)
-                .lineLimit(1)
-                .foregroundStyle(isLast ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        // 末段(当前目录)= 纯标签而非 Button:左键天然不可点、无障碍不报"可激活按钮"。不用
+        // `.disabled(isLast)` 抑制一个 Button —— `.disabled` 会把 isEnabled=false 传导给随后的
+        // `.overlay`,可能让 RightClickCatcher 静默收不到右键(末段右键就废了);用结构分叉根治。
+        Group {
+            if isLast {
+                Text(name).foregroundStyle(.primary)
+            } else {
+                Button { onSelect(url) } label: { Text(name).foregroundStyle(.secondary) }
+                    .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(isLast)   // 当前目录不可点(已在此)
-        // 右键:文件夹引用操作(末段不可左键点但可右键,路径脊柱任意段一致)。
+        .font(.caption)
+        .lineLimit(1)
+        // 右键:文件夹引用操作(路径脊柱任意段一致,末段亦可右键;overlay 在 disabled 语义之外)。
         .overlay(RightClickCatcher { _ in onSegmentMenu(url) })
         .help(name)
         .accessibilityLabel(isLast ? "当前目录 \(name)" : "跳转到 \(name)")
