@@ -23,9 +23,14 @@ struct RenameTextField: NSViewRepresentable {
     var multiline: Bool = false
     /// 多行态圆角(borderless 自绘):由宿主传入与格子同心的半径。
     var cornerRadius: CGFloat = 6
+    /// 初始选区策略:`true` 选中文件名主干(去最后扩展名,Finder 文件改名语义);`false` 全选。
+    /// tab 标签改的是书签别名,无扩展名概念,须传 `false` 全选 —— 否则 `v2.0`/`备份.2024` 这类
+    /// 含点别名会被误当扩展名只选前缀。
+    var selectsStem: Bool = true
 
     func makeNSView(context: Context) -> FocusingTextField {
         let field = FocusingTextField(string: initialName)
+        field.selectsStem = selectsStem
         field.delegate = context.coordinator
         field.font = .preferredFont(forTextStyle: .caption1)   // 对齐展示态 .font(.caption)
         field.controlSize = .small
@@ -119,17 +124,19 @@ struct RenameTextField: NSViewRepresentable {
     }
 }
 
-/// 挂上 window 即夺焦并选中文件名主干(Finder 语义)。
+/// 挂上 window 即夺焦并按 `selectsStem` 选区(文件名选主干 / tab 别名全选,Finder 语义)。
 /// 用 `viewDidMoveToWindow`(挂上 window 必然回调)而非单次 async hop——后者在 LazyVGrid 里
 /// view 尚未挂上 window 时会永久错过聚焦(Codex review)。一次性,避免后续 layout pass 重复选区。
 final class FocusingTextField: NSTextField {
+    /// 见 RenameTextField.selectsStem:true=选主干(文件名),false=全选(tab 别名)。
+    var selectsStem = true
     private var didApplyInitialFocus = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window, !didApplyInitialFocus else { return }
         didApplyInitialFocus = true
-        focusAndSelectStem(in: window)
+        focusAndSelectInitial(in: window)
         // 兜底(#2):Tab 跳邻项时,旧框拆除(resign first responder)与本框夺焦发生在同一次
         // SwiftUI 更新里,顺序不定 —— 旧框后拆会把本框刚夺到的焦点清空,导致光标不进新改名框。
         // 下一拍若本框仍挂在窗口、且当前没有任何输入框持有焦点,则补夺一次(不抢另一个已激活
@@ -137,13 +144,15 @@ final class FocusingTextField: NSTextField {
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window,
                   !(window.firstResponder is NSText) else { return }
-            self.focusAndSelectStem(in: window)
+            self.focusAndSelectInitial(in: window)
         }
     }
 
-    private func focusAndSelectStem(in window: NSWindow) {
+    private func focusAndSelectInitial(in window: NSWindow) {
         window.makeFirstResponder(self)
-        currentEditor()?.selectedRange = RenameSelection.stemRange(for: stringValue)
+        currentEditor()?.selectedRange = selectsStem
+            ? RenameSelection.stemRange(for: stringValue)
+            : NSRange(location: 0, length: (stringValue as NSString).length)
     }
 }
 

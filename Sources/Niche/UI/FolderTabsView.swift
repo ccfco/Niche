@@ -155,9 +155,13 @@ struct FolderTabsView: View {
                 guard model.renamingTabID == id else { return }
                 onRenameTabCommit(id, name)
                 model.endRenameTab()
-            }
+            },
+            // tab 改的是书签别名(非文件名),无扩展名概念 → 全选,否则 `v2.0` 这类含点别名误选前缀。
+            selectsStem: false
         )
-        .frame(width: 120)
+        // minWidth..maxWidth 而非定宽:短名给足 120 编辑空间,长别名按内容撑开;封顶 280 防病态长名把
+        // 单行框撑过视口 —— tab 栏是横向 ScrollView 不跟随 NSTextField 光标,无封顶则光标会滚出可视区。
+        .frame(minWidth: 120, maxWidth: 280)
         .padding(.vertical, 1)
     }
 
