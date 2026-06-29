@@ -55,7 +55,7 @@ final class BindingStore: ObservableObject {
 
     func remove(id: FolderBinding.ID) {
         bindings.removeAll { $0.id == id }
-        DirectoryMirror.clearLastPath(for: id)   // 防 per-binding 下钻位置 key 泄漏
+        DirectoryMirror.clearLastPath(for: id, defaults: defaults)   // 防 per-binding 下钻位置 key 泄漏(同后端才清得到)
         persist()
     }
 

@@ -40,6 +40,9 @@ final class DirectoryMirror: ObservableObject {
     /// 临时 tab(路径输入「前往」根外目录):不入 BindingStore、不持久化,单槽替换;
     /// 其余能力(文件操作/TCC/FSEvents/iCloud)与正式 tab 完全等价。
     let isTemporary: Bool
+    /// 下钻位置持久化的存储后端(默认 .standard;测试注入独立 suite,不污染真实偏好)。
+    /// 对齐 BindingStore 的 init(defaults:) 范式 —— 二者须用同一后端,clearLastPath 才能清到对的键。
+    private let defaults: UserDefaults
     /// 绑定根目录(bookmark 解析所得,不随下钻变化)。
     private(set) var rootURL: URL
     /// 当前展示的目录(spec §4.7 ⌘↓ 进子目录 / ⌘↑ 回上级;下钻不越过 rootURL)。
@@ -83,16 +86,18 @@ final class DirectoryMirror: ObservableObject {
     /// FSEvents 流是否成功建立(失败 → 无实时同步,需手动 refresh)。
     private(set) var isWatching = false
 
-    init(binding: FolderBinding, showHidden: Bool, isTemporary: Bool = false) {
+    init(binding: FolderBinding, showHidden: Bool, isTemporary: Bool = false,
+         defaults: UserDefaults = .standard) {
         self.binding = binding
         self.showHidden = showHidden
         self.isTemporary = isTemporary
+        self.defaults = defaults
         let root = Self.resolve(binding) ?? binding.url
         self.rootURL = root
         // 恢复上次下钻位置(per-binding,§4.7 肌肉记忆:每个书签记自己的常驻深度)。启动期**只做不碰
         // 磁盘的纯路径前缀校验**,实际存在性留给 armAttempt 的 stat —— 不在 init 列目录/探针,守住
         // "权限按需触发、不启动弹"(§4.1.1)。临时 tab 不持久化。
-        self.currentDirectory = Self.restoredDirectory(root: root, bindingID: binding.id, isTemporary: isTemporary)
+        self.currentDirectory = Self.restoredDirectory(root: root, bindingID: binding.id, isTemporary: isTemporary, defaults: defaults)
         icloud.onStatusChange = { [weak self] map in self?.applyDatalessOverride(map) }
     }
 
@@ -440,9 +445,10 @@ final class DirectoryMirror: ObservableObject {
     /// 允许根内软链就地下钻到根外真实目标(见 enter 注释,Finder 双击软链进入语义)——持久化须忠实
     /// 复刻该合法状态,否则上次能进、重启却恢复不了,前后行为不一致。能绕过此处写穿根外的唯一额外
     /// 途径是篡改 UserDefaults plist,但 app 不沙盒、本就全盘访问,非有意义攻击面(Codex review)。
-    private static func restoredDirectory(root: URL, bindingID: FolderBinding.ID, isTemporary: Bool) -> URL {
+    private static func restoredDirectory(root: URL, bindingID: FolderBinding.ID, isTemporary: Bool,
+                                          defaults: UserDefaults) -> URL {
         guard !isTemporary,
-              let saved = UserDefaults.standard.string(forKey: lastPathKey(for: bindingID))
+              let saved = defaults.string(forKey: lastPathKey(for: bindingID))
         else { return root }
         let target = URL(fileURLWithPath: saved, isDirectory: true).standardizedFileURL
         // 与 enter/canGoUp/面包屑同源用「未解析软链」前缀:currentDirectory 始终由 root 追加得到。
@@ -450,19 +456,20 @@ final class DirectoryMirror: ObservableObject {
     }
 
     /// 清除某绑定的下钻位置(BindingStore.remove 调,防 UUID key 泄漏)。
-    static func clearLastPath(for id: FolderBinding.ID) {
-        UserDefaults.standard.removeObject(forKey: lastPathKey(for: id))
+    /// defaults 须与写入方(DirectoryMirror 实例)同后端,否则清不到键。
+    static func clearLastPath(for id: FolderBinding.ID, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: lastPathKey(for: id))
     }
 
     /// 持久化当前下钻位置(enter/goUp/rootChanged 后调)。临时 tab 不存。
     private func persistCurrentDirectory() {
         guard !isTemporary else { return }
-        UserDefaults.standard.set(currentDirectory.path, forKey: Self.lastPathKey(for: binding.id))
+        defaults.set(currentDirectory.path, forKey: Self.lastPathKey(for: binding.id))
     }
 
     /// 回退到绑定根(恢复的下钻子目录在 arm 时已失效):重置当前目录并清掉失效存储。
     private func fallBackToRoot() {
         currentDirectory = rootURL
-        Self.clearLastPath(for: binding.id)
+        Self.clearLastPath(for: binding.id, defaults: defaults)
     }
 }
