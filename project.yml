@@ -6,6 +6,13 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 
+packages:
+  # 自动更新框架。零 SPM 依赖红线的已批准例外（同 Clipin）：自研一键下载/EdDSA
+  # 验签/原子替换/重启需上千行且易错，属"无该依赖做不出该功能"。
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.9.0
+
 settings:
   base:
     ARCHS: arm64
@@ -29,6 +36,9 @@ targets:
     platform: macOS
     sources:
       - path: Sources/Niche
+    dependencies:
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.Niche

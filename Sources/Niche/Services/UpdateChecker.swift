@@ -84,9 +84,21 @@ final class UpdateChecker: ObservableObject {
         NSWorkspace.shared.open(latestRelease?.releasePageURL ?? releasesURL)
     }
 
-    func downloadLatest() {
-        let target = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesURL
-        NSWorkspace.shared.open(target)
+    /// Sparkle 安装闭包，由 AppDelegate.setupSparkle() 注入。
+    var installHandler: (() -> Void)?
+
+    /// 触发 Sparkle 一键安装。installHandler 为 nil 只意味着集成断裂（setupSparkle 没跑）——
+    /// fail-loud：os_log error + assertionFailure 暴露问题，仍打开下载页让用户不至于卡死
+    /// （已记日志 + 断言，不是静默吞异常）。
+    func installUpdate() {
+        guard let installHandler else {
+            Log.updates.error("installUpdate 调用但 installHandler 为 nil — Sparkle setup 缺失")
+            assertionFailure("installHandler 未注入；setupSparkle() 必须在启动时运行")
+            let target = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesURL
+            NSWorkspace.shared.open(target)
+            return
+        }
+        installHandler()
     }
 
     // MARK: - 内部
@@ -128,8 +140,11 @@ final class UpdateChecker: ObservableObject {
             let resp = try decoder.decode(GitHubReleaseResponse.self, from: data)
             let fetched = Date()
 
+            // compare 用纯数字分段；非数字 tag（1.0.0-beta）会被折叠成错误结果。
+            // 我们只发纯数字版本，遇非法 tag 直接忽略（log + 不提示），不静默误判。
             let remote = Self.normalized(resp.tagName)
-            if Self.compare(remote, Self.normalized(currentVersion)) == .orderedDescending {
+            if Self.isNumericVersion(remote),
+               Self.compare(remote, Self.normalized(currentVersion)) == .orderedDescending {
                 latestRelease = ReleaseInfo(
                     version: remote,
                     publishedAt: resp.publishedAt,
@@ -137,6 +152,9 @@ final class UpdateChecker: ObservableObject {
                     downloadURL: Self.downloadURL(from: resp.assets)
                 )
             } else {
+                if !Self.isNumericVersion(remote) {
+                    Log.updates.error("忽略非数字版本 tag: \(resp.tagName, privacy: .public)")
+                }
                 latestRelease = nil
             }
 
@@ -159,6 +177,14 @@ final class UpdateChecker: ObservableObject {
         var s = v.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.first?.lowercased() == "v" { s = String(s.dropFirst()) }
         return s
+    }
+
+    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc 等非数字段，
+    /// 避免 compare 把 1.0.0-beta 误折叠成 1.0.0。
+    private static func isNumericVersion(_ version: String) -> Bool {
+        !version.isEmpty && version.split(separator: ".").allSatisfy { segment in
+            !segment.isEmpty && segment.allSatisfy(\.isNumber)
+        }
     }
 
     private static func numericComponents(_ version: String) -> [Int] {

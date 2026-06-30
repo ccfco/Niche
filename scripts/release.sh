@@ -94,14 +94,24 @@ rm -f "$ZIP"
 ditto -c -k --keepParent "$BUILT" "$ZIP"
 echo "  → $ZIP  ($(du -sh "$ZIP" | cut -f1))"
 
-# ── tag + push ───────────────────────────────────────────────
-echo "▸ [5/6] 打 tag $TAG 并推送…"
+# ── appcast EdDSA 签名 ───────────────────────────────────────
+echo "▸ [5/7] 生成 appcast（EdDSA 签名）…"
+command -v generate_appcast >/dev/null 2>&1 || { echo "✘ 缺少 generate_appcast（Sparkle 工具），请装到 PATH" >&2; exit 1; }
+# generate_appcast 不收 --output，固定写 <dir>/appcast.xml；写完 cp 到仓库根供客户端拉取。
+# 私钥从本机 Keychain 读（与 Clipin 复用同一对 EdDSA 密钥），首次签名会弹 Keychain 授权。
+generate_appcast "$DIST" \
+    --download-url-prefix "https://github.com/ccfco/Niche/releases/download/$TAG/"
+cp "$DIST/appcast.xml" "$ROOT/appcast.xml"
+
+# ── 发布顺序（原子性红线，同 Clipin）─────────────────────────
+# appcast 一旦推到 main，已装客户端立刻拉到它指向的下载 URL；若资产还没上传 → 404，更新链断。
+# 顺序必须：tag + push 代码 → 建 release 传 zip → 验证资产可下载 → 最后才 push appcast。
+echo "▸ [6/7] 打 tag $TAG 并推送代码…"
 git tag "$TAG"
 git push origin main
 git push origin "$TAG"
 
-# ── GitHub release ───────────────────────────────────────────
-echo "▸ [6/6] 创建 GitHub release…"
+echo "▸ [7/7] 创建 GitHub release 并上传资产…"
 if [ -n "$NOTES_FILE" ]; then
     NOTES="$(cat "$NOTES_FILE")"
     echo "  notes 来源:$NOTES_FILE"
@@ -120,5 +130,26 @@ $NOTES
 NOTES
 )"
 
+echo "▸ 验证 release 资产可访问（appcast 即将指向的下载 URL）…"
+DOWNLOAD_URL="https://github.com/ccfco/Niche/releases/download/$TAG/${APP_NAME}.app.zip"
+ASSET_OK=""
+for i in 1 2 3 4 5; do
+    if curl -fsIL "$DOWNLOAD_URL" >/dev/null 2>&1; then
+        ASSET_OK=1; echo "  ✓ 资产可访问"; break
+    fi
+    echo "  资产暂不可访问，2s 后重试（$i/5）…"; sleep 2
+done
+if [ -z "$ASSET_OK" ]; then
+    echo "✘ release 资产 5 次探测仍不可访问，已中止——不推送 appcast，避免客户端拿到 404。" >&2
+    echo "  appcast 仍为发版前状态（客户端无害）。回滚：git push origin :$TAG && git tag -d $TAG && gh release delete $TAG --yes" >&2
+    exit 1
+fi
+
+echo "▸ 推送 appcast（资产已就位，此刻暴露才安全）…"
+git add appcast.xml
+git commit -m "chore: 更新 appcast $TAG（资产已确认可下载）"
+git push origin main
+
 echo "✔ 已发布 ${APP_NAME} ${TAG}"
 echo "   https://github.com/ccfco/Niche/releases/tag/${TAG}"
+echo "   appcast.xml 已推送，Sparkle 客户端将自动检测。"

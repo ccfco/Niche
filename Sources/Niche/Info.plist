@@ -41,5 +41,14 @@
 	<string>Niche 需要控制"访达"来为所选文件显示简介(调起访达原生的"显示简介"窗口)。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Niche. Open source under MIT.</string>
+	<!-- Sparkle 自动更新。检测由 UpdateChecker（GitHub API 轮询）负责，Sparkle 只做
+	     下载/EdDSA 验签/替换/重启，故关掉它自己的定时检查（SUEnableAutomaticChecks=false）。
+	     SUPublicEDKey 与 Clipin 复用同一对 EdDSA 密钥（同机同 Keychain），私钥永不轮换。 -->
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/ccfco/Niche/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>tan1/rD5UKDwTEXAxmI/CzX/XLRQeABtgCO0uZhmFi4=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 </dict>
 </plist>

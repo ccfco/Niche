@@ -166,12 +166,12 @@ struct AboutSettings: View {
                 LabeledContent("状态") { updateStatusView }
                 if let release = checker.latestRelease {
                     HStack(spacing: edge.itemSpacing) {
-                        Button("下载最新版…") { checker.downloadLatest() }
+                        Button("安装更新") { checker.installUpdate() }
                             .buttonStyle(NicheFooterGlassButtonStyle(compact: true))
                         Button("查看 Release") { checker.openReleasePage() }
                             .buttonStyle(.borderless)
                     }
-                    SettingsFootnote("Niche \(release.displayVersion) 已可用。")
+                    SettingsFootnote("Niche \(release.displayVersion) 已可安装（一键自动安装）。")
                 } else {
                     Button("立即检查") { checker.checkNow() }
                         .buttonStyle(NicheFooterGlassButtonStyle(compact: true))

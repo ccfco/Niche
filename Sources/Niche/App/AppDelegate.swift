@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 
 /// AppKit 侧入口:持有依赖容器、菜单栏图标控制器、触发热区与面板控制器,并重建主菜单。
 @MainActor
@@ -6,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let environment = AppEnvironment()
     private var menuBarController: MenuBarController?
     private var controller: NicheController?
+    /// Sparkle 更新器(安装层)。强持有,startingUpdater:true 在启动时拉起。
+    private var sparkleUpdater: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // LSUIElement app 默认就是 accessory;显式声明以防被其它配置改写。
@@ -15,12 +18,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = makeMainMenu()
         let controller = NicheController(environment: environment)
         self.controller = controller
+        // 先注入 Sparkle 安装闭包，再 start 检测层（start 5s 后才首检，顺序保险）。
+        setupSparkle()
         UpdateChecker.shared.start()
         menuBarController = MenuBarController(
             environment: environment,
             onToggle: { [weak controller] in controller?.toggle() },
             onOpenSettings: { [weak controller] in controller?.openSettings() }
         )
+    }
+
+    /// 装配 Sparkle：检测交给 UpdateChecker（GitHub API），Sparkle 只做安装器，
+    /// 故关掉它自己的定时检查；把「触发安装」闭包注入 UpdateChecker。
+    private func setupSparkle() {
+        let controller = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        controller.updater.automaticallyChecksForUpdates = false
+        sparkleUpdater = controller
+        UpdateChecker.shared.installHandler = { [weak self] in
+            self?.sparkleUpdater?.updater.checkForUpdates()
+        }
     }
 
     /// 最小主菜单:App(设置/退出)+ 编辑(标准选择子,target 留空走响应链)。

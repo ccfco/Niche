@@ -81,9 +81,9 @@ final class MenuBarController {
                 action: nil, keyEquivalent: ""
             )
             badge.isEnabled = false
-            let download = NSMenuItem(title: "下载最新版…", action: #selector(downloadUpdate), keyEquivalent: "")
-            download.target = self
-            menu.addItem(download)
+            let install = NSMenuItem(title: "安装更新", action: #selector(installUpdate), keyEquivalent: "")
+            install.target = self
+            menu.addItem(install)
             menu.addItem(.separator())
         }
 
@@ -104,7 +104,7 @@ final class MenuBarController {
         onOpenSettings()
     }
 
-    @objc private func downloadUpdate() {
-        UpdateChecker.shared.downloadLatest()
+    @objc private func installUpdate() {
+        UpdateChecker.shared.installUpdate()
     }
 }
