@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "%lld 个项目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld items"
+          }
+        }
+      }
+    },
     "Niche %@": {
       "localizations": {
         "en": {
@@ -31,12 +41,42 @@
         }
       }
     },
+    "Niche 设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niche Settings"
+          }
+        }
+      }
+    },
+    "iCloud 下载超时,请检查网络后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud download timed out. Please check your network and try again."
+          }
+        }
+      }
+    },
     "「%@」不存在或已被移动": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "\"%@\" doesn't exist or has been moved"
+          }
+        }
+      }
+    },
+    "「%@」可能已被系统或其他 App 占用,请换一个组合。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%@\" may already be in use by the system or another app. Please try a different combination."
           }
         }
       }
@@ -1021,6 +1061,16 @@
         }
       }
     },
+    "种类": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kind"
+          }
+        }
+      }
+    },
     "移到废纸篓": {
       "localizations": {
         "en": {
@@ -1207,6 +1257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finder failed to show Get Info"
+          }
+        }
+      }
+    },
+    "路径不存在": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Path Doesn’t Exist"
           }
         }
       }

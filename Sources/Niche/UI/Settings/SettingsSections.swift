@@ -207,7 +207,8 @@ struct AboutSettings: View {
             Label("检查失败", systemImage: "exclamationmark.circle")
                 .foregroundStyle(.secondary)
         } else if let last = checker.lastCheckedAt {
-            Text("已是最新（\(last.formatted(.relative(presentation: .named).locale(Locale(identifier: "zh_CN"))))）")
+            // 跟随系统当前语言格式化相对时间(此前写死 zh_CN,英文系统下这句仍会显示中文)。
+            Text("已是最新（\(last.formatted(.relative(presentation: .named)))）")
                 .foregroundStyle(.secondary)
         } else {
             Text("尚未检查").foregroundStyle(.secondary)

@@ -9,7 +9,7 @@ import Carbon.HIToolbox
 struct HotkeyRegistrationError: LocalizedError {
     let display: String
     var errorDescription: String? {
-        "「\(display)」可能已被系统或其他 App 占用,请换一个组合。"
+        String(localized: "「\(display)」可能已被系统或其他 App 占用,请换一个组合。")
     }
 }
 

@@ -78,7 +78,7 @@ final class ICloudStatus {
     /// 用户没取消任何东西,看不懂哪里出了问题)。
     enum DownloadError: LocalizedError {
         case timeout
-        var errorDescription: String? { "iCloud 下载超时,请检查网络后重试。" }
+        var errorDescription: String? { String(localized: "iCloud 下载超时,请检查网络后重试。") }
     }
 
     /// 显式请求下载一个占位文件,轮询到可用(spec §4.1.2:等可用后再把 URL 交给 QLPreviewPanel)。

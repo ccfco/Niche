@@ -52,7 +52,7 @@ final class SettingsWindowController {
             backing: .buffered, defer: false
         )
         w.contentView = glass
-        w.title = "Niche 设置"
+        w.title = String(localized: "Niche 设置")
         w.titleVisibility = .hidden            // 隐藏标题文字,红绿灯仍保留、浮在玻璃左上
         w.titlebarAppearsTransparent = true    // 内容延伸进 titlebar,整窗才是一块连续玻璃
         w.isMovableByWindowBackground = true   // 无可见标题栏文字,允许直接拖玻璃移动窗口

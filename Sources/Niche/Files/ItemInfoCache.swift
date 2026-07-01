@@ -54,7 +54,7 @@ final class ItemInfoCache {
             guard let count = try? FileManager.default.contentsOfDirectory(
                 at: item.url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]).count
             else { return (nil, false) }
-            return ("\(count) 个项目", true)
+            return (String(localized: "\(count) 个项目"), true)
         }
         // 文件:优先 Spotlight 元数据(访达同源)—— 视频/音频显时长,图片显尺寸。
         // CFNumber 在 Swift 侧不保证桥成 Int/Double → 统一过 NSNumber 取值(浮点 CFNumber 也稳)。
