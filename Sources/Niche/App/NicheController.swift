@@ -113,6 +113,14 @@ final class NicheController {
         settingsWindow.show()
     }
 
+    /// 打开设置窗口并跳转「触发」分区(Onboarding「去设置」用)。
+    func openTriggerSettings() {
+        settingsWindow.show(section: .trigger)
+    }
+
+    /// Onboarding 用的触发方式描述,转发 triggerPrefs 的单一真相源(不重复维护)。
+    var onboardingTriggerDescription: String { triggerPrefs.onboardingTriggerDescription }
+
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?

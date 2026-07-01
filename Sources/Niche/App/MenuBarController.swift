@@ -9,13 +9,15 @@ final class MenuBarController {
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
     private let onOpenSettings: () -> Void
+    private let onShowOnboarding: () -> Void
     private var updateCancellable: AnyCancellable?
 
     init(environment: AppEnvironment, onToggle: @escaping () -> Void,
-         onOpenSettings: @escaping () -> Void) {
+         onOpenSettings: @escaping () -> Void, onShowOnboarding: @escaping () -> Void) {
         self.environment = environment
         self.onToggle = onToggle
         self.onOpenSettings = onOpenSettings
+        self.onShowOnboarding = onShowOnboarding
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureButton()
         statusItem.menu = makeMenu()
@@ -89,6 +91,8 @@ final class MenuBarController {
 
         let settings = menu.addItem(withTitle: String(localized: "设置…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
+        let onboarding = menu.addItem(withTitle: String(localized: "使用引导…"), action: #selector(showOnboarding), keyEquivalent: "")
+        onboarding.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: String(localized: "退出 Niche"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
@@ -102,6 +106,10 @@ final class MenuBarController {
     /// (点了没反应,控制台提示改用 SettingsLink),设置窗口已 AppKit 自管(SettingsWindowController)。
     @objc private func openSettings() {
         onOpenSettings()
+    }
+
+    @objc private func showOnboarding() {
+        onShowOnboarding()
     }
 
     @objc private func installUpdate() {

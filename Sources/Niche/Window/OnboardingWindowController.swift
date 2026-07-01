@@ -45,11 +45,15 @@ final class OnboardingWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         super.init(window: window)
 
-        window.contentView = NSHostingView(rootView: OnboardingView(
+        let host = NSHostingView(rootView: OnboardingView(
             triggerDescription: triggerDescription,
             onOpenTriggerSettings: onOpenTriggerSettings,
             onDismiss: { [weak self] in self?.close() }
         ))
+        window.contentView = host
+        // NSHostingView 不会自动把 .zero 起建的窗口撑到内容实际大小,须显式按 fittingSize
+        // 设窗口内容尺寸,否则窗口以 0x0 呈现(视觉上等同"没弹出",且极易被误判/意外关闭)。
+        window.setContentSize(host.fittingSize)
         window.center()
         window.delegate = self
     }

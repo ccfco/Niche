@@ -25,8 +25,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController(
             environment: environment,
             onToggle: { [weak controller] in controller?.toggle() },
-            onOpenSettings: { [weak controller] in controller?.openSettings() }
+            onOpenSettings: { [weak controller] in controller?.openSettings() },
+            onShowOnboarding: { [weak controller] in
+                guard let controller else { return }
+                OnboardingWindowController.show(
+                    triggerDescription: controller.onboardingTriggerDescription,
+                    onOpenTriggerSettings: { controller.openTriggerSettings() }
+                )
+            }
         )
+        if !OnboardingState.hasSeen {
+            OnboardingWindowController.show(
+                triggerDescription: controller.onboardingTriggerDescription,
+                onOpenTriggerSettings: { [weak controller] in controller?.openTriggerSettings() }
+            )
+        }
     }
 
     /// 装配 Sparkle：检测交给 UpdateChecker（GitHub API），Sparkle 只做安装器，
