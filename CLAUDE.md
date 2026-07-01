@@ -59,8 +59,9 @@
 - **列表(原生 `Table`)与图标(`LazyVGrid`)两模式行为必须等价**:选中(`Set<id>`+光标+锚点单一真相)/ 排序(`FileSortOrder` 单一真相,表头与底栏菜单共写)/ 右键(同款 `RightClickCatcher`→`ContextMenuBuilder`)/ 拖入拖出 / 键盘——给一模式加能力时另一模式同步,缺一即违反「原生正确性 > 功能数量」。
 
 ### 自动更新(Sparkle，双层架构同 Clipin)
-- **检测与安装必须分两层**：`UpdateChecker`（GitHub API 轮询）只做检测、驱动菜单栏小红点 + 设置页；Sparkle 只做下载/EdDSA 验签/替换/重启。`AppDelegate.setupSparkle()` 把「触发安装」闭包注入 `UpdateChecker.installHandler`，并置 Sparkle `automaticallyChecksForUpdates=false`，禁止两层都去轮询。
-- **发版必须走 `scripts/release.sh`，且 appcast 必须在 release 资产上传并验证可下载后才 push**：先 push appcast 会让已装客户端拿到指向不存在下载 URL 的 appcast（永久 404）。脚本顺序固定：构建→ad-hoc 签名→generate_appcast EdDSA 签名→tag→push 代码→建 release 传 zip→curl 验证资产→最后才 push appcast。
+- **检测与安装必须分两层**：`UpdateChecker`（轮询 `appcast.xml`）只做检测、驱动菜单栏小红点 + 设置页；Sparkle 只做下载/EdDSA 验签/替换/重启。`AppDelegate.setupSparkle()` 把「触发安装」闭包注入 `UpdateChecker.installHandler`，并置 Sparkle `automaticallyChecksForUpdates=false`，禁止两层都去轮询。
+- **`UpdateChecker` 检测源必须是 `appcast.xml`（`raw.githubusercontent.com`），禁止改回 `api.github.com`**：后者未认证限额 60 次/小时且按 IP 算，共享出口 IP 极易被其它流量打满，一旦打满检测层（含菜单栏红点、设置页、Sparkle 安装入口）全部瘫痪——实测踩过。appcast.xml 是静态 CDN 资源不受此限，且和 Sparkle 装的是同一份数据，不会有双源不一致。解析用 `AppcastParser`（`XMLParser` 委托，不开 `shouldProcessNamespaces`）：`didEndElement` 必须清空 `currentElement`，否则标签间的换行缩进会被 `foundCharacters` 当作仍在当前标签内、误追加进版本号（实测踩过：`"0.1.3\n            "`)。
+- **发版必须走 `scripts/release.sh`，且 appcast 必须在 release 资产上传并验证可下载后才 push**：先 push appcast 会让已装客户端拿到指向不存在下载 URL 的 appcast（永久 404）。脚本顺序固定：前置检查(工作树干净)→版本号写回并单独 commit→构建→ad-hoc 签名→generate_appcast EdDSA 签名→tag→push 代码→建 release 传 zip→`gh api` 查资产 state/size 就绪(非 curl HEAD)→curl 兜底验证可达→最后才 push appcast。
 - **Sparkle EdDSA 私钥与 Clipin 复用同一对（本机 Keychain）、公钥在 Info.plist `SUPublicEDKey`**：禁止 `generate_keys` 重新生成——换私钥会让所有已装客户端验签失败、更新链彻底断。签名弹的是本机 Keychain 密码（点「始终允许」免重复弹），终端用户验签只用公钥、永不需要密码。
 
 ## 设计原则(同 Clipin)

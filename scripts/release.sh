@@ -52,11 +52,6 @@ fi
 # ── 版本 ────────────────────────────────────────────────────
 if [ -n "$VER_ARG" ]; then
     VER="$VER_ARG"
-    # 写回 project.yml(MARKETING_VERSION)并单独提交,否则这次改动永远不进 tag 指向的 commit
-    sed -i '' "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"$VER\"/" project.yml
-    git add project.yml
-    git commit -m "chore: 版本号 bump 到 $VER"
-    echo "▸ 版本号更新为 $VER(已写回 project.yml 并提交)"
 else
     VER="$(grep 'MARKETING_VERSION' project.yml | head -1 \
         | sed -E 's/.*MARKETING_VERSION: *"([^"]+)".*/\1/')"
@@ -66,6 +61,19 @@ TAG="v$VER"
 if git rev-parse -q --verify "$TAG" >/dev/null 2>&1; then
     echo "✘ tag $TAG 已存在,如需重发请先 git tag -d $TAG" >&2; exit 1
 fi
+
+# CFBundleVersion(build number):Sparkle 判断"是否有更新"主要看它,不是 MARKETING_VERSION。
+# 这里以前从没被自动维护过(project.yml 写死一个值),导致所有版本 build number 相同,
+# Sparkle 永远判定"已是最新",更新链彻底失效(实测踩过)。用 git commit 数,天然单调递增,
+# 不像"去掉版本号的点"那样有编码陷阱(0.1.10 → 110 会大于 0.2.0 → 20,语义却相反)。
+BUILD_NUMBER="$(($(git rev-list --count HEAD) + 1))"
+sed -i '' \
+    -e "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"$VER\"/" \
+    -e "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" \
+    project.yml
+git add project.yml
+git commit -m "chore: 版本号 bump 到 $VER(build $BUILD_NUMBER)"
+echo "▸ 版本号 $VER / build $BUILD_NUMBER(已写回 project.yml 并提交)"
 
 # ── 构建 ─────────────────────────────────────────────────────
 echo "▸ [2/6] XcodeGen + Release 构建(arm64)…"

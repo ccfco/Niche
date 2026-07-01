@@ -2,7 +2,9 @@ import AppKit
 import Combine
 import Foundation
 
-/// GitHub Releases 轮询式更新检查(参照 Clipin UpdateReminderService)。
+/// appcast.xml 轮询式更新检查:检测源与 Sparkle 安装用的是同一份数据(raw.githubusercontent.com
+/// 静态 CDN),不打 api.github.com——后者未认证限额 60 次/小时且按 IP 算,共享出口 IP 上
+/// 极易被其它流量打满,一旦打满整个检测层(含菜单栏红点、设置页、Sparkle 安装入口)全部瘫痪。
 /// 启动后 5s 首次检查,之后每 6h 定时;12h 内不重复检查同一版本。
 /// 无浮层提示:菜单栏小红点 + 设置页「关于」区承载更新 UI。
 @MainActor
@@ -18,9 +20,8 @@ final class UpdateChecker: ObservableObject {
     let currentVersion: String
 
     private let defaults = UserDefaults.standard
-    private let decoder = JSONDecoder()
     private let session: URLSession
-    private let apiURL = URL(string: "https://api.github.com/repos/ccfco/Niche/releases/latest")!
+    private let appcastURL = URL(string: "https://raw.githubusercontent.com/ccfco/Niche/main/appcast.xml")!
     private let releasesURL = URL(string: "https://github.com/ccfco/Niche/releases/latest")!
     private var periodicCheckTimer: Timer?
     private var didStart = false
@@ -43,8 +44,6 @@ final class UpdateChecker: ObservableObject {
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         dismissedVersion = defaults.string(forKey: Keys.dismissedVersion)
-
-        decoder.dateDecodingStrategy = .iso8601
 
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
@@ -132,29 +131,38 @@ final class UpdateChecker: ObservableObject {
         }
 
         do {
-            var req = URLRequest(url: apiURL)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            var req = URLRequest(url: appcastURL)
             req.setValue("Niche/\(currentVersion)", forHTTPHeaderField: "User-Agent")
 
-            let (data, _) = try await session.data(for: req)
-            let resp = try decoder.decode(GitHubReleaseResponse.self, from: data)
+            let (data, response) = try await session.data(for: req)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
             let fetched = Date()
 
-            // compare 用纯数字分段；非数字 tag（1.0.0-beta）会被折叠成错误结果。
-            // 我们只发纯数字版本，遇非法 tag 直接忽略（log + 不提示），不静默误判。
-            let remote = Self.normalized(resp.tagName)
-            if Self.isNumericVersion(remote),
-               Self.compare(remote, Self.normalized(currentVersion)) == .orderedDescending {
+            let parser = AppcastParser()
+            let xmlParser = XMLParser(data: data)
+            xmlParser.delegate = parser
+            guard xmlParser.parse() else { throw URLError(.cannotParseResponse) }
+
+            // appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);
+            // 只数字版本参与比较,挑其中最大的一条——同 GitHub API 时代的非法 tag 防御逻辑。
+            let candidate = parser.items
+                .compactMap { item -> (version: String, downloadURL: URL, pubDate: Date?)? in
+                    guard let version = item.version, Self.isNumericVersion(version),
+                          let downloadURL = item.downloadURL else { return nil }
+                    return (version, downloadURL, item.pubDate)
+                }
+                .max { Self.compare($0.version, $1.version) == .orderedAscending }
+
+            if let candidate, Self.compare(candidate.version, Self.normalized(currentVersion)) == .orderedDescending {
                 latestRelease = ReleaseInfo(
-                    version: remote,
-                    publishedAt: resp.publishedAt,
-                    releasePageURL: resp.htmlURL,
-                    downloadURL: Self.downloadURL(from: resp.assets)
+                    version: candidate.version,
+                    publishedAt: candidate.pubDate,
+                    releasePageURL: URL(string: "https://github.com/ccfco/Niche/releases/tag/v\(candidate.version)")!,
+                    downloadURL: candidate.downloadURL
                 )
             } else {
-                if !Self.isNumericVersion(remote) {
-                    Log.updates.error("忽略非数字版本 tag: \(resp.tagName, privacy: .public)")
-                }
                 latestRelease = nil
             }
 
@@ -165,12 +173,6 @@ final class UpdateChecker: ObservableObject {
             Log.updates.error("更新检查失败: \(error.localizedDescription, privacy: .public)")
             didLastCheckFail = true
         }
-    }
-
-    private static func downloadURL(from assets: [GitHubReleaseAsset]) -> URL? {
-        let pairs = assets.map { ($0, $0.name.lowercased()) }
-        return pairs.first(where: { $0.1.hasSuffix(".dmg") })?.0.browserDownloadURL
-            ?? pairs.first(where: { $0.1.hasSuffix(".zip") })?.0.browserDownloadURL
     }
 
     private static func normalized(_ v: String) -> String {
@@ -212,27 +214,71 @@ struct ReleaseInfo: Equatable {
     var displayVersion: String { version.hasPrefix("v") ? version : "v\(version)" }
 }
 
-private struct GitHubReleaseResponse: Decodable {
-    let tagName: String
-    let htmlURL: URL
-    let publishedAt: Date?
-    let body: String
-    let assets: [GitHubReleaseAsset]
-
-    enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case htmlURL = "html_url"
-        case publishedAt = "published_at"
-        case body
-        case assets
+/// Sparkle appcast(标准 RSS + sparkle 命名空间)的最小化解析器,只取 UpdateChecker 需要的三个字段。
+/// 不用 shouldProcessNamespaces,elementName 直接拿到 "sparkle:shortVersionString" 这种限定名。
+private final class AppcastParser: NSObject, XMLParserDelegate {
+    struct Item {
+        var version: String?
+        var pubDate: Date?
+        var downloadURL: URL?
     }
-}
 
-private struct GitHubReleaseAsset: Decodable {
-    let name: String
-    let browserDownloadURL: URL
-    enum CodingKeys: String, CodingKey {
-        case name
-        case browserDownloadURL = "browser_download_url"
+    private(set) var items: [Item] = []
+    private var current: Item?
+    private var currentElement = ""
+    private var pubDateText = ""
+
+    func parser(
+        _ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
+        qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]
+    ) {
+        currentElement = elementName
+        switch elementName {
+        case "item":
+            current = Item()
+        case "enclosure":
+            if let urlString = attributeDict["url"] {
+                current?.downloadURL = URL(string: urlString)
+            }
+        default:
+            break
+        }
     }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        switch currentElement {
+        case "sparkle:shortVersionString":
+            let appended = (current?.version ?? "") + string
+            current?.version = appended
+        case "pubDate":
+            pubDateText += string
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if elementName == "pubDate" {
+            current?.pubDate = Self.rfc822Formatter.date(from: pubDateText.trimmingCharacters(in: .whitespacesAndNewlines))
+            pubDateText = ""
+        }
+        if elementName == "sparkle:shortVersionString" {
+            let trimmed = current?.version?.trimmingCharacters(in: .whitespacesAndNewlines)
+            current?.version = trimmed
+        }
+        if elementName == "item", let item = current {
+            items.append(item)
+            current = nil
+        }
+        // 结束标签后立刻清空,否则标签间的换行/缩进空白会被 foundCharacters 当作
+        // 仍在当前标签内、误追加进 version/pubDate(实测踩过:"0.1.3\n            ")。
+        currentElement = ""
+    }
+
+    private static let rfc822Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+        return formatter
+    }()
 }
