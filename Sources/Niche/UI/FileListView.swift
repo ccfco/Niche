@@ -224,7 +224,8 @@ struct FileListView: View {
     }
 
     private func kindLabel(_ item: FileItem) -> String {
-        item.contentType?.localizedDescription ?? (item.isDirectory ? "文件夹" : "文件")
+        item.contentType?.localizedDescription
+            ?? (item.isDirectory ? String(localized: "文件夹") : String(localized: "文件"))
     }
 
     /// 修改日期:短日期 + 短时间(随系统区域),distantPast(读取失败)显 "--"。

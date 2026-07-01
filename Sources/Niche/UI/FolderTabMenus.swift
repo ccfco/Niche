@@ -40,12 +40,12 @@ final class AddFolderMenuPresenter: NSObject, NSMenuDelegate {
     /// 菜单构建拆出来供测试断言(popUp 是模态追踪,测试里跑不了)。
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        let choose = NSMenuItem(title: "添加文件夹…", action: #selector(doChooseFolder), keyEquivalent: "")
+        let choose = NSMenuItem(title: String(localized: "添加文件夹…"), action: #selector(doChooseFolder), keyEquivalent: "")
         choose.target = self
         choose.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: nil)
         menu.addItem(choose)
         // keyEquivalent 只作 ⇧⌘G 的提示展示(菜单非主菜单不参与派发,快捷键本体在面板键盘权威)。
-        let go = NSMenuItem(title: "前往路径…", action: #selector(doGoToPath), keyEquivalent: "g")
+        let go = NSMenuItem(title: String(localized: "前往路径…"), action: #selector(doGoToPath), keyEquivalent: "g")
         go.keyEquivalentModifierMask = [.command, .shift]
         go.target = self
         go.image = NSImage(systemSymbolName: "arrow.turn.down.right", accessibilityDescription: nil)
@@ -101,8 +101,8 @@ final class PathContextMenu: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         appendFolderRefItems(menu)
         menu.addItem(.separator())
-        add(menu, "重命名标签…", #selector(doRenameTab), symbol: "pencil")
-        add(menu, "移除此文件夹", #selector(doRemove), symbol: "minus.circle")
+        add(menu, String(localized: "重命名标签…"), #selector(doRenameTab), symbol: "pencil")
+        add(menu, String(localized: "移除此文件夹"), #selector(doRemove), symbol: "minus.circle")
         menu.delegate = self
         return menu
     }
@@ -119,9 +119,9 @@ final class PathContextMenu: NSObject, NSMenuDelegate {
 
     /// 脊柱任意段共用的三项文件夹引用操作。
     private func appendFolderRefItems(_ menu: NSMenu) {
-        add(menu, "在 Finder 中显示", #selector(doReveal), symbol: "folder")
-        add(menu, "复制路径", #selector(doCopyPath), symbol: "doc.on.clipboard")
-        add(menu, "显示简介", #selector(doShowInfo), symbol: "info.circle")
+        add(menu, String(localized: "在 Finder 中显示"), #selector(doReveal), symbol: "folder")
+        add(menu, String(localized: "复制路径"), #selector(doCopyPath), symbol: "doc.on.clipboard")
+        add(menu, String(localized: "显示简介"), #selector(doShowInfo), symbol: "info.circle")
     }
 
     private func add(_ menu: NSMenu, _ title: String, _ action: Selector, symbol: String) {

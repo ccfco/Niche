@@ -41,7 +41,7 @@ struct PathInputBar: View {
         }
         .padding(.horizontal, edge.panelPadding)
         .padding(.vertical, edge.innerSpacing)
-        .accessibilityLabel("前往路径")
+        .accessibilityLabel(String(localized: "前往路径"))
     }
 }
 
@@ -67,7 +67,7 @@ private struct PathTextField: NSViewRepresentable {
         field.bezelStyle = .roundedBezel
         field.usesSingleLineMode = true
         field.lineBreakMode = .byTruncatingHead   // 长路径看尾部(当前所在),与 Finder 标题栏一致
-        field.placeholderString = "输入路径,如 /usr/local 或 ~/Downloads"
+        field.placeholderString = String(localized: "输入路径,如 /usr/local 或 ~/Downloads")
         return field
     }
 

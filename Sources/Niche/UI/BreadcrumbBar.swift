@@ -16,8 +16,8 @@ struct BreadcrumbBar: View {
         HStack(spacing: edge.innerSpacing) {
             Button(action: onUp) { Image(systemName: "chevron.up") }
                 .buttonStyle(NicheFooterGlassButtonStyle(compact: true))
-                .help("回上级目录")
-                .accessibilityLabel("回上级目录")
+                .help(String(localized: "回上级目录"))
+                .accessibilityLabel(String(localized: "回上级目录"))
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: edge.innerSpacing) {
@@ -54,6 +54,6 @@ struct BreadcrumbBar: View {
         // 右键:文件夹引用操作(路径脊柱任意段一致,末段亦可右键;overlay 在 disabled 语义之外)。
         .overlay(RightClickCatcher { _ in onSegmentMenu(url) })
         .help(name)
-        .accessibilityLabel(isLast ? "当前目录 \(name)" : "跳转到 \(name)")
+        .accessibilityLabel(isLast ? String(localized: "当前目录 \(name)") : String(localized: "跳转到 \(name)"))
     }
 }

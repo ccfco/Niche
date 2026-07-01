@@ -149,8 +149,8 @@ struct FileCellView: View {
 
     /// VoiceOver 读出的状态值:类型 +(iCloud 未下载时)占位提示。
     private var accessibilityValue: String {
-        var parts = [item.isDirectory ? "文件夹" : "文件"]
-        if item.isDataless { parts.append("未下载") }
+        var parts = [item.isDirectory ? String(localized: "文件夹") : String(localized: "文件")]
+        if item.isDataless { parts.append(String(localized: "未下载")) }
         return parts.joined(separator: ",")
     }
 

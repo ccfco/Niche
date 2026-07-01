@@ -50,7 +50,7 @@ final class SortMenuPresenter: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         // 默认混排(directoriesFirst=false,与访达一致);开则全部排序键下目录聚于最前。
-        menu.addItem(checkable("文件夹保持在最前",
+        menu.addItem(checkable(String(localized: "文件夹保持在最前"),
                                on: order.directoriesFirst,
                                action: #selector(toggleDirectoriesFirst),
                                represents: nil))
@@ -85,17 +85,17 @@ final class SortMenuPresenter: NSObject, NSMenuDelegate {
 
     private static func keyTitle(_ key: FileSortOrder.Key) -> String {
         switch key {
-        case .name: return "名称"
-        case .date: return "修改日期"
-        case .size: return "大小"
-        case .kind: return "类型"
+        case .name: return String(localized: "名称")
+        case .date: return String(localized: "修改日期")
+        case .size: return String(localized: "大小")
+        case .kind: return String(localized: "类型")
         }
     }
 
     private static func directionTitle(_ direction: FileSortOrder.Direction) -> String {
         switch direction {
-        case .ascending: return "升序"
-        case .descending: return "降序"
+        case .ascending: return String(localized: "升序")
+        case .descending: return String(localized: "降序")
         }
     }
 }

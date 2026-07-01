@@ -73,7 +73,7 @@ struct ContentPanelView: View {
         case .idle, .loading:
             EmptyStateView(kind: .loading)
         case .permissionDenied:
-            EmptyStateView(kind: .permissionDenied(model.currentMirror?.binding.displayName ?? "此文件夹"),
+            EmptyStateView(kind: .permissionDenied(model.currentMirror?.binding.displayName ?? String(localized: "此文件夹")),
                            onAuthorize: { model.currentMirror?.reauthorize() })
         case let .volumeUnmounted(name):
             // 明确「重试」按钮(复用 button 槽),不靠隐形整区可点(#12)。
@@ -82,11 +82,11 @@ struct ContentPanelView: View {
         case .missing:
             // 目录被删/移走 ≠ 权限被拒:误报 denied 会引导用户白授权(体检审计)。
             // 从废纸篓恢复后点「重试」即可;不再要可右键 tab 移除绑定。
-            EmptyStateView(kind: .missing(model.currentMirror?.binding.displayName ?? "此文件夹"),
+            EmptyStateView(kind: .missing(model.currentMirror?.binding.displayName ?? String(localized: "此文件夹")),
                            onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .accessFailed:
             // 非权限的列目录失败:暴露"无法读取"而非误导去授权,按钮走重列(retryIfPossible)。
-            EmptyStateView(kind: .accessFailed(model.currentMirror?.binding.displayName ?? "此文件夹"),
+            EmptyStateView(kind: .accessFailed(model.currentMirror?.binding.displayName ?? String(localized: "此文件夹")),
                            onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .ready:
             switch model.viewMode {
@@ -102,8 +102,10 @@ struct ContentPanelView: View {
         NicheSegmentedGlass(
             selection: Binding(get: { model.viewMode }, set: { model.viewMode = $0 }),
             segments: [
-                .init(value: .list, systemImage: "list.bullet", help: "列表视图", label: "列表视图"),
-                .init(value: .icon, systemImage: "square.grid.2x2", help: "图标视图", label: "图标视图"),
+                .init(value: .list, systemImage: "list.bullet",
+                      help: String(localized: "列表视图"), label: String(localized: "列表视图")),
+                .init(value: .icon, systemImage: "square.grid.2x2",
+                      help: String(localized: "图标视图"), label: String(localized: "图标视图")),
             ]
         )
     }

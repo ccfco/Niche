@@ -46,22 +46,22 @@ struct EmptyStateView: View {
 
     private var title: String {
         switch kind {
-        case .noFolders: return "还没有绑定文件夹"
-        case .empty: return "此文件夹为空"
-        case let .permissionDenied(name): return "无法访问「\(name)」"
-        case let .volumeUnmounted(name): return "卷「\(name)」已卸载"
-        case let .missing(name): return "「\(name)」不存在或已被移动"
-        case let .accessFailed(name): return "无法读取「\(name)」"
-        case .loading: return "载入中…"
+        case .noFolders: return String(localized: "还没有绑定文件夹")
+        case .empty: return String(localized: "此文件夹为空")
+        case let .permissionDenied(name): return String(localized: "无法访问「\(name)」")
+        case let .volumeUnmounted(name): return String(localized: "卷「\(name)」已卸载")
+        case let .missing(name): return String(localized: "「\(name)」不存在或已被移动")
+        case let .accessFailed(name): return String(localized: "无法读取「\(name)」")
+        case .loading: return String(localized: "载入中…")
         }
     }
 
     /// 主动作按钮文案(noFolders / permissionDenied / volumeUnmounted 各有可点按钮,不靠隐形整区)。
     private var buttonTitle: String? {
         switch kind {
-        case .noFolders: return "添加文件夹"
-        case .permissionDenied: return "点此授权并重试"
-        case .volumeUnmounted, .missing, .accessFailed: return "重试"
+        case .noFolders: return String(localized: "添加文件夹")
+        case .permissionDenied: return String(localized: "点此授权并重试")
+        case .volumeUnmounted, .missing, .accessFailed: return String(localized: "重试")
         case .empty, .loading: return nil
         }
     }

@@ -45,8 +45,8 @@ struct BottomBarView: View {
                 .frame(width: edge.base * 9)   // ~72pt 轨道,两端图标另算,不挤占底栏
             Image(systemName: "photo").font(.system(size: 12)).foregroundStyle(.secondary)
         }
-        .help("图标大小")
-        .accessibilityLabel("图标大小")
+        .help(String(localized: "图标大小"))
+        .accessibilityLabel(String(localized: "图标大小"))
     }
 
     private var sortButton: some View {
@@ -56,20 +56,22 @@ struct BottomBarView: View {
         // 与底栏其余按钮统一玻璃语言(chrome 纪律:各按钮自承材质)。
         .buttonStyle(NicheFooterGlassButtonStyle())
         .background(MenuAnchor(box: sortAnchor))
-        .help("排序方式")
-        .accessibilityLabel("排序方式")
+        .help(String(localized: "排序方式"))
+        .accessibilityLabel(String(localized: "排序方式"))
         .accessibilityValue(sortDescription)   // VoiceOver 读出当前排序态,不用进菜单才知道
     }
 
     private var sortDescription: String {
         let key: String
         switch model.sortOrder.key {
-        case .name: key = "名称"
-        case .date: key = "修改日期"
-        case .size: key = "大小"
-        case .kind: key = "类型"
+        case .name: key = String(localized: "名称")
+        case .date: key = String(localized: "修改日期")
+        case .size: key = String(localized: "大小")
+        case .kind: key = String(localized: "类型")
         }
-        return "按\(key)\(model.sortOrder.direction == .ascending ? "升序" : "降序")"
+        let direction = model.sortOrder.direction == .ascending
+            ? String(localized: "升序") : String(localized: "降序")
+        return String(localized: "按\(key)\(direction)")
     }
 
     private var hiddenToggle: some View {
@@ -80,9 +82,9 @@ struct BottomBarView: View {
             Image(systemName: "eye")
         }
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: model.showHidden))
-        .help("显示隐藏文件")
-        .accessibilityLabel("显示隐藏文件")
-        .accessibilityValue(model.showHidden ? "开" : "关")
+        .help(String(localized: "显示隐藏文件"))
+        .accessibilityLabel(String(localized: "显示隐藏文件"))
+        .accessibilityValue(model.showHidden ? String(localized: "开") : String(localized: "关"))
     }
 
     // Pin 激活态用 isActive 常驻高亮(同心玻璃内的填充)传达"已钉住",而非换不透明材质或颜色。
@@ -92,7 +94,7 @@ struct BottomBarView: View {
             Image(systemName: pinned ? "pin.fill" : "pin")
         }
         .buttonStyle(NicheFooterGlassButtonStyle(isActive: pinned))
-        .help(pinned ? "取消钉住" : "钉住(常驻浮窗)")
-        .accessibilityLabel(pinned ? "取消钉住" : "钉住为常驻浮窗")
+        .help(pinned ? String(localized: "取消钉住") : String(localized: "钉住(常驻浮窗)"))
+        .accessibilityLabel(pinned ? String(localized: "取消钉住") : String(localized: "钉住为常驻浮窗"))
     }
 }

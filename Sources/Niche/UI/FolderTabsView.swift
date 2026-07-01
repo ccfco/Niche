@@ -257,18 +257,18 @@ struct FolderTabsView: View {
             .help(mirror.binding.path)
             // 右键:文件夹引用操作(临时 tab 非书签,只配引用项;同面包屑段)。
             .overlay(RightClickCatcher { _ in onPathSegmentMenu(mirror.rootURL) })
-            .accessibilityLabel("临时:\(mirror.binding.displayName)")
+            .accessibilityLabel(String(localized: "临时:\(mirror.binding.displayName)"))
             .accessibilityAddTraits(isCurrent ? .isSelected : [])
             Button(action: onPinTemporary) { Image(systemName: "pin") }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .help("钉住为常驻文件夹")
-                .accessibilityLabel("钉住为常驻文件夹")
+                .help(String(localized: "钉住为常驻文件夹"))
+                .accessibilityLabel(String(localized: "钉住为常驻文件夹"))
             Button { model.closeTemporary() } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .help("关闭临时文件夹")
-                .accessibilityLabel("关闭临时文件夹")
+                .help(String(localized: "关闭临时文件夹"))
+                .accessibilityLabel(String(localized: "关闭临时文件夹"))
         }
     }
 
@@ -279,8 +279,8 @@ struct FolderTabsView: View {
         .buttonStyle(NicheFooterGlassButtonStyle(compact: true))   // 与视图切换/底栏同一玻璃语言
         .background(MenuAnchor(box: addAnchor))
         .offset(x: addButtonDropShift)   // 末尾插入时右让,空槽落在最后一个 tab 之后
-        .help("添加文件夹或前往路径")
-        .accessibilityLabel("添加文件夹或前往路径")
+        .help(String(localized: "添加文件夹或前往路径"))
+        .accessibilityLabel(String(localized: "添加文件夹或前往路径"))
     }
 }
 
