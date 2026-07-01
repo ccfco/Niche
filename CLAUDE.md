@@ -58,6 +58,17 @@
 - **缩略图禁止在 row 渲染路径同步解码**,必须后台 ImageIO 解码 + 缓存上限。
 - **列表(原生 `Table`)与图标(`LazyVGrid`)两模式行为必须等价**:选中(`Set<id>`+光标+锚点单一真相)/ 排序(`FileSortOrder` 单一真相,表头与底栏菜单共写)/ 右键(同款 `RightClickCatcher`→`ContextMenuBuilder`)/ 拖入拖出 / 键盘——给一模式加能力时另一模式同步,缺一即违反「原生正确性 > 功能数量」。
 
+### 本地化(String Catalog,中文=源语言)
+- **`Localizable.xcstrings` 中文作为 key 本身**(`project.yml` `developmentLanguage: zh-Hans`),English 是附加译文;日志(`Log.*`)/注释/commit message 不本地化。
+- **一律显式 `String(localized:)`,不依赖字面量隐式转 `LocalizedStringKey`**——除非目标参数类型就是 `LocalizedStringKey`(如 `Text("...")`/`Toggle("...")`/`TableColumn("...")` 等标准 SwiftUI API 的字面量参数),这类literal保留原样。三元表达式只要有一支是非字面量 `String`,两支的类型会被统一推成 `String`,连字面量那支也会跟着失去隐式查表资格,必须两支都显式包。
+- **`TagPalette.standard` 的 `name` 字段不本地化**:它既是右键菜单展示文本,也是 `ContextMenuBuilder.toggleTag` 写入 `com.apple.metadata:_kMDItemUserTags` 的字面量标签名,翻译成英文会让本 App 写入的标签名与访达标准中文标签名不一致、标签互认失效——这是功能标识符,不是纯展示字符串。
+- **插值字符串会生成占位符 key**(`String(localized: "跳转到 \(name)")` → key `"跳转到 %@"`,`Int` 插值是 `%lld`),手写 `.xcstrings` 条目时占位符要按参数真实类型对应,不能全按 `%@` 处理。
+
+### Onboarding(首次使用引导)
+- **`OnboardingState.hasSeen` 走旁路 `UserDefaults`,不进 `BindingStore`**(同下钻深度持久化的理由:不需要 `@Published` 广播触发 `rebuildMirrors`)。
+- **`OnboardingWindowController` 建窗禁止用 `contentRect: .zero`**:`NSHostingView` 不会把 0×0 窗口自动撑到 SwiftUI 内容的实际尺寸,窗口会以 0×0 呈现(视觉上等同没弹出),必须在设好 `contentView` 后显式 `window.setContentSize(host.fittingSize)`。此类问题编译与 XCTest 都测不出,只能真机装跑验证。
+- **`SettingsWindowController` 的分区选中态(`selection`)归窗口控制器持有,不是 `SettingsView` 的 `@State`**:窗口只建一次、View 实例不会因外部再调用而重建,`@State` 初值只在首次生效——`show(section:)` 要在窗口已存在后跳转指定分区,必须把状态提到跨 `show()` 调用存活的控制器层,`SettingsView` 改收 `@Binding`。
+
 ### 自动更新(Sparkle，双层架构同 Clipin)
 - **检测与安装必须分两层**：`UpdateChecker`（轮询 `appcast.xml`）只做检测、驱动菜单栏小红点 + 设置页；Sparkle 只做下载/EdDSA 验签/替换/重启。`AppDelegate.setupSparkle()` 把「触发安装」闭包注入 `UpdateChecker.installHandler`，并置 Sparkle `automaticallyChecksForUpdates=false`，禁止两层都去轮询。
 - **`UpdateChecker` 检测源必须是 `appcast.xml`（`raw.githubusercontent.com`），禁止改回 `api.github.com`**：后者未认证限额 60 次/小时且按 IP 算，共享出口 IP 极易被其它流量打满，一旦打满检测层（含菜单栏红点、设置页、Sparkle 安装入口）全部瘫痪——实测踩过。appcast.xml 是静态 CDN 资源不受此限，且和 Sparkle 装的是同一份数据，不会有双源不一致。解析用 `AppcastParser`（`XMLParser` 委托，不开 `shouldProcessNamespaces`）：`didEndElement` 必须清空 `currentElement`，否则标签间的换行缩进会被 `foundCharacters` 当作仍在当前标签内、误追加进版本号（实测踩过：`"0.1.3\n            "`)。
