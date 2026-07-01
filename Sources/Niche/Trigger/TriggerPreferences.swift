@@ -33,4 +33,13 @@ final class TriggerPreferences: ObservableObject {
         hoverDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.18
         hotkey = HotkeyPreference.load()
     }
+
+    /// Onboarding 用的一句话触发方式描述,跟随当前实际配置(不是写死文案)。
+    var onboardingTriggerDescription: String {
+        if hotZoneEnabled {
+            return String(localized: "从屏幕顶部(刘海所在位置)滑出——把鼠标移到那里就能唤出 Niche。")
+        } else {
+            return String(localized: "用全局快捷键「\(hotkey.display)」唤出 Niche——按键可在设置里查看或修改。")
+        }
+    }
 }

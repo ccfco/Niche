@@ -141,6 +141,26 @@
         }
       }
     },
+    "从屏幕顶部(刘海所在位置)滑出——把鼠标移到那里就能唤出 Niche。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It slides out from the top of your screen (where the notch is) — just move your mouse there to bring up Niche."
+          }
+        }
+      }
+    },
+    "使用引导…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Onboarding…"
+          }
+        }
+      }
+    },
     "修改日期": {
       "localizations": {
         "en": {
@@ -287,6 +307,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Compress"
+          }
+        }
+      }
+    },
+    "去设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Settings"
           }
         }
       }
@@ -941,6 +971,16 @@
         }
       }
     },
+    "欢迎使用 Niche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to Niche"
+          }
+        }
+      }
+    },
     "正在检查…": {
       "localizations": {
         "en": {
@@ -1051,12 +1091,32 @@
         }
       }
     },
+    "用全局快捷键「%@」唤出 Niche——按键可在设置里查看或修改。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the global shortcut \"%@\" to bring up Niche — you can view or change it in Settings."
+          }
+        }
+      }
+    },
     "目标位置已有同名项,如何处理?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "An item with the same name already exists. What would you like to do?"
+          }
+        }
+      }
+    },
+    "知道了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got It"
           }
         }
       }

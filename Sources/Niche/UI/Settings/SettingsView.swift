@@ -11,10 +11,9 @@ struct SettingsView: View {
     @ObservedObject var model: PanelModel
     /// 触发方式偏好(热区/延迟/快捷键)单一真相源,由 NicheController 注入并订阅应用。
     @ObservedObject var triggerPrefs: TriggerPreferences
+    @Binding var selection: SettingsSection
     /// 添加文件夹走 NicheController 统一路径(与面板「+」一致:自动选中新 tab)。
     var onAddFolder: () -> Void = {}
-
-    @State private var selection: SettingsSection = .folders
 
     var body: some View {
         HStack(spacing: 0) {
