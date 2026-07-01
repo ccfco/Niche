@@ -18,6 +18,11 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var didLastCheckFail = false
 
     let currentVersion: String
+    /// CFBundleVersion(build number)。Sparkle 自己判断"是否有更新"用这个,不是 marketing
+    /// 版本号——检测层必须跟它对齐,否则会出现"同 marketing version、不同 build"的重发
+    /// (release.sh 文档化的回滚重跑路径就会产生)被 Sparkle 判定有更新、UpdateChecker 却
+    /// 判定没有,菜单栏/设置页安装入口不出现的分裂。
+    private let currentBuildNumber: Int
 
     private let defaults = UserDefaults.standard
     private let session: URLSession
@@ -41,6 +46,8 @@ final class UpdateChecker: ObservableObject {
 
     private init() {
         currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        let buildString = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        currentBuildNumber = Int(buildString) ?? 0
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         dismissedVersion = defaults.string(forKey: Keys.dismissedVersion)
@@ -145,17 +152,19 @@ final class UpdateChecker: ObservableObject {
             xmlParser.delegate = parser
             guard xmlParser.parse() else { throw URLError(.cannotParseResponse) }
 
-            // appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);
-            // 只数字版本参与比较,挑其中最大的一条——同 GitHub API 时代的非法 tag 防御逻辑。
+            // appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);挑 build number
+            // 最大的一条——必须按 build number(Sparkle 的真实判断依据)排序,不能按 marketing
+            // 版本号,否则"同 marketing version、不同 build"的条目会被错误地并列/丢弃。
             let candidate = parser.items
-                .compactMap { item -> (version: String, downloadURL: URL, pubDate: Date?)? in
+                .compactMap { item -> (version: String, buildNumber: Int, downloadURL: URL, pubDate: Date?)? in
                     guard let version = item.version, Self.isNumericVersion(version),
+                          let buildNumber = item.buildNumber,
                           let downloadURL = item.downloadURL else { return nil }
-                    return (version, downloadURL, item.pubDate)
+                    return (version, buildNumber, downloadURL, item.pubDate)
                 }
-                .max { Self.compare($0.version, $1.version) == .orderedAscending }
+                .max { $0.buildNumber < $1.buildNumber }
 
-            if let candidate, Self.compare(candidate.version, Self.normalized(currentVersion)) == .orderedDescending {
+            if let candidate, candidate.buildNumber > currentBuildNumber {
                 latestRelease = ReleaseInfo(
                     version: candidate.version,
                     publishedAt: candidate.pubDate,
@@ -175,33 +184,12 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    private static func normalized(_ v: String) -> String {
-        var s = v.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s.first?.lowercased() == "v" { s = String(s.dropFirst()) }
-        return s
-    }
-
-    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc 等非数字段，
-    /// 避免 compare 把 1.0.0-beta 误折叠成 1.0.0。
+    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc 等非数字段，仅用于显示前的
+    /// 脏数据兜底(判定"是否有更新"已改用 build number,不再靠这个字符串比较)。
     private static func isNumericVersion(_ version: String) -> Bool {
         !version.isEmpty && version.split(separator: ".").allSatisfy { segment in
             !segment.isEmpty && segment.allSatisfy(\.isNumber)
         }
-    }
-
-    private static func numericComponents(_ version: String) -> [Int] {
-        normalized(version).split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
-    }
-
-    private static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        let l = numericComponents(lhs)
-        let r = numericComponents(rhs)
-        for i in 0..<max(l.count, r.count) {
-            let lv = i < l.count ? l[i] : 0
-            let rv = i < r.count ? r[i] : 0
-            if lv != rv { return lv < rv ? .orderedAscending : .orderedDescending }
-        }
-        return .orderedSame
     }
 }
 
@@ -214,11 +202,12 @@ struct ReleaseInfo: Equatable {
     var displayVersion: String { version.hasPrefix("v") ? version : "v\(version)" }
 }
 
-/// Sparkle appcast(标准 RSS + sparkle 命名空间)的最小化解析器,只取 UpdateChecker 需要的三个字段。
+/// Sparkle appcast(标准 RSS + sparkle 命名空间)的最小化解析器,只取 UpdateChecker 需要的四个字段。
 /// 不用 shouldProcessNamespaces,elementName 直接拿到 "sparkle:shortVersionString" 这种限定名。
 private final class AppcastParser: NSObject, XMLParserDelegate {
     struct Item {
         var version: String?
+        var buildNumber: Int?
         var pubDate: Date?
         var downloadURL: URL?
     }
@@ -227,6 +216,7 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
     private var current: Item?
     private var currentElement = ""
     private var pubDateText = ""
+    private var buildNumberText = ""
 
     func parser(
         _ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
@@ -250,6 +240,8 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
         case "sparkle:shortVersionString":
             let appended = (current?.version ?? "") + string
             current?.version = appended
+        case "sparkle:version":
+            buildNumberText += string
         case "pubDate":
             pubDateText += string
         default:
@@ -266,12 +258,16 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
             let trimmed = current?.version?.trimmingCharacters(in: .whitespacesAndNewlines)
             current?.version = trimmed
         }
+        if elementName == "sparkle:version" {
+            current?.buildNumber = Int(buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines))
+            buildNumberText = ""
+        }
         if elementName == "item", let item = current {
             items.append(item)
             current = nil
         }
         // 结束标签后立刻清空,否则标签间的换行/缩进空白会被 foundCharacters 当作
-        // 仍在当前标签内、误追加进 version/pubDate(实测踩过:"0.1.3\n            ")。
+        // 仍在当前标签内、误追加进 version/pubDate/buildNumber(实测踩过:"0.1.3\n            ")。
         currentElement = ""
     }
 
