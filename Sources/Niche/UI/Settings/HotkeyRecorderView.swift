@@ -14,10 +14,10 @@ struct HotkeyRecorderView: View {
             Button {
                 isRecording ? stopRecording() : startRecording()
             } label: {
-                Text(isRecording ? "按下新快捷键…" : hotkey.display)
+                Text(isRecording ? String(localized: "按下新快捷键…") : hotkey.display)
                     .frame(minWidth: 120)
             }
-            .help(isRecording ? "按 Esc 取消" : "点击后按下新的快捷键组合(需含 ⌘/⌃/⌥)")
+            .help(isRecording ? String(localized: "按 Esc 取消") : String(localized: "点击后按下新的快捷键组合(需含 ⌘/⌃/⌥)"))
             if hotkey != .default {
                 Button("还原默认") { hotkey = .default }
                     .buttonStyle(.borderless)

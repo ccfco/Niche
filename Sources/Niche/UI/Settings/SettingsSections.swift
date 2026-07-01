@@ -15,7 +15,7 @@ struct FoldersSettings: View {
 
     var body: some View {
         SettingsPane(title: SettingsSection.folders.title) {
-            SettingsFootnote("从刘海滑出后,每个绑定文件夹是一个 tab。拖动可调整顺序。")
+            SettingsFootnote(String(localized: "从刘海滑出后,每个绑定文件夹是一个 tab。拖动可调整顺序。"))
 
             List {
                 ForEach(environment.bindingStore.bindings) { binding in
@@ -69,8 +69,8 @@ struct FoldersSettings: View {
                 Image(systemName: "minus.circle")
             }
             .buttonStyle(.borderless)
-            .help("移除此文件夹")
-            .accessibilityLabel("移除「\(binding.displayName)」")
+            .help(String(localized: "移除此文件夹"))
+            .accessibilityLabel(String(localized: "移除「\(binding.displayName)」"))
         }
     }
 }
@@ -95,7 +95,7 @@ struct TriggerSettings: View {
                     HotkeyRecorderView(hotkey: $triggerPrefs.hotkey)
                 }
             }
-            SettingsFootnote("关闭热区后仍可用菜单栏图标或快捷键呼出。")
+            SettingsFootnote(String(localized: "关闭热区后仍可用菜单栏图标或快捷键呼出。"))
         }
     }
 }
@@ -124,7 +124,7 @@ struct GeneralSettings: View {
                         }
                     }
             }
-            SettingsFootnote("首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权请求;允许后镜像才会实时同步。")
+            SettingsFootnote(String(localized: "首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权请求;允许后镜像才会实时同步。"))
         }
         // 复用窗口(isReleasedWhenClosed=false):重开设置页时回读系统真相,避免外部改了
         // Login Items 后仍显示陈旧 @State 镜像。
@@ -162,7 +162,7 @@ struct AboutSettings: View {
                 ))
             }
 
-            SettingsGroup(header: "更新") {
+            SettingsGroup(header: String(localized: "更新")) {
                 LabeledContent("状态") { updateStatusView }
                 if let release = checker.latestRelease {
                     HStack(spacing: edge.itemSpacing) {
@@ -171,7 +171,7 @@ struct AboutSettings: View {
                         Button("查看 Release") { checker.openReleasePage() }
                             .buttonStyle(.borderless)
                     }
-                    SettingsFootnote("Niche \(release.displayVersion) 已可安装（一键自动安装）。")
+                    SettingsFootnote(String(localized: "Niche \(release.displayVersion) 已可安装（一键自动安装）。"))
                 } else {
                     Button("立即检查") { checker.checkNow() }
                         .buttonStyle(NicheFooterGlassButtonStyle(compact: true))
@@ -179,7 +179,7 @@ struct AboutSettings: View {
                 }
             }
 
-            SettingsGroup(header: "项目") {
+            SettingsGroup(header: String(localized: "项目")) {
                 LabeledContent("开源仓库") {
                     Link("github.com/ccfco/Niche",
                          destination: URL(string: "https://github.com/ccfco/Niche")!)

@@ -10,10 +10,10 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .folders: return "文件夹"
-        case .trigger: return "触发"
-        case .general: return "通用"
-        case .about: return "关于"
+        case .folders: return String(localized: "文件夹")
+        case .trigger: return String(localized: "触发")
+        case .general: return String(localized: "通用")
+        case .about: return String(localized: "关于")
         }
     }
 

@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "Niche %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niche %@"
+          }
+        }
+      }
+    },
+    "Niche %@ 已可安装（一键自动安装）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niche %@ is ready to install (one-click automatic install)."
+          }
+        }
+      }
+    },
     "Niche 会在访达中选中此文件夹。在访达里右键选择「自定义文件夹」,即可设置符号、emoji 或颜色。": {
       "localizations": {
         "en": {
@@ -71,6 +91,16 @@
         }
       }
     },
+    "从刘海滑出后,每个绑定文件夹是一个 tab。拖动可调整顺序。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Once it slides out from the notch, each bound folder becomes a tab. Drag to reorder."
+          }
+        }
+      }
+    },
     "修改日期": {
       "localizations": {
         "en": {
@@ -91,12 +121,32 @@
         }
       }
     },
+    "关于": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About"
+          }
+        }
+      }
+    },
     "关闭临时文件夹": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Close Temporary Folder"
+          }
+        }
+      }
+    },
+    "关闭热区后仍可用菜单栏图标或快捷键呼出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Even with the hot zone off, you can still open Niche from the menu bar icon or shortcut."
           }
         }
       }
@@ -117,6 +167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "List View"
+          }
+        }
+      }
+    },
+    "刘海热区触发": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch Hot Zone Trigger"
           }
         }
       }
@@ -171,6 +231,16 @@
         }
       }
     },
+    "发现新版本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Version Available"
+          }
+        }
+      }
+    },
     "取消": {
       "localizations": {
         "en": {
@@ -191,12 +261,32 @@
         }
       }
     },
+    "只解除绑定,不会动磁盘上的文件夹。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This only removes the binding — the folder on disk is untouched."
+          }
+        }
+      }
+    },
     "名称": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Name"
+          }
+        }
+      }
+    },
+    "呼出快捷键": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Global Shortcut"
           }
         }
       }
@@ -271,6 +361,46 @@
         }
       }
     },
+    "好": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "安装更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Update"
+          }
+        }
+      }
+    },
+    "尚未检查": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not checked yet"
+          }
+        }
+      }
+    },
+    "已是最新（%@）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up to date (%@)"
+          }
+        }
+      }
+    },
     "开": {
       "localizations": {
         "en": {
@@ -281,12 +411,42 @@
         }
       }
     },
+    "开机自启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Launch at Login"
+          }
+        }
+      }
+    },
+    "开源仓库": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Source Repo"
+          }
+        }
+      }
+    },
     "归档.zip": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Archive.zip"
+          }
+        }
+      }
+    },
+    "当前版本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Version"
           }
         }
       }
@@ -351,12 +511,32 @@
         }
       }
     },
+    "按 Esc 取消": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press Esc to cancel"
+          }
+        }
+      }
+    },
     "按%@%@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Sort by %@, %@"
+          }
+        }
+      }
+    },
+    "按下新快捷键…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press a new shortcut…"
           }
         }
       }
@@ -427,6 +607,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t Create Folder"
+          }
+        }
+      }
+    },
+    "无法更改开机自启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Change Launch at Login"
           }
         }
       }
@@ -521,6 +711,26 @@
         }
       }
     },
+    "显示项目简介(分辨率 / 时长 / 项目数)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Item Info (resolution / duration / item count)"
+          }
+        }
+      }
+    },
+    "更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update"
+          }
+        }
+      }
+    },
     "替换": {
       "localizations": {
         "en": {
@@ -547,6 +757,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "untitled folder"
+          }
+        }
+      }
+    },
+    "查看 Release": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Release"
+          }
+        }
+      }
+    },
+    "检查失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check Failed"
+          }
+        }
+      }
+    },
+    "正在检查…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
           }
         }
       }
@@ -611,12 +851,32 @@
         }
       }
     },
+    "点击后按下新的快捷键组合(需含 ⌘/⌃/⌥)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click, then press a new shortcut (must include ⌘/⌃/⌥)"
+          }
+        }
+      }
+    },
     "点此授权并重试": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Tap to Authorize and Retry"
+          }
+        }
+      }
+    },
+    "状态": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
           }
         }
       }
@@ -671,12 +931,42 @@
         }
       }
     },
+    "移除「%@」": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove \"%@\""
+          }
+        }
+      }
+    },
+    "移除「%@」?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove \"%@\"?"
+          }
+        }
+      }
+    },
     "移除此文件夹": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Remove This Folder"
+          }
+        }
+      }
+    },
+    "立即检查": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check Now"
           }
         }
       }
@@ -701,12 +991,52 @@
         }
       }
     },
+    "自动检查更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically Check for Updates"
+          }
+        }
+      }
+    },
     "自定义文件夹…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Customize Folder…"
+          }
+        }
+      }
+    },
+    "触发": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trigger"
+          }
+        }
+      }
+    },
+    "触发灵敏度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trigger Sensitivity"
+          }
+        }
+      }
+    },
+    "许可": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "License"
           }
         }
       }
@@ -761,12 +1091,32 @@
         }
       }
     },
+    "还原默认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Default"
+          }
+        }
+      }
+    },
     "还没有绑定文件夹": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "No folders added yet"
+          }
+        }
+      }
+    },
+    "通用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         }
       }
@@ -847,6 +1197,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automation Permission Required"
+          }
+        }
+      }
+    },
+    "项目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project"
+          }
+        }
+      }
+    },
+    "首次访问桌面/文稿/下载等受保护目录时,系统会弹出授权请求;允许后镜像才会实时同步。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system will ask for permission the first time you access protected folders like Desktop/Documents/Downloads; once allowed, mirroring stays in sync."
           }
         }
       }
