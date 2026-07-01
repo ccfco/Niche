@@ -111,6 +111,16 @@
         }
       }
     },
+    "全选": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select All"
+          }
+        }
+      }
+    },
     "关": {
       "localizations": {
         "en": {
@@ -201,6 +211,16 @@
         }
       }
     },
+    "剪切": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut"
+          }
+        }
+      }
+    },
     "升序": {
       "localizations": {
         "en": {
@@ -277,6 +297,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Name"
+          }
+        }
+      }
+    },
+    "呼出 Niche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Niche"
           }
         }
       }
@@ -551,6 +581,16 @@
         }
       }
     },
+    "撤销": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        }
+      }
+    },
     "文件": {
       "localizations": {
         "en": {
@@ -591,6 +631,26 @@
         }
       }
     },
+    "新版本可用：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Version Available: %@"
+          }
+        }
+      }
+    },
+    "无法下载「%@」": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Download \"%@\""
+          }
+        }
+      }
+    },
     "无法压缩": {
       "localizations": {
         "en": {
@@ -601,12 +661,32 @@
         }
       }
     },
+    "无法撤销": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Undo"
+          }
+        }
+      }
+    },
     "无法新建文件夹": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t Create Folder"
+          }
+        }
+      }
+    },
+    "无法显示简介": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Show Get Info"
           }
         }
       }
@@ -627,6 +707,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t construct AppleScript"
+          }
+        }
+      }
+    },
+    "无法注册快捷键 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Register Shortcut %@"
+          }
+        }
+      }
+    },
+    "无法移入文件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Move File In"
           }
         }
       }
@@ -687,6 +787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t Read \"%@\""
+          }
+        }
+      }
+    },
+    "无法重做": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Redo"
           }
         }
       }
@@ -771,6 +881,16 @@
         }
       }
     },
+    "标准(0.18s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard (0.18s)"
+          }
+        }
+      }
+    },
     "检查失败": {
       "localizations": {
         "en": {
@@ -847,6 +967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Folder or Go to Path"
+          }
+        }
+      }
+    },
+    "灵敏(0.1s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responsive (0.1s)"
           }
         }
       }
@@ -961,6 +1091,16 @@
         }
       }
     },
+    "稳重(0.4s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relaxed (0.4s)"
+          }
+        }
+      }
+    },
     "立即检查": {
       "localizations": {
         "en": {
@@ -987,6 +1127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste"
+          }
+        }
+      }
+    },
+    "编辑": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
           }
         }
       }
@@ -1037,6 +1187,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "License"
+          }
+        }
+      }
+    },
+    "设置…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
           }
         }
       }
@@ -1111,12 +1271,32 @@
         }
       }
     },
+    "退出 Niche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit Niche"
+          }
+        }
+      }
+    },
     "通用": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "General"
+          }
+        }
+      }
+    },
+    "重做": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
           }
         }
       }

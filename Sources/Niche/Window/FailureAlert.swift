@@ -13,7 +13,7 @@ enum FailureAlert {
         alert.messageText = title
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: String(localized: "好"))
         alert.runModal()
     }
 }

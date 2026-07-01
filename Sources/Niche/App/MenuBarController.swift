@@ -70,27 +70,27 @@ final class MenuBarController {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "呼出 Niche", action: #selector(togglePanel), keyEquivalent: "")
+        menu.addItem(withTitle: String(localized: "呼出 Niche"), action: #selector(togglePanel), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
 
         // 有新版本时在设置前插入更新区。
         if let release = UpdateChecker.shared.latestRelease {
             let badge = menu.addItem(
-                withTitle: "新版本可用：\(release.displayVersion)",
+                withTitle: String(localized: "新版本可用：\(release.displayVersion)"),
                 action: nil, keyEquivalent: ""
             )
             badge.isEnabled = false
-            let install = NSMenuItem(title: "安装更新", action: #selector(installUpdate), keyEquivalent: "")
+            let install = NSMenuItem(title: String(localized: "安装更新"), action: #selector(installUpdate), keyEquivalent: "")
             install.target = self
             menu.addItem(install)
             menu.addItem(.separator())
         }
 
-        let settings = menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = menu.addItem(withTitle: String(localized: "设置…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 Niche", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: String(localized: "退出 Niche"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
 

@@ -148,7 +148,7 @@ final class NicheController {
         if hotkey.register(keyCode: pref.keyCode, modifiers: pref.carbonModifiers) {
             lastGoodHotkey = pref
         } else {
-            presentFailure(title: "无法注册快捷键 \(pref.display)",
+            presentFailure(title: String(localized: "无法注册快捷键 \(pref.display)"),
                            error: HotkeyRegistrationError(display: pref.display))
             // 回退上一个可用键(写回偏好,设置页同步显示;sink 再触发时命中 == 守卫不再循环)。
             // 启动期第一发就失败(持久化了已被占用的键)→ 回退出厂默认。
@@ -223,7 +223,7 @@ final class NicheController {
         quickLook.onDownloadEnd = { [weak self] url in self?.model.endDownload(url) }
         quickLook.onDownloadFailed = { [weak self] url, error in
             Log.files.error("预览按需下载失败:\(error.localizedDescription, privacy: .public)")
-            self?.presentFailure(title: "无法下载「\(url.lastPathComponent)」", error: error)
+            self?.presentFailure(title: String(localized: "无法下载「\(url.lastPathComponent)」"), error: error)
         }
         // 光标变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
         // @Published 在 willSet 阶段发布,此刻 cursorID 仍是旧值 → 派生的 cursorIndex 会算出"上一个"
@@ -420,7 +420,7 @@ final class NicheController {
 
     /// 按需下载失败 → 可见提示(用户双击的动作失败必须让其知道,不靠隐形日志)。
     private func presentDownloadFailure(name: String, error: Error) {
-        presentFailure(title: "无法下载「\(name)」", error: error)
+        presentFailure(title: String(localized: "无法下载「\(name)」"), error: error)
     }
 
     /// 在瞬态面板可见时呈现任意模态(NSOpenPanel / NSAlert / 冲突弹窗)的**统一**入口:
@@ -451,7 +451,7 @@ final class NicheController {
         do { try ops.undoLast() }
         catch {
             Log.files.error("撤销失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法撤销", error: error)
+            presentFailure(title: String(localized: "无法撤销"), error: error)
         }
     }
 
@@ -460,7 +460,7 @@ final class NicheController {
         do { try ops.redoLast() }
         catch {
             Log.files.error("重做失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法重做", error: error)
+            presentFailure(title: String(localized: "无法重做"), error: error)
         }
     }
 
@@ -472,7 +472,7 @@ final class NicheController {
             beginRenameSafely(url)
         } catch {
             Log.files.error("新建文件夹失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法新建文件夹", error: error)
+            presentFailure(title: String(localized: "无法新建文件夹"), error: error)
         }
     }
 
@@ -510,7 +510,7 @@ final class NicheController {
             do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
             catch {
                 Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法粘贴", error: error)
+                presentFailure(title: String(localized: "无法粘贴"), error: error)
             }
         }
     }
@@ -561,7 +561,7 @@ final class NicheController {
                 ops.open(url)
             } catch {
                 Log.files.error("前往目标下载失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法下载「\(url.lastPathComponent)」", error: error)
+                presentFailure(title: String(localized: "无法下载「\(url.lastPathComponent)」"), error: error)
             }
         }
     }
@@ -629,7 +629,7 @@ final class NicheController {
                 FinderGetInfo.presentAuthorizationAlert(autoHide: autoHide)
             case .failed(let error):
                 Log.files.error("显示简介失败:\(error.localizedDescription, privacy: .public)")
-                FailureAlert.present(title: "无法显示简介", error: error, autoHide: autoHide)
+                FailureAlert.present(title: String(localized: "无法显示简介"), error: error, autoHide: autoHide)
             }
         }
     }
@@ -669,7 +669,7 @@ final class NicheController {
                 // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
                 // 与双击下载失败提示对称,而非只记日志后无声消失。
                 Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法移入文件", error: error)
+                presentFailure(title: String(localized: "无法移入文件"), error: error)
             }
         }
     }
@@ -695,7 +695,7 @@ final class NicheController {
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
             panel.allowsMultipleSelection = false
-            panel.prompt = "添加"
+            panel.prompt = String(localized: "添加")
             guard panel.runModal() == .OK, let url = panel.url else { return }
 
             let bookmark = DirectoryMirror.makeBookmark(for: url)

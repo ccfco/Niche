@@ -22,7 +22,9 @@ final class TriggerPreferences: ObservableObject {
 
     /// 触发延迟的预设档(设置页 Picker;自由滑杆对 0.18 这种手感值反而难选准)。
     static let hoverDelayPresets: [(label: String, value: Double)] = [
-        ("灵敏(0.1s)", 0.1), ("标准(0.18s)", 0.18), ("稳重(0.4s)", 0.4),
+        (String(localized: "灵敏(0.1s)"), 0.1),
+        (String(localized: "标准(0.18s)"), 0.18),
+        (String(localized: "稳重(0.4s)"), 0.4),
     ]
 
     init() {
