@@ -7,7 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let environment = AppEnvironment()
     private var menuBarController: MenuBarController?
     private var controller: NicheController?
-    /// Sparkle 更新器(安装层)。强持有,startingUpdater:true 在启动时拉起。
+    /// Sparkle 更新器(安装层)。强持有,startingUpdater:false + 手动 start,
+    /// 确保 automaticallyChecksForUpdates 在 updater 真正跑起来前就已关闭(消除时序疑虑)。
     private var sparkleUpdater: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,11 +33,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 故关掉它自己的定时检查；把「触发安装」闭包注入 UpdateChecker。
     private func setupSparkle() {
         let controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: false,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
         controller.updater.automaticallyChecksForUpdates = false
+        do {
+            try controller.updater.start()
+        } catch {
+            Log.updates.error("Sparkle updater 启动失败: \(error.localizedDescription, privacy: .public)")
+        }
         sparkleUpdater = controller
         UpdateChecker.shared.installHandler = { [weak self] in
             self?.sparkleUpdater?.updater.checkForUpdates()

@@ -43,23 +43,26 @@ if [ -n "$NOTES_FILE" ] && [ ! -f "$NOTES_FILE" ]; then
     echo "✘ notes 文件不存在:$NOTES_FILE" >&2; exit 1
 fi
 
+# ── 前置检查(先于任何文件改动,否则版本号写回会自己弄脏工作树挡自己) ──
+echo "▸ [1/6] 前置检查…"
+if [ -n "$(git status --porcelain)" ]; then
+    echo "✘ 有未提交改动,请先 commit" >&2; exit 1
+fi
+
 # ── 版本 ────────────────────────────────────────────────────
 if [ -n "$VER_ARG" ]; then
     VER="$VER_ARG"
-    # 写回 project.yml(MARKETING_VERSION)
+    # 写回 project.yml(MARKETING_VERSION)并单独提交,否则这次改动永远不进 tag 指向的 commit
     sed -i '' "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"$VER\"/" project.yml
-    echo "▸ 版本号更新为 $VER(已写回 project.yml)"
+    git add project.yml
+    git commit -m "chore: 版本号 bump 到 $VER"
+    echo "▸ 版本号更新为 $VER(已写回 project.yml 并提交)"
 else
     VER="$(grep 'MARKETING_VERSION' project.yml | head -1 \
         | sed -E 's/.*MARKETING_VERSION: *"([^"]+)".*/\1/')"
 fi
 TAG="v$VER"
 
-# ── 前置检查 ─────────────────────────────────────────────────
-echo "▸ [1/6] 前置检查…"
-if [ -n "$(git status --porcelain)" ]; then
-    echo "✘ 有未提交改动,请先 commit" >&2; exit 1
-fi
 if git rev-parse -q --verify "$TAG" >/dev/null 2>&1; then
     echo "✘ tag $TAG 已存在,如需重发请先 git tag -d $TAG" >&2; exit 1
 fi
@@ -130,20 +133,35 @@ $NOTES
 NOTES
 )"
 
-echo "▸ 验证 release 资产可访问（appcast 即将指向的下载 URL）…"
-DOWNLOAD_URL="https://github.com/ccfco/Niche/releases/download/$TAG/${APP_NAME}.app.zip"
+echo "▸ 验证 release 资产可下载（appcast 即将指向的下载 URL）…"
+# curl HEAD 对 GitHub Releases 不可靠(不保证与 GET 行为一致,也不保证上传后立即全局可见)。
+# 用 gh api 查资产真实状态(state==uploaded 且 size>0),确认后再用 curl HEAD 做一次真实可达性兜底。
+ASSET_NAME="${APP_NAME}.app.zip"
+DOWNLOAD_URL="https://github.com/ccfco/Niche/releases/download/$TAG/${ASSET_NAME}"
 ASSET_OK=""
-for i in 1 2 3 4 5; do
-    if curl -fsIL "$DOWNLOAD_URL" >/dev/null 2>&1; then
-        ASSET_OK=1; echo "  ✓ 资产可访问"; break
+DELAYS=(5 10 20 30 30 30)
+for i in "${!DELAYS[@]}"; do
+    STATE="$(gh api "repos/ccfco/Niche/releases/tags/$TAG" \
+        --jq ".assets[] | select(.name==\"$ASSET_NAME\") | .state" 2>/dev/null || true)"
+    SIZE="$(gh api "repos/ccfco/Niche/releases/tags/$TAG" \
+        --jq ".assets[] | select(.name==\"$ASSET_NAME\") | .size" 2>/dev/null || true)"
+    if [ "$STATE" = "uploaded" ] && [ -n "$SIZE" ] && [ "$SIZE" -gt 0 ]; then
+        ASSET_OK=1; echo "  ✓ 资产已就绪（state=uploaded, size=${SIZE}）"; break
     fi
-    echo "  资产暂不可访问，2s 后重试（$i/5）…"; sleep 2
+    echo "  资产未就绪（state=${STATE:-unknown}），${DELAYS[$i]}s 后重试（$((i + 1))/${#DELAYS[@]}）…"
+    sleep "${DELAYS[$i]}"
 done
 if [ -z "$ASSET_OK" ]; then
-    echo "✘ release 资产 5 次探测仍不可访问，已中止——不推送 appcast，避免客户端拿到 404。" >&2
+    echo "✘ release 资产轮询 ${#DELAYS[@]} 次仍未就绪，已中止——不推送 appcast，避免客户端拿到 404。" >&2
     echo "  appcast 仍为发版前状态（客户端无害）。回滚：git push origin :$TAG && git tag -d $TAG && gh release delete $TAG --yes" >&2
     exit 1
 fi
+if ! curl -fsIL "$DOWNLOAD_URL" >/dev/null 2>&1; then
+    echo "✘ gh api 报资产已就绪,但实际 HTTP 请求不可达,已中止——不推送 appcast。" >&2
+    echo "  appcast 仍为发版前状态（客户端无害）。回滚：git push origin :$TAG && git tag -d $TAG && gh release delete $TAG --yes" >&2
+    exit 1
+fi
+echo "  ✓ HTTP 可达性确认通过"
 
 echo "▸ 推送 appcast（资产已就位，此刻暴露才安全）…"
 git add appcast.xml
