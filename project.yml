@@ -1,6 +1,7 @@
 name: Niche
 options:
   bundleIdPrefix: com.ccfco
+  developmentLanguage: zh-Hans
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
