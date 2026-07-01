@@ -73,7 +73,7 @@ final class TagColorRowView: NSView {
         // 文件夹:还要容纳「自定义文件夹…」文字宽度,取较大者当 view 宽(custom view 宽度即菜单宽度锚)。
         var width = dotsWidth
         if customize != nil {
-            let textW = ("自定义文件夹…" as NSString).size(withAttributes: [.font: Self.menuFont]).width
+            let textW = (String(localized: "自定义文件夹…") as NSString).size(withAttributes: [.font: Self.menuFont]).width
             width = max(width, textColumnX + textW + trailingPad)   // 文字列起 + 文字 + 右留白
         }
         let height = (customize == nil ? 0 : customizeRowH) + dotRowH
@@ -101,7 +101,8 @@ final class TagColorRowView: NSView {
     /// 第 i 个色点的 hover 提示串(对齐访达「添加/移除 "X"」)。
     private func hintText(_ i: Int) -> String {
         let name = tags[i].name
-        return "\(applied.contains(name) ? "移除" : "添加") \u{201C}\(name)\u{201D}"
+        let verb = applied.contains(name) ? String(localized: "移除") : String(localized: "添加")
+        return "\(verb) \u{201C}\(name)\u{201D}"
     }
 
     /// 「自定义文件夹」行的标签图标(SF tag,染成 color;对齐访达该项的标签图标)。按色现生成,菜单重绘不频繁。
@@ -167,7 +168,7 @@ final class TagColorRowView: NSView {
                 let isz = icon.size
                 icon.draw(in: NSRect(x: iconColumnX, y: (customizeRowH - isz.height) / 2, width: isz.width, height: isz.height))
             }
-            drawRowText("自定义文件夹…", x: textColumnX, color: fg)
+            drawRowText(String(localized: "自定义文件夹…"), x: textColumnX, color: fg)
         }
     }
 

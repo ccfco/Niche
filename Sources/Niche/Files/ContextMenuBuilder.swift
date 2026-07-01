@@ -49,8 +49,8 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         self.context = Context(selection: [], directory: directory, anchorView: anchorView)
         let menu = NSMenu()
         menu.autoenablesItems = false   // 自行控制「粘贴」启用态(否则只要 target 响应就恒启用)
-        add(menu, "新建文件夹", #selector(doNewFolder), symbol: "folder.badge.plus")
-        let paste = NSMenuItem(title: "粘贴", action: #selector(doPaste), keyEquivalent: "")
+        add(menu, String(localized: "新建文件夹"), #selector(doNewFolder), symbol: "folder.badge.plus")
+        let paste = NSMenuItem(title: String(localized: "粘贴"), action: #selector(doPaste), keyEquivalent: "")
         paste.target = self
         paste.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
         paste.isEnabled = ops.canPaste
@@ -70,24 +70,24 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         let multiple = ctx.selection.count > 1
 
-        add(menu, "打开", #selector(doOpen), symbol: "arrow.up.forward.app")
+        add(menu, String(localized: "打开"), #selector(doOpen), symbol: "arrow.up.forward.app")
         if !multiple, let first = ctx.selection.first {
             menu.addItem(openWithSubmenu(for: first))
         }
-        add(menu, "在 Finder 中显示", #selector(doReveal), symbol: "folder")
-        add(menu, "显示简介", #selector(doShowInfo), symbol: "info.circle")
+        add(menu, String(localized: "在 Finder 中显示"), #selector(doReveal), symbol: "folder")
+        add(menu, String(localized: "显示简介"), #selector(doShowInfo), symbol: "info.circle")
         menu.addItem(.separator())
 
         if !multiple {
-            add(menu, "重命名", #selector(doRename), symbol: "pencil")
+            add(menu, String(localized: "重命名"), #selector(doRename), symbol: "pencil")
         }
-        add(menu, "拷贝", #selector(doCopy), symbol: "square.on.square")
-        add(menu, "复制路径", #selector(doCopyPath), symbol: "doc.on.clipboard")
-        add(menu, "移动到…", #selector(doMoveTo), symbol: "arrowshape.turn.up.right")
+        add(menu, String(localized: "拷贝"), #selector(doCopy), symbol: "square.on.square")
+        add(menu, String(localized: "复制路径"), #selector(doCopyPath), symbol: "doc.on.clipboard")
+        add(menu, String(localized: "移动到…"), #selector(doMoveTo), symbol: "arrowshape.turn.up.right")
         menu.addItem(.separator())
 
-        add(menu, "压缩", #selector(doCompress), symbol: "doc.zipper")
-        add(menu, "分享…", #selector(doShare), symbol: "square.and.arrow.up")
+        add(menu, String(localized: "压缩"), #selector(doCompress), symbol: "doc.zipper")
+        add(menu, String(localized: "分享…"), #selector(doShare), symbol: "square.and.arrow.up")
         // 外观行(自绘 TagColorRowView):一排标签色圆点;文件夹再带一行「自定义文件夹」。整体一个 NSView,
         // 圆点与文字共用左缘、不经 NSMenuItem 标题 —— 避免借标题触发的菜单宽度抖动/文字跑位。
         menu.addItem(.separator())
@@ -95,7 +95,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         menu.addItem(tagRowItem(ctx, canCustomize: canCustomize))
         menu.addItem(.separator())
 
-        add(menu, "移到废纸篓", #selector(doTrash), symbol: "trash")
+        add(menu, String(localized: "移到废纸篓"), #selector(doTrash), symbol: "trash")
         return menu
     }
 
@@ -108,7 +108,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     }
 
     private func openWithSubmenu(for url: URL) -> NSMenuItem {
-        let parent = NSMenuItem(title: "打开方式", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: String(localized: "打开方式"), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         let appURLs = NSWorkspace.shared.urlsForApplications(toOpen: url)
         for appURL in appURLs.prefix(12) {
@@ -162,7 +162,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             do { try ops.setTags(tags, on: url) }
             catch {
                 Log.files.error("切换标签失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法设置标签", error: error)
+                presentFailure(title: String(localized: "无法设置标签"), error: error)
                 return   // 多选逐项失败不连环弹窗,首错即止
             }
         }
@@ -204,12 +204,12 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         }
         presentModal {
             let alert = NSAlert()
-            alert.messageText = "在访达中自定义文件夹"
-            alert.informativeText = "Niche 会在访达中选中此文件夹。在访达里右键选择「自定义文件夹」,即可设置符号、emoji 或颜色。"
-            alert.addButton(withTitle: "打开访达")
-            alert.addButton(withTitle: "取消")
+            alert.messageText = String(localized: "在访达中自定义文件夹")
+            alert.informativeText = String(localized: "Niche 会在访达中选中此文件夹。在访达里右键选择「自定义文件夹」,即可设置符号、emoji 或颜色。")
+            alert.addButton(withTitle: String(localized: "打开访达"))
+            alert.addButton(withTitle: String(localized: "取消"))
             alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = "不再提示"
+            alert.suppressionButton?.title = String(localized: "不再提示")
             let response = alert.runModal()
             // 勾了「不再提示」即记住意图(无论本次去不去访达),下次直接 reveal。
             if alert.suppressionButton?.state == .on {
@@ -237,12 +237,12 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
-            panel.prompt = "移动到此"
+            panel.prompt = String(localized: "移动到此")
             guard panel.runModal() == .OK, let dest = panel.url else { return }
             do { try ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
             catch {
                 Log.files.error("移动到失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法移动到所选位置", error: error)
+                presentFailure(title: String(localized: "无法移动到所选位置"), error: error)
             }
         }
     }
@@ -253,7 +253,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             do { try await ops.compress(ctx.selection, in: ctx.directory) }
             catch {
                 Log.files.error("压缩失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法压缩", error: error)
+                presentFailure(title: String(localized: "无法压缩"), error: error)
             }
         }
     }
@@ -275,7 +275,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             onRequestRename(url)
         } catch {
             Log.files.error("新建文件夹失败:\(error.localizedDescription, privacy: .public)")
-            presentFailure(title: "无法新建文件夹", error: error)
+            presentFailure(title: String(localized: "无法新建文件夹"), error: error)
         }
     }
 
@@ -286,7 +286,7 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
             catch {
                 Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: "无法粘贴", error: error)
+                presentFailure(title: String(localized: "无法粘贴"), error: error)
             }
         }
     }
@@ -304,8 +304,8 @@ enum ConflictPrompt {
     @MainActor
     static func ask(name: String) -> ConflictResolution {
         let alert = NSAlert()
-        alert.messageText = "「\(name)」已存在"
-        alert.informativeText = "目标位置已有同名项,如何处理?"
+        alert.messageText = String(localized: "「\(name)」已存在")
+        alert.informativeText = String(localized: "目标位置已有同名项,如何处理?")
         alert.addButton(withTitle: ConflictResolution.replace.localizedTitle)
         alert.addButton(withTitle: ConflictResolution.keepBoth.localizedTitle)
         alert.addButton(withTitle: ConflictResolution.skip.localizedTitle)

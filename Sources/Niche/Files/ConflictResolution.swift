@@ -10,9 +10,9 @@ enum ConflictResolution: String, CaseIterable, Identifiable {
 
     var localizedTitle: String {
         switch self {
-        case .replace: return "替换"
-        case .keepBoth: return "两者都保留"
-        case .skip: return "跳过"
+        case .replace: return String(localized: "替换")
+        case .keepBoth: return String(localized: "两者都保留")
+        case .skip: return String(localized: "跳过")
         }
     }
 }

@@ -40,7 +40,7 @@ final class FileOperations {
                 // 失败项不静默吞(CLAUDE.md:让问题暴露):日志 + 可见提示,部分失败也让用户知道。
                 if let error {
                     Log.files.error("移到废纸篓部分失败:\(error.localizedDescription, privacy: .public)")
-                    self?.onError?("无法移到废纸篓", error)
+                    self?.onError?(String(localized: "无法移到废纸篓"), error)
                 }
             }
         }
@@ -157,7 +157,7 @@ final class FileOperations {
     // MARK: - 新建文件夹
 
     @discardableResult
-    func newFolder(in directory: URL, name: String = "未命名文件夹") throws -> URL {
+    func newFolder(in directory: URL, name: String = String(localized: "未命名文件夹")) throws -> URL {
         try ensureWritable(directory)
         let dest = ConflictResolver.uniqueURL(for: directory.appendingPathComponent(name), in: directory)
         try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: false)
@@ -180,7 +180,7 @@ final class FileOperations {
         try ensureWritable(directory)
         let archiveName = urls.count == 1
             ? urls[0].deletingPathExtension().lastPathComponent + ".zip"
-            : "归档.zip"
+            : String(localized: "归档.zip")
         let dest = ConflictResolver.uniqueURL(for: directory.appendingPathComponent(archiveName), in: directory)
 
         try await Task.detached(priority: .userInitiated) {

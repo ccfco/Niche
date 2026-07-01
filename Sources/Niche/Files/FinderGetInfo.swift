@@ -42,7 +42,7 @@ enum FinderGetInfo {
 
         guard let script = NSAppleScript(source: source) else {
             return .failed(NSError(domain: "FinderGetInfo", code: -1,
-                                   userInfo: [NSLocalizedDescriptionKey: "无法构造 AppleScript"]))
+                                   userInfo: [NSLocalizedDescriptionKey: String(localized: "无法构造 AppleScript")]))
         }
         var errorInfo: NSDictionary?
         script.executeAndReturnError(&errorInfo)
@@ -52,7 +52,7 @@ enum FinderGetInfo {
         if code == errAEEventNotPermitted { return .notAuthorized }
         let message = (errorInfo[NSAppleScript.errorMessage] as? String)
             ?? (errorInfo[NSAppleScript.errorBriefMessage] as? String)
-            ?? "访达执行「显示简介」失败"
+            ?? String(localized: "访达执行「显示简介」失败")
         return .failed(NSError(domain: "FinderGetInfo", code: code,
                                userInfo: [NSLocalizedDescriptionKey: message]))
     }
@@ -63,11 +63,11 @@ enum FinderGetInfo {
         autoHide.begin(.modalDialog)
         defer { autoHide.end(.modalDialog) }
         let alert = NSAlert()
-        alert.messageText = "需要「自动化」权限"
-        alert.informativeText = "「显示简介」需要让 Niche 控制「访达」。请在「系统设置 › 隐私与安全性 › 自动化」中允许 Niche 控制访达,然后重试。"
+        alert.messageText = String(localized: "需要「自动化」权限")
+        alert.informativeText = String(localized: "「显示简介」需要让 Niche 控制「访达」。请在「系统设置 › 隐私与安全性 › 自动化」中允许 Niche 控制访达,然后重试。")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "打开系统设置")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: String(localized: "打开系统设置"))
+        alert.addButton(withTitle: String(localized: "取消"))
         if alert.runModal() == .alertFirstButtonReturn {
             if let url = URL(string:
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {

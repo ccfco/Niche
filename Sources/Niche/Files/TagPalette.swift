@@ -7,6 +7,10 @@ import AppKit
 ///
 /// 名称必须与系统标签名一致才能写成色标(写标签靠名字)。非标准名(用户自建/改名的标签)映射不到 →
 /// 落 `fallback` 灰点(Finder 对无色自定义标签也显灰),不臆造颜色。
+///
+/// `name` 不本地化:它既是 UI 展示文本也是写入 `com.apple.metadata:_kMDItemUserTags` 的字面量
+/// (见 ContextMenuBuilder.toggleTag / FileItem.tags),改成英文会让本 App 写入的标签名与访达
+/// 标准中文标签名不一致,标签互认(色点还原)失效——这是功能标识符,不是纯展示字符串。
 enum TagPalette {
     /// 有序(与 Finder 菜单同序)—— 供色点行从左到右铺设。
     static let standard: [(name: String, color: NSColor)] = [
