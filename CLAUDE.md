@@ -66,8 +66,11 @@
 
 ### Onboarding(首次使用引导)
 - **`OnboardingState.hasSeen` 走旁路 `UserDefaults`,不进 `BindingStore`**(同下钻深度持久化的理由:不需要 `@Published` 广播触发 `rebuildMirrors`)。
+- **Onboarding 内容窗口必须用 `PanelController` 里的 `NicheGlassHostingView`,禁止用裸 `NSHostingView`**:裸 `NSHostingView` 默认带不透明背衬层(不清 `layer.backgroundColor`),会把 SwiftUI 层的 `.glassEffect` 完全遮住,视觉上呈现"死白卡片"而非磨砂玻璃——实测踩过,肉眼完全看不出 glass 质感。`NicheGlassHostingView` 在 `updateLayer()` 里显式清空背景色,这是让 `.glassEffect` 生效的必要条件,不是可选优化。
+- **`OnboardingWindowController` 用无交通灯的辅助浮层 chrome**(透明 titlebar + 隐藏红绿灯 + KVC `cornerRadius` + 原生阴影,不叠 `NSGlassEffectView`),玻璃质感留给 SwiftUI 内容层的 `.glassEffect(.regular, in:)`——比整窗玻璃更轻量,适配这种固定尺寸、无呼出动画的独立小窗(对齐 macOS 26/27 Liquid Glass,同 Settings 窗口两套不同 chrome 配方分工:NavigationSplitView 主窗口用标准红绿灯 chrome,辅助小窗用这套)。
 - **`OnboardingWindowController` 建窗禁止用 `contentRect: .zero`**:`NSHostingView` 不会把 0×0 窗口自动撑到 SwiftUI 内容的实际尺寸,窗口会以 0×0 呈现(视觉上等同没弹出),必须在设好 `contentView` 后显式 `window.setContentSize(host.fittingSize)`。此类问题编译与 XCTest 都测不出,只能真机装跑验证。
-- **`SettingsWindowController` 的分区选中态(`selection`)归窗口控制器持有,不是 `SettingsView` 的 `@State`**:窗口只建一次、View 实例不会因外部再调用而重建,`@State` 初值只在首次生效——`show(section:)` 要在窗口已存在后跳转指定分区,必须把状态提到跨 `show()` 调用存活的控制器层,`SettingsView` 改收 `@Binding`。
+- **设置页分区选中态必须是 `ObservableObject`(`SettingsNavigationModel.selection: @Published`),禁止用 `Binding(get:set:)` 手动桥接一个普通存储字段**:后者的 `set` 闭包写值不参与 SwiftUI 的失效通知机制,view 树收不到"该重渲染"的信号——实测踩过,表现为侧边栏点击没反应、`show(section:)` 跳转分区不生效("全是 bug")。`SettingsWindowController` 持有 `SettingsNavigationModel` 实例(跨 `show()` 调用存活,窗口只建一次),`SettingsView` 用 `@ObservedObject` 接收,直接读写 `navigation.selection`。
+- **设置页结构是原生 `NavigationSplitView`(侧栏 `List(.sidebar)`)+ grouped `Form`**(对齐 macOS 26/27 System Settings,`SettingsWindowController` 用标准窗口 chrome:`.fullSizeContentView` + 透明 titlebar + 可见标题,不再叠 `NSGlassEffectView` 整窗玻璃)——分组卡片交给 grouped Form 原生绘制,不再自绘 SettingsPane/SettingsGroup 那套文字层级分组;grouped Form 对无 header 文字的首个 Section 会在顶部留一块平台级空白(与内容无关、公开 API 够不着),给 Section 传分区名当 header 可消除,零自绘。
 
 ### 自动更新(Sparkle，双层架构同 Clipin)
 - **检测与安装必须分两层**：`UpdateChecker`（轮询 `appcast.xml`）只做检测、驱动菜单栏小红点 + 设置页；Sparkle 只做下载/EdDSA 验签/替换/重启。`AppDelegate.setupSparkle()` 把「触发安装」闭包注入 `UpdateChecker.installHandler`，并置 Sparkle `automaticallyChecksForUpdates=false`，禁止两层都去轮询。
