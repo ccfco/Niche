@@ -47,7 +47,9 @@ final class UpdateChecker: ObservableObject {
     private init() {
         currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         let buildString = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
-        currentBuildNumber = Int(buildString) ?? 0
+        // build 号正常是纯整数（Niche 用 git 提交数，天然干净）；防御性容忍带小数点的格式
+        // （如手改 appcast 塞入 "144.0"）：整数解析失败再按浮点截断。与 Clipin 解析器保持一致。
+        currentBuildNumber = Int(buildString) ?? Int(Double(buildString) ?? 0)
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         dismissedVersion = defaults.string(forKey: Keys.dismissedVersion)
@@ -259,7 +261,9 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
             current?.version = trimmed
         }
         if elementName == "sparkle:version" {
-            current?.buildNumber = Int(buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines))
+            // 容忍带小数点的 build 号（"144.0"）：先整数、失败再按浮点截断（见 currentBuildNumber 注释）。
+            let bt = buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines)
+            current?.buildNumber = Int(bt) ?? Double(bt).map { Int($0) }
             buildNumberText = ""
         }
         if elementName == "item", let item = current {
