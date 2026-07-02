@@ -24,13 +24,13 @@ struct SettingsView: View {
         }
     }
 
-    /// 原生 System Settings 风格详情区:grouped Form 提供分组卡片 + 分隔线,顶部 paneHeader
-    /// (图标 + 标题 + 描述)对齐原生每个 pane 的头部块。
+    /// 原生 System Settings 风格详情区:grouped Form 提供分组卡片 + 分隔线。
+    /// 对齐原生(见系统「辅助功能」页):pane 标题**同时**出现在工具栏(navigationTitle,小)+
+    /// 内容首张介绍卡(paneHeader,图标 + 标题 + 说明,大),两处角色不同、非「双头」冗余。
+    /// 「关于」页首个 Section 本身是身份卡(图标+名字+版本),即它的头部,不再叠通用 paneHeader。
     @ViewBuilder
     private var detailPane: some View {
         Form {
-            // 「关于」页第一个 Section 本身就是身份卡(图标+名字+版本),已经是它的头部,
-            // 不再叠通用 paneHeader,避免"双头"冗余(同 Clipin About 页的取舍)。
             if navigation.selection != .about {
                 paneHeader(navigation.selection)
             }
@@ -42,15 +42,20 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        // 抵消 NavigationSplitView detail 列的幻影顶部空白(SwiftUI 已确认 bug rdar://122947424:
+        // detail 列重复传播工具栏高度的 safe area,凭空多出≈一个工具栏高的空白)。见
+        // SettingsChrome.settingsDetailTopGapFix。负 padding 把内容上移到标题栏正下方。
+        .padding(.top, -SettingsChrome.settingsDetailTopGapFix)
         .navigationTitle(navigation.selection.title)
     }
 
-    /// 原生 System Settings 每个 pane 顶部的头部块:accent 圆角方块图标 + 一句摘要。
-    /// Section 必须带 header 文字 —— grouped Form 对无 header 的首个 Section 会在顶部留一块
-    /// 平台级空白(与内容无关,公开 API 够不着);给分区名当 header 是零自绘的解法,顺带满足
-    /// 「设置页内禁止自绘卡片,分组交给 grouped Form」这条 chrome 纪律(同 Clipin 踩过的坑)。
+    /// 原生 System Settings 每个 pane 顶部的介绍卡:accent 圆角方块图标 + 标题 + 一句说明。
+    /// 参照系统「辅助功能」页——标题内嵌在卡片里(与工具栏标题相同,原生本就重复,见 detailPane
+    /// 注释),不再用 `Section(title)` 把标题拎成 grey section header。作为 grouped Form 首张
+    /// 卡片(无 section header),卡片外观交给 Form 原生绘制,不自绘背景(chrome 纪律)。
+    /// 顶部幻影空白由 detailPane 的负补偿统一抵消,见 SettingsChrome.settingsDetailTopGapFix。
     private func paneHeader(_ section: SettingsSection) -> some View {
-        Section(section.title) {
+        Section {
             HStack(alignment: .center, spacing: EdgeMetrics.standard.sectionSpacing) {
                 Image(systemName: section.icon)
                     .font(.system(size: 22, weight: .medium))
@@ -60,9 +65,12 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: EdgeMetrics.standard.controlCornerRadius, style: .continuous)
                             .fill(Color.accentColor)
                     )
-                Text(section.summary)
-                    .settingsCaption()
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: EdgeMetrics.standard.innerSpacing) {
+                    Text(section.title).font(.headline)
+                    Text(section.summary)
+                        .settingsCaption()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer(minLength: 0)
             }
             .padding(.vertical, EdgeMetrics.standard.innerSpacing)
@@ -76,6 +84,13 @@ struct SettingsView: View {
 enum SettingsChrome {
     static let windowSize = NSSize(width: 560, height: 480)
     static let windowMinSize = NSSize(width: 480, height: 380)
+
+    /// 设置页 detail 顶部负补偿:抵消 SwiftUI 已确认 bug(rdar://122947424)——
+    /// NavigationSplitView 的 detail 列把工具栏高度的 safe area 重复传播,凭空多出
+    /// ≈一个工具栏高的顶部空白(详见 developer.apple.com/forums/thread/746611)。
+    /// 补偿框架 bug、非设计间距,故不挂 EdgeMetrics 网格;值≈工具栏高,经验值,随 macOS
+    /// 版本可能微调——若顶部仍有空隙或内容被压到标题下,调这一个数。(与 Clipin 同构)
+    static let settingsDetailTopGapFix: CGFloat = 20
 }
 
 extension View {

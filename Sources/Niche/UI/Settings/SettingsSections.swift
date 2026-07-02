@@ -133,10 +133,11 @@ struct AboutSettings: View {
     }
 
     var body: some View {
-        // Section 必须带 header —— 无 header 的首个 Section 会把该显示 header 的高度原样
-        // 空着(grouped Form 平台级留白,同 detailPane.paneHeader 注释踩过的坑;这里虽已有
-        // 身份卡当视觉头部,仍需给 Section 本身传文字消除这块空白)。
-        Section(SettingsSection.about.title) {
+        // 身份卡作为「关于」页的头部(图标+名字+版本),无 section header。顶部幻影空白
+        // 由 detailPane 的负补偿统一抵消(rdar://122947424),见 SettingsChrome.settingsDetailTopGapFix
+        // ——不再靠给 Section 传 header 文字来填(那是被幻影空白误导的旧解法,原生首张介绍卡
+        // 就是无 header 且不留白)。
+        Section {
             HStack(spacing: EdgeMetrics.standard.sectionSpacing) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
