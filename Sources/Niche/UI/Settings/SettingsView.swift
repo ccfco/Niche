@@ -45,6 +45,8 @@ struct SettingsView: View {
         // 抵消 NavigationSplitView detail 列的幻影顶部空白(SwiftUI 已确认 bug rdar://122947424:
         // detail 列重复传播工具栏高度的 safe area,凭空多出≈一个工具栏高的空白)。见
         // SettingsChrome.settingsDetailTopGapFix。负 padding 把内容上移到标题栏正下方。
+        // 曾试图换掉这个 hack 去换取滚动边缘玻璃模糊,实测手建窗口这套结构下玻璃效果做不出来
+        // (同 Clipin 结论),遂保留此已验证方案,不再折腾。
         .padding(.top, -SettingsChrome.settingsDetailTopGapFix)
         .navigationTitle(navigation.selection.title)
     }

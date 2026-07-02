@@ -45,6 +45,10 @@ final class SettingsWindowController {
         // 反而和系统材质冲突。配套:`titlebarAppearsTransparent` 让材质透上来、
         // `titlebarSeparatorStyle=.none` 去分隔线,`titleVisibility=.visible` 让
         // `.navigationTitle(section.title)` 桥到工具栏显示当前分区名(对齐系统设置每页顶部标题)。
+        // 曾尝试用 `NSHostingController` + `sceneBridgingOptions` 桥出真 `NSToolbar` 换取滚动
+        // 边缘玻璃模糊(macOS 26 scroll edge effect),实测手建窗口这套结构下不生效
+        // (Clipin 同款结构同样没做出来,只用 titlebar 透明 + 负 padding 解决空白,未强求玻璃),
+        // 遂放弃、改回裸 `NSHostingView`,不为这一视觉细节继续增加复杂度。
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: SettingsChrome.windowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
