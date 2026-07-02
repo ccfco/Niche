@@ -28,5 +28,6 @@ docs/superpowers
 # Superpowers brainstorm 可视化伴侣（本地 mockup，不进 git）
 .superpowers/
 
-# AGENTS.md：本地 agent 工具指引（镜像 CLAUDE.md），不进 git
+# CLAUDE.md / AGENTS.md：本地 agent 工具指引，不进 git
+CLAUDE.md
 AGENTS.md
