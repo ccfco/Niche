@@ -42,13 +42,16 @@ final class SettingsWindowController {
         // vibrancy 材质延伸到窗口最顶端、让红绿灯坐在侧栏材质上(macOS 26 原生结构),并自动把
         // detail 区避让到工具栏下方。不再叠 `NSGlassEffectView` 整窗玻璃(那是面板/旧设置页的
         // 自绘配方) —— NavigationSplitView + grouped Form 本身就是原生 Liquid Glass,自绘玻璃
-        // 反而和系统材质冲突。配套:`titlebarAppearsTransparent` 让材质透上来、
-        // `titlebarSeparatorStyle=.none` 去分隔线,`titleVisibility=.visible` 让
-        // `.navigationTitle(section.title)` 桥到工具栏显示当前分区名(对齐系统设置每页顶部标题)。
-        // 曾尝试用 `NSHostingController` + `sceneBridgingOptions` 桥出真 `NSToolbar` 换取滚动
-        // 边缘玻璃模糊(macOS 26 scroll edge effect),实测手建窗口这套结构下不生效
-        // (Clipin 同款结构同样没做出来,只用 titlebar 透明 + 负 padding 解决空白,未强求玻璃),
-        // 遂放弃、改回裸 `NSHostingView`,不为这一视觉细节继续增加复杂度。
+        // 反而和系统材质冲突。`titleVisibility=.visible` 让 `.navigationTitle(section.title)`
+        // 桥到工具栏显示当前分区名(对齐系统设置每页顶部标题)。
+        // 滚动边缘玻璃模糊(macOS 26 scroll edge effect,系统设置详情区同款)三前提缺一不可,均已
+        // 用独立最小复现工程验证过(harness:独立 NSWindow + NavigationSplitView + grouped Form,
+        // 可编程滚动 + 截图):① 工具栏必须经 `NSHostingController` + `sceneBridgingOptions`
+        // 桥成真 `NSToolbar`,裸 `NSHostingView` 只在内容里画"假工具栏",模糊层不会出现;
+        // ② `titlebarAppearsTransparent` 必须保持 **false**(默认)——置 true 会整个关掉该效果,
+        // 且 false 不会带来不透明色带(未滚动时标题栏区域本就与 Form 背景融为一体);
+        // ③ detail Form 不能再叠 rdar://122947424 的负 padding hack 抵消幻影空白(桥接后该 bug
+        // 的触发前提本身也消失了)。
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: SettingsChrome.windowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -56,18 +59,18 @@ final class SettingsWindowController {
         )
         w.title = String(localized: "Niche 设置")
         w.titleVisibility = .visible
-        w.titlebarAppearsTransparent = true
-        w.titlebarSeparatorStyle = .none
         w.isReleasedWhenClosed = false         // 关闭只是 orderOut,实例复用
-        w.setContentSize(SettingsChrome.windowSize)
-        w.contentMinSize = SettingsChrome.windowMinSize
-        w.contentView = NSHostingView(
+        let host = NSHostingController(
             rootView: SettingsView(
                 model: model, triggerPrefs: triggerPrefs, navigation: navigation,
                 onAddFolder: onAddFolder
             )
             .environmentObject(environment)
         )
+        host.sceneBridgingOptions = [.toolbars, .title]
+        w.contentViewController = host
+        w.setContentSize(SettingsChrome.windowSize)
+        w.contentMinSize = SettingsChrome.windowMinSize
         w.center()
         window = w
         return w

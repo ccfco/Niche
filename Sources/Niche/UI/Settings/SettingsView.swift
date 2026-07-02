@@ -42,12 +42,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        // 抵消 NavigationSplitView detail 列的幻影顶部空白(SwiftUI 已确认 bug rdar://122947424:
-        // detail 列重复传播工具栏高度的 safe area,凭空多出≈一个工具栏高的空白)。见
-        // SettingsChrome.settingsDetailTopGapFix。负 padding 把内容上移到标题栏正下方。
-        // 曾试图换掉这个 hack 去换取滚动边缘玻璃模糊,实测手建窗口这套结构下玻璃效果做不出来
-        // (同 Clipin 结论),遂保留此已验证方案,不再折腾。
-        .padding(.top, -SettingsChrome.settingsDetailTopGapFix)
+        // 系统设置同款滚动边缘玻璃:内容滚入工具栏区域时渐进模糊(macOS 26 scroll edge effect,
+        // 见 SettingsWindowController 三前提注释)。不可再叠负 padding 抵消幻影空白——那会把
+        // 内容硬挪出 safe area,edge effect 的"内容进入工具栏区域"检测随之失效。
         .navigationTitle(navigation.selection.title)
     }
 
@@ -55,7 +52,6 @@ struct SettingsView: View {
     /// 参照系统「辅助功能」页——标题内嵌在卡片里(与工具栏标题相同,原生本就重复,见 detailPane
     /// 注释),不再用 `Section(title)` 把标题拎成 grey section header。作为 grouped Form 首张
     /// 卡片(无 section header),卡片外观交给 Form 原生绘制,不自绘背景(chrome 纪律)。
-    /// 顶部幻影空白由 detailPane 的负补偿统一抵消,见 SettingsChrome.settingsDetailTopGapFix。
     private func paneHeader(_ section: SettingsSection) -> some View {
         Section {
             HStack(alignment: .center, spacing: EdgeMetrics.standard.sectionSpacing) {
@@ -86,13 +82,6 @@ struct SettingsView: View {
 enum SettingsChrome {
     static let windowSize = NSSize(width: 560, height: 480)
     static let windowMinSize = NSSize(width: 480, height: 380)
-
-    /// 设置页 detail 顶部负补偿:抵消 SwiftUI 已确认 bug(rdar://122947424)——
-    /// NavigationSplitView 的 detail 列把工具栏高度的 safe area 重复传播,凭空多出
-    /// ≈一个工具栏高的顶部空白(详见 developer.apple.com/forums/thread/746611)。
-    /// 补偿框架 bug、非设计间距,故不挂 EdgeMetrics 网格;值≈工具栏高,经验值,随 macOS
-    /// 版本可能微调——若顶部仍有空隙或内容被压到标题下,调这一个数。(与 Clipin 同构)
-    static let settingsDetailTopGapFix: CGFloat = 20
 }
 
 extension View {
