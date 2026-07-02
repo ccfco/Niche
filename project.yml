@@ -19,8 +19,8 @@ settings:
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: YES
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.6"
-    CURRENT_PROJECT_VERSION: 144
+    MARKETING_VERSION: "0.1.7"
+    CURRENT_PROJECT_VERSION: 156
     # 本地开发用 ad-hoc 签名;不沙盒,GitHub Release 自分发时再换正式签名/公证
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
