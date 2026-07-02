@@ -173,7 +173,7 @@ echo "  ✓ HTTP 可达性确认通过"
 
 echo "▸ 推送 appcast（资产已就位，此刻暴露才安全）…"
 git add appcast.xml
-git commit -m "chore: 更新 appcast $TAG（资产已确认可下载）"
+git commit -m "chore: 更新 appcast ${TAG}（资产已确认可下载）"
 git push origin main
 
 echo "✔ 已发布 ${APP_NAME} ${TAG}"
