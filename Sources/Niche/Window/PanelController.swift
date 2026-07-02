@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// 替代了旧的 NotchExpansion(DNK 黑底刘海板,吞玻璃)+ PinnedPanelController(另一个 titled 窗)。
 ///
-/// - 尺寸:单一**标准尺寸**(宽恰容 5 列单元格,派生自网格;两模式共用,Pin 不改、不可 resize)。
+/// - 尺寸:单一**标准尺寸**(宽恰容 6 列单元格,派生自网格;两模式共用,Pin 不改、不可 resize)。
 /// - 瞬态:从刘海下方"长出来"(frame 动画)+ 鼠标离开"面板↔刘海"走廊即收。
 /// - 常驻:就地变 floating、可激活、可拖动(detach);不长出、不改尺寸。
 @MainActor

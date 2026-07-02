@@ -38,11 +38,14 @@ final class PanelModel: ObservableObject {
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4
     /// 图标视图图标边长(pt),底栏滑块无极调节(对齐访达缩放条:面板尺寸不变,只改图标大小+列数)。
-    /// 默认 64 = 访达图标视图默认 iconSize。**不在 didSet 持久化** —— 拖动会逐中间值狂写 UserDefaults;
+    /// 默认 52 —— 面板固定宽度按 6 列基准(PanelController.cellWidth=84)几何设计,
+    /// 而网格列宽公式是 iconSize+40(FileGridView.columnCount):52+40=92,(544+8)/92 恰好整除 6,
+    /// 精确铺满 6 列不留零头。此前用访达默认 64 会挤出只有 5 列的半满网格(568pt 面板宽度下)。
+    /// **不在 didSet 持久化** —— 拖动会逐中间值狂写 UserDefaults;
     /// 改由 Slider 松手(onEditingChanged)调 persistIconSize 写一次。拖动中 @Published 实时驱动缩放。
     @Published var iconSize: CGFloat = {
         let saved = UserDefaults.standard.double(forKey: "niche.iconSize")
-        return saved > 0 ? CGFloat(saved) : 64
+        return saved > 0 ? CGFloat(saved) : 52
     }()
     static let iconSizeRange: ClosedRange<CGFloat> = 40...128
 
