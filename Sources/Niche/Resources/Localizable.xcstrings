@@ -101,6 +101,26 @@
         }
       }
     },
+    "上边缘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top Edge"
+          }
+        }
+      }
+    },
+    "下边缘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom Edge"
+          }
+        }
+      }
+    },
     "不再提示": {
       "localizations": {
         "en": {
@@ -127,6 +147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Temporary: %@"
+          }
+        }
+      }
+    },
+    "仅影响无刘海屏幕的回退热区,真实刘海按物理宽度显示,不受此项影响。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only affects the fallback zone on notch-less displays; a real notch always uses its physical width."
           }
         }
       }
@@ -361,6 +391,36 @@
         }
       }
     },
+    "右上角": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top Right"
+          }
+        }
+      }
+    },
+    "右下角": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom Right"
+          }
+        }
+      }
+    },
+    "右边缘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right Edge"
+          }
+        }
+      }
+    },
     "名称": {
       "localizations": {
         "en": {
@@ -487,6 +547,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not checked yet"
+          }
+        }
+      }
+    },
+    "左上角": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top Left"
+          }
+        }
+      }
+    },
+    "左下角": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom Left"
+          }
+        }
+      }
+    },
+    "左边缘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left Edge"
           }
         }
       }
@@ -1081,12 +1171,42 @@
         }
       }
     },
+    "热区宽度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hot Zone Width"
+          }
+        }
+      }
+    },
+    "热角": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hot Corners"
+          }
+        }
+      }
+    },
     "状态": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Status"
+          }
+        }
+      }
+    },
+    "现在就试试看——呼出后这个窗口会自动关闭": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try it now—this window closes automatically once the panel appears"
           }
         }
       }
@@ -1371,6 +1491,16 @@
         }
       }
     },
+    "边缘触发": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edge Triggers"
+          }
+        }
+      }
+    },
     "还原默认": {
       "localizations": {
         "en": {
@@ -1517,6 +1647,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "The system will ask for permission the first time you access protected folders like Desktop/Documents/Downloads; once allowed, mirroring stays in sync."
+          }
+        }
+      }
+    },
+    "鼠标移到勾选的屏幕角落即可呼出,面板从该角展开,同 macOS 系统热角。不支持拖拽文件迎上。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move the mouse to a checked screen corner to bring up Niche; the panel expands from that corner, same as macOS Hot Corners. Doesn't support dragging files in."
+          }
+        }
+      }
+    },
+    "鼠标移到勾选的屏幕边缘即可呼出,面板从鼠标所在位置滑出。启用 Dock 所在边时留意误触。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move the mouse to a checked screen edge to bring up Niche; the panel slides out at the mouse position. Watch for accidental triggers on the Dock's edge."
           }
         }
       }

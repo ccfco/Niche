@@ -75,13 +75,66 @@ struct TriggerSettings: View {
                     Text(preset.label).tag(preset.value)
                 }
             }
-            .disabled(!triggerPrefs.hotZoneEnabled)
+            // 延迟作用于所有 hover 触发(主热区/热角/边缘),任一开启就可调 —— 只绑主热区会出现
+            // "只开热角时延迟在生效却改不了"。
+            .disabled(!triggerPrefs.hotZoneEnabled
+                      && triggerPrefs.enabledHotCorners.isEmpty
+                      && triggerPrefs.enabledSides.isEmpty)
             LabeledContent("呼出快捷键") {
                 HotkeyRecorderView(hotkey: $triggerPrefs.hotkey)
             }
         } footer: {
             Text("关闭热区后仍可用菜单栏图标或快捷键呼出。").settingsCaption()
         }
+
+        Section {
+            Slider(value: $triggerPrefs.hotZoneWidthScale, in: 0.6...2.0, step: 0.1) {
+                Text("热区宽度")
+            }
+            .disabled(!triggerPrefs.hotZoneEnabled)
+        } footer: {
+            Text("仅影响无刘海屏幕的回退热区,真实刘海按物理宽度显示,不受此项影响。").settingsCaption()
+        }
+
+        Section {
+            ForEach(ScreenCorner.allCases, id: \.self) { corner in
+                Toggle(corner.title, isOn: hotCornerBinding(corner))
+            }
+        } header: {
+            Text("热角")
+        } footer: {
+            Text("鼠标移到勾选的屏幕角落即可呼出,面板从该角展开,同 macOS 系统热角。不支持拖拽文件迎上。").settingsCaption()
+        }
+
+        Section {
+            ForEach(ScreenSide.allCases, id: \.self) { side in
+                Toggle(side.title, isOn: sideBinding(side))
+            }
+        } header: {
+            Text("边缘触发")
+        } footer: {
+            Text("鼠标移到勾选的屏幕边缘即可呼出,面板从鼠标所在位置滑出。启用 Dock 所在边时留意误触。").settingsCaption()
+        }
+    }
+
+    private func hotCornerBinding(_ corner: ScreenCorner) -> Binding<Bool> {
+        Binding(
+            get: { triggerPrefs.enabledHotCorners.contains(corner) },
+            set: { isOn in
+                if isOn { triggerPrefs.enabledHotCorners.insert(corner) }
+                else { triggerPrefs.enabledHotCorners.remove(corner) }
+            }
+        )
+    }
+
+    private func sideBinding(_ side: ScreenSide) -> Binding<Bool> {
+        Binding(
+            get: { triggerPrefs.enabledSides.contains(side) },
+            set: { isOn in
+                if isOn { triggerPrefs.enabledSides.insert(side) }
+                else { triggerPrefs.enabledSides.remove(side) }
+            }
+        )
     }
 }
 

@@ -23,20 +23,45 @@ final class NotchGeometryTests: XCTestCase {
     }
 
     func testNoNotchFallsBackToTopCenter() {
+        // 1920 宽屏:16% = 307.2,落在 [160,480] 夹取范围内,不触发夹取。
         let res = NotchGeometry.resolve(
             screenFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
             safeAreaTop: 0,
             auxiliaryLeftWidth: nil,
             auxiliaryRightWidth: nil,
-            menubarHeight: 24,
-            fallbackWidth: 220
+            menubarHeight: 24
         )
         XCTAssertFalse(res.hasNotch)
         let r = res.rect
-        XCTAssertEqual(r.width, 220, accuracy: 0.001)
+        XCTAssertEqual(r.width, 307.2, accuracy: 0.001)
         XCTAssertEqual(r.height, 24, accuracy: 0.001)
         XCTAssertEqual(r.midX, 960, accuracy: 0.001)
         XCTAssertEqual(r.maxY, 1080, accuracy: 0.001)
+    }
+
+    func testFallbackWidthClampedOnSmallAndHugeScreens() {
+        // 极小屏:16% 低于 160 下限,夹到 160。
+        let small = NotchGeometry.resolve(
+            screenFrame: CGRect(x: 0, y: 0, width: 600, height: 400),
+            safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, menubarHeight: 24
+        )
+        XCTAssertEqual(small.rect.width, 160, accuracy: 0.001)
+
+        // 超宽屏:16% 高于 480 上限,夹到 480。
+        let huge = NotchGeometry.resolve(
+            screenFrame: CGRect(x: 0, y: 0, width: 5120, height: 1440),
+            safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, menubarHeight: 24
+        )
+        XCTAssertEqual(huge.rect.width, 480, accuracy: 0.001)
+    }
+
+    func testFallbackWidthScaleMultipliesBaseWidth() {
+        let res = NotchGeometry.resolve(
+            screenFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, menubarHeight: 24,
+            widthScale: 1.5
+        )
+        XCTAssertEqual(res.rect.width, 307.2 * 1.5, accuracy: 0.001)
     }
 
     func testExternalDisplayWithMenubarButNoAuxIsFallback() {

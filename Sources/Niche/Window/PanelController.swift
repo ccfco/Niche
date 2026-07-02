@@ -34,8 +34,11 @@ final class PanelController {
     private var typeAhead = TypeAheadBuffer()
     private var leaveWorkItem: DispatchWorkItem?
     /// 瞬态 keep-alive 区域基准(面板 frame ∪ 此矩形);防 hover-收-再 hover 闪烁。
-    /// 贴刘海时=刘海矩形(连成走廊);脱离刘海(unpin)时=面板自身。
+    /// 贴锚(刘海/热角/边缘)时=锚的走廊矩形(连成走廊);脱离锚(unpin)时=面板自身。
     private var anchorRect: CGRect = .zero
+    /// 本次呈现的锚点(触发源在哪面板从哪长出):驱动收回细条方向 + relayout 生长方向 + 玻璃钉边。
+    /// unpin 后置 nil(面板已脱离边缘,收起只淡出不飞回)。
+    private var lastAnchor: PanelAnchor?
     /// 淡出竞态守卫:每次显示自增;hide 淡出回调若被新一次显示抢占(代次不符)则放弃 orderOut。
     private var showGeneration = 0
     private var isHiding = false
@@ -101,14 +104,25 @@ final class PanelController {
         let newHeight = panelHeight(itemCount: count)
         let frame = panel.frame
         guard abs(frame.height - newHeight) > 1 else { return }
-        let top = frame.maxY   // 顶边不动
-        var originY = top - newHeight
-        // 屏幕底部夹取:pinned 拖到屏幕下方后向下生长可能越界,保证不低于可视区下沿(Codex review)。
-        if let screenMinY = panel.screen?.visibleFrame.minY, originY < screenMinY {
-            originY = screenMinY
-        }
-        let newFrame = NSRect(x: frame.origin.x, y: originY, width: frame.width,
+        let newFrame: NSRect
+        if lastAnchor?.growsUpward == true, panel.mode == .transient {
+            // 底部锚定(下边缘/下角触发):底边不动向上长,顶边不越可视区上沿。
+            let bottom = frame.minY
+            var top = bottom + newHeight
+            if let screenMaxY = panel.screen?.visibleFrame.maxY, top > screenMaxY {
+                top = screenMaxY
+            }
+            newFrame = NSRect(x: frame.origin.x, y: bottom, width: frame.width, height: top - bottom)
+        } else {
+            let top = frame.maxY   // 顶边不动
+            var originY = top - newHeight
+            // 屏幕底部夹取:pinned 拖到屏幕下方后向下生长可能越界,保证不低于可视区下沿(Codex review)。
+            if let screenMinY = panel.screen?.visibleFrame.minY, originY < screenMinY {
+                originY = screenMinY
+            }
+            newFrame = NSRect(x: frame.origin.x, y: originY, width: frame.width,
                               height: top - originY)
+        }
         snapGlass(toContentHeight: newFrame.height)   // 同 present:玻璃先到新高度,窗口裁切露出(无 morph)
         if motion.reduceMotion {
             panel.setFrame(newFrame, display: true)
@@ -123,18 +137,20 @@ final class PanelController {
 
     // MARK: - 显示 / 收起
 
-    /// 呼出瞬态:从刘海/回退区下方"长出来"(nonactivating 取键焦点做导航但不抢前台)+ 起鼠标离开监听。
-    func presentTransient(below resolution: NotchGeometry.Resolution, itemCount: Int) {
+    /// 呼出瞬态:面板从锚点(刘海/热角/边缘)处"长出来"(nonactivating 取键焦点做导航但不抢前台)
+    /// + 起鼠标离开监听。锚点决定目标位置、生长细条方向与走廊(见 PanelAnchor)。
+    func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount: Int) {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
         startKeyMonitor()
         panel.mode = .transient
-        let target = standardFrame(below: resolution, itemCount: itemCount)
-        anchorRect = resolution.rect
-        // 起始:刘海宽的小条,顶边贴刘海底 → 向下+两侧长到标准尺寸。
-        let start = NSRect(x: target.midX - resolution.rect.width / 2,
-                           y: target.maxY - 6, width: resolution.rect.width, height: 6)
+        let size = CGSize(width: panelWidth, height: panelHeight(itemCount: itemCount))
+        let target = anchor.targetFrame(panelSize: size, visible: screen.visibleFrame)
+        lastAnchor = anchor
+        anchorRect = anchor.corridorRect(target: target, screenFrame: screen.frame)
+        // 起始:贴锚一侧的细条 → 向内长到标准尺寸。
+        let start = anchor.collapsedFrame(target: target)
         panel.setFrame(start, display: false)
         snapGlass(toContentHeight: target.height)   // 玻璃先到目标尺寸,窗口长大只是裁切露出(无 morph)
         panel.alphaValue = 0
@@ -184,11 +200,10 @@ final class PanelController {
         isHiding = true
         let gen = showGeneration
         let dur = motion.reduceMotion ? 0.12 : 0.18
-        // 瞬态:收回目标 = 刘海宽小条,顶边贴当前顶(present start 的镜像);常驻不收(已脱离刘海,
-        // 飞回刘海口反而突兀)。anchorRect 在贴刘海时=刘海矩形,故宽/中心取自它。
-        let collapse: NSRect? = panel.mode == .transient
-            ? NSRect(x: anchorRect.midX - anchorRect.width / 2,
-                     y: panel.frame.maxY - 6, width: anchorRect.width, height: 6)
+        // 瞬态:收回目标 = 贴锚一侧的细条(present start 的镜像);常驻或已脱离锚(unpin 过)不收
+        // (飞回边缘口反而突兀),只淡出。
+        let collapse: NSRect? = (panel.mode == .transient)
+            ? lastAnchor?.collapsedFrame(target: panel.frame)
             : nil
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = dur
@@ -212,39 +227,69 @@ final class PanelController {
         panel.mode = pinned ? .pinned : .transient
         if pinned {
             stopMouseLeaveMonitor()
+            lastAnchor = nil   // Pin = 脱离锚点:relayout 回顶边固定,玻璃钉边回顶部居中,方向一致
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         } else {
-            anchorRect = panel.frame   // 脱离刘海:走廊塌缩为面板自身,离开面板即收
+            anchorRect = panel.frame   // 脱离锚点:走廊塌缩为面板自身,离开面板即收
+            lastAnchor = nil           // 已不贴任何边缘,收起只淡出、不飞回
             startMouseLeaveMonitor()
         }
     }
 
     // MARK: - 几何 / 窗口
 
-    /// 标准 frame:刘海/回退区正下方居中,顶边贴刘海底(向下展开)。高度按条目数自适应。
-    private func standardFrame(below resolution: NotchGeometry.Resolution, itemCount: Int) -> NSRect {
-        let anchor = resolution.rect
-        let w = panelWidth
-        let h = panelHeight(itemCount: itemCount)
-        return NSRect(x: anchor.midX - w / 2,
-                      y: anchor.minY - h,   // anchor.minY = 刘海底 = 面板顶
-                      width: w, height: h)
-    }
-
-    /// 窗口 setFrame 动画**之前**调:把玻璃快照到目标内容尺寸、顶部居中锚定,并关隐式动画
+    /// 窗口 setFrame 动画**之前**调:把玻璃快照到目标内容尺寸、按锚点钉边,并关隐式动画
     /// (CATransaction)避免玻璃自己 morph。此后放大窗口 frame,容器裁切露出玻璃;autoresize 只改
     /// 玻璃**位置**不改 bounds → 全程零 morph(根治呼出"慢 + 从右往左")。height = 目标内容高度。
+    ///
+    /// 钉边必须跟随锚点:从顶长出钉顶部居中(历史行为),从左边缘长出必须钉左、从底角长出必须钉
+    /// 该角 —— 钉错边窗口放大时 autoresize 会平移玻璃,"高光横扫"morph 复发。
     private func snapGlass(toContentHeight height: CGFloat) {
         guard let glass, let container = panel?.contentView else { return }
         let w = panelWidth
         let cb = container.bounds
-        // 相对当前容器:顶边对齐(y = 容器高 - 玻璃高)、水平居中。autoresize 随后维持此锚定。
-        let frame = NSRect(x: (cb.width - w) / 2, y: cb.height - height, width: w, height: height)
+        let (hPin, vPin) = glassPin
+        let x: CGFloat
+        switch hPin {
+        case .left: x = 0
+        case .center: x = (cb.width - w) / 2
+        case .right: x = cb.width - w
+        }
+        let y: CGFloat = vPin == .bottom ? 0 : cb.height - height
+        var mask: NSView.AutoresizingMask = vPin == .bottom ? [.maxYMargin] : [.minYMargin]
+        switch hPin {
+        case .left: mask.insert(.maxXMargin)
+        case .center: mask.formUnion([.minXMargin, .maxXMargin])
+        case .right: mask.insert(.minXMargin)
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        glass.frame = frame
+        glass.autoresizingMask = mask
+        glass.frame = NSRect(x: x, y: y, width: w, height: height)
         CATransaction.commit()
+    }
+
+    private enum GlassHPin { case left, center, right }
+    private enum GlassVPin { case top, bottom }
+
+    /// 玻璃钉边方位(由锚点派生;无锚点 = 历史顶部居中)。
+    private var glassPin: (GlassHPin, GlassVPin) {
+        switch lastAnchor {
+        case .none, .top:
+            return (.center, .top)
+        case let .corner(corner, _):
+            let h: GlassHPin = (corner == .topLeft || corner == .bottomLeft) ? .left : .right
+            let v: GlassVPin = (corner == .bottomLeft || corner == .bottomRight) ? .bottom : .top
+            return (h, v)
+        case let .side(side, _):
+            switch side {
+            case .top: return (.center, .top)
+            case .bottom: return (.center, .bottom)
+            case .left: return (.left, .top)
+            case .right: return (.right, .top)
+            }
+        }
     }
 
     private func ensurePanel() -> NichePanel {

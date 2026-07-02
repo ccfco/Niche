@@ -11,22 +11,35 @@ import AppKit
 /// 拖拽迎上仍走热区窗口的 NSDraggingDestination(全局鼠标监听拿不到拖拽 session)。
 @MainActor
 final class HotZoneController {
+    /// 一块生效的触发区:命中矩形 + 触发身份(宿主据此决定面板从哪长出)。
+    struct Zone {
+        enum Kind: Equatable {
+            case primary                 // 刘海/顶部回退(唯一支持拖拽迎上的区)
+            case corner(ScreenCorner)    // 热角
+            case side(ScreenSide)        // 边缘
+        }
+        let kind: Kind
+        let rect: CGRect
+    }
+
     private let window = HotZoneWindow()
     private let hoverIntent: HoverIntent
 
-    /// 确认呼出。`draggingFile=true` 表示拖拽迎上(宿主可用更快 spring)。
-    var onTrigger: ((_ draggingFile: Bool) -> Void)?
+    /// 确认呼出。kind 是触发来源;`draggingFile=true` 表示拖拽迎上(只可能来自 .primary)。
+    var onTrigger: ((_ kind: Zone.Kind, _ draggingFile: Bool) -> Void)?
 
-    /// 给定屏 → 该屏的热区命中矩形(全局坐标,原点左下)。宿主注入(ScreenObserver + NotchGeometry)。
-    /// 鼠标进入新屏时用它重算 rect。
-    var resolveRect: ((NSScreen) -> CGRect?)?
+    /// 给定屏 → 该屏所有生效热区(全局坐标,原点左下)。宿主注入(ScreenObserver + NotchGeometry +
+    /// 热角/边缘)。约定第一个是 .primary(承载拖拽落点识别的 HotZoneWindow);命中按数组顺序取
+    /// 第一个包含鼠标的区(热角在边缘之前,角落重叠处热角赢)。鼠标进入新屏时用它重算。
+    var resolveZones: ((NSScreen) -> [Zone])?
 
-    /// 热区触发开关(设置页"刘海热区触发"):关掉只停 hover 判定,监听保留(开关随时可逆,
-    /// 拖拽迎上也一并停 —— 用户关热区的预期是"鼠标靠近刘海不再有任何反应")。
+    /// 监听总开关(宿主按"任一触发区生效"推导;主热区单独关走 resolveZones 不下发 .primary):
+    /// 关掉只停 hover 判定,监听保留(开关随时可逆,拖拽迎上也一并停)。
     var isEnabled = true {
         didSet {
             guard isEnabled != oldValue, !isEnabled else { return }
             insideHotZone = false
+            activeKind = nil
             hoverIntent.exit()
         }
     }
@@ -38,8 +51,10 @@ final class HotZoneController {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    /// 当前命中矩形(全局坐标,原点左下)。鼠标进入即起 hover intent。
-    private var hotZoneRect: CGRect = .zero
+    /// 当前屏所有生效热区(主热区 + 热角 + 边缘)。鼠标进入任一个即起 hover intent。
+    private var zones: [Zone] = []
+    /// 鼠标当前所在区的身份(hover intent 确认时回传给宿主;离开置 nil)。
+    private var activeKind: Zone.Kind?
     /// 已解析热区的那块屏的 frame;鼠标离开它才重新搜屏(快路径,避免每次移动都遍历屏幕列表)。
     private var trackedScreenFrame: CGRect = .zero
     private var insideHotZone = false
@@ -47,13 +62,14 @@ final class HotZoneController {
     init(hoverDelay: TimeInterval = 0.18) {
         hoverIntent = HoverIntent(delay: hoverDelay)
         hoverIntent.onConfirmed = { [weak self] in
-            self?.onTrigger?(false)
+            guard let self else { return }
+            self.onTrigger?(self.activeKind ?? .primary, false)
         }
-        // 拖拽迎上:窗口的 NSDraggingDestination 立即触发(不等防抖)。
+        // 拖拽迎上:窗口的 NSDraggingDestination 立即触发(不等防抖)。窗口只在主热区,身份必为 .primary。
         window.onDragEntered = { [weak self] in
             guard let self, self.isEnabled else { return }
             self.hoverIntent.exit()
-            self.onTrigger?(true)
+            self.onTrigger?(.primary, true)
         }
         startMouseMonitor()
     }
@@ -81,16 +97,29 @@ final class HotZoneController {
         guard isEnabled else { return }
         let mouse = NSEvent.mouseLocation
         syncScreenIfNeeded(mouse: mouse)
-        guard hotZoneRect != .zero else { return }
+        guard !zones.isEmpty else { return }
         // 含上边界:CGRect.contains 排除 maxY,鼠标顶到屏幕最顶(y=maxY=屏高)恰落在被排除的
-        // 上边界 → 贴边呼不出。热区贴屏顶,必须显式含 max 边。
-        let inside = mouse.x >= hotZoneRect.minX && mouse.x <= hotZoneRect.maxX
-                  && mouse.y >= hotZoneRect.minY && mouse.y <= hotZoneRect.maxY
+        // 上边界 → 贴边呼不出(热角/边缘同理贴屏幕最右/最下边)。热区贴边,必须显式含 max 边。
+        let hit = zones.first { zone in
+            mouse.x >= zone.rect.minX && mouse.x <= zone.rect.maxX
+                && mouse.y >= zone.rect.minY && mouse.y <= zone.rect.maxY
+        }
+        let inside = hit != nil
+        if let hit {
+            // 跨区滑动(如角落→相邻边缘重叠带):重起 dwell 计时,不沿用旧区已积累的停留时间,
+            // 否则新区会被旧区的计时提前触发(Codex review)。同一区内滑动身份不变、计时不动。
+            if insideHotZone, activeKind != hit.kind {
+                hoverIntent.exit()
+                hoverIntent.enter()
+            }
+            activeKind = hit.kind
+        }
         guard inside != insideHotZone else { return }
         insideHotZone = inside
         if inside {
             hoverIntent.enter()
         } else {
+            activeKind = nil
             hoverIntent.exit()
         }
     }
@@ -103,10 +132,16 @@ final class HotZoneController {
         // 换屏即作废旧屏的进出态:显式 exit 取消可能在跑的 hover intent timer,
         // 避免旧屏 enter 未配对 exit 导致防抖卡住(跨屏不保证落点仍在热区会触发 exit)。
         insideHotZone = false
+        activeKind = nil
         hoverIntent.exit()
-        guard let rect = resolveRect?(screen) else { hotZoneRect = .zero; return }
-        hotZoneRect = rect
-        window.place(at: rect)
+        zones = resolveZones?(screen) ?? []
+        // HotZoneWindow 只承载主热区(刘海/回退)的拖拽落点识别;热角/边缘纯 hover 触发,不需要窗口。
+        // 主热区被单独关掉(hotZoneEnabled=false,但热角/边缘仍开)时收起窗口,拖拽路径一并停。
+        if let primary = zones.first(where: { $0.kind == .primary }) {
+            window.place(at: primary.rect)
+        } else {
+            window.orderOut(nil)
+        }
     }
 
     deinit {

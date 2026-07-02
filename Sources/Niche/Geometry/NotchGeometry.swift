@@ -29,14 +29,15 @@ enum NotchGeometry {
     ///   - auxiliaryLeftWidth / auxiliaryRightWidth: 刘海两侧可用区宽度
     ///     (`auxiliaryTopLeftArea?.width` / `auxiliaryTopRightArea?.width`);无刘海为 nil。
     ///   - menubarHeight: 菜单栏高度,作为无刘海回退矩形的高度。
-    ///   - fallbackWidth: 无刘海回退矩形宽度(默认 220,贴近刘海视觉宽度)。
+    ///   - widthScale: 无刘海回退矩形的宽度缩放(设置页滑杆,默认 1.0)。真实刘海宽度贴合物理刘海,
+    ///     不受此项影响 —— 缩放只解决"大外接屏上固定宽度显得窄"这一件事。
     static func resolve(
         screenFrame: CGRect,
         safeAreaTop: CGFloat,
         auxiliaryLeftWidth: CGFloat?,
         auxiliaryRightWidth: CGFloat?,
         menubarHeight: CGFloat,
-        fallbackWidth: CGFloat = 220
+        widthScale: CGFloat = 1.0
     ) -> Resolution {
         // 有刘海的判据:两侧 aux 宽度均存在且 safeAreaTop > 0。
         if let left = auxiliaryLeftWidth, let right = auxiliaryRightWidth, safeAreaTop > 0 {
@@ -52,7 +53,10 @@ enum NotchGeometry {
             }
         }
 
-        // 无刘海:顶部中央回退,高度取菜单栏高度(至少 1pt 防退化)。
+        // 无刘海:顶部中央回退,宽度按屏宽比例算(16%,夹在 160~480pt 之间防止小屏太窄/大屏离谱宽),
+        // 再乘用户滑杆缩放;高度取菜单栏高度(至少 1pt 防退化)。
+        let baseWidth = min(max(screenFrame.width * 0.16, 160), 480)
+        let fallbackWidth = baseWidth * widthScale
         let height = max(menubarHeight, 1)
         let rect = CGRect(
             x: screenFrame.midX - fallbackWidth / 2,

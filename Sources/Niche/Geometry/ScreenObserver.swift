@@ -28,14 +28,15 @@ final class ScreenObserver: ObservableObject {
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     }
 
-    /// 解析某屏的刘海/回退几何。
-    func resolution(for screen: NSScreen) -> NotchGeometry.Resolution {
+    /// 解析某屏的刘海/回退几何。widthScale 见 NotchGeometry.resolve。
+    func resolution(for screen: NSScreen, widthScale: CGFloat = 1.0) -> NotchGeometry.Resolution {
         NotchGeometry.resolve(
             screenFrame: screen.frame,
             safeAreaTop: screen.safeAreaInsets.top,
             auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
             auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width,
-            menubarHeight: screen.frame.maxY - screen.visibleFrame.maxY
+            menubarHeight: screen.frame.maxY - screen.visibleFrame.maxY,
+            widthScale: widthScale
         )
     }
 }

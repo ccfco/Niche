@@ -121,6 +121,11 @@ final class NicheController {
     /// Onboarding 用的触发方式描述,转发 triggerPrefs 的单一真相源(不重复维护)。
     var onboardingTriggerDescription: String { triggerPrefs.onboardingTriggerDescription }
 
+    /// 面板真正呈现的信号(瞬态 present / 常驻 revealPinned 两条路径都发),不区分触发方式
+    /// (热区/快捷键/菜单栏都算)。Onboarding 订阅它判定"用户真的学会呼出了",比"点了知道了"
+    /// 这种自我报告可靠——验证的是真实行为而非用户是否读完文字。
+    let panelPresented = PassthroughSubject<Void, Never>()
+
     private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
@@ -149,8 +154,14 @@ final class NicheController {
     /// 把触发偏好应用到触发系统。快捷键注册失败(撞系统占用等)→ 可见提示并回退到上一个
     /// 可用键(兜底呼出不能无声失效)。
     private func applyTriggerPreferences() {
+        // isEnabled 是监听总开关:任一触发区(主热区/热角/边缘)生效即开。主热区自己的开关
+        // 体现在 resolveZones 不下发 .primary,不能拿它一票否决热角/边缘。
         hotZone.isEnabled = triggerPrefs.hotZoneEnabled
+            || !triggerPrefs.enabledHotCorners.isEmpty
+            || !triggerPrefs.enabledSides.isEmpty
         hotZone.setHoverDelay(triggerPrefs.hoverDelay)
+        // 宽度滑杆/热角开关改的是几何,不是这两个开关能带出来的 —— 显式重新落位。
+        hotZone.refreshPlacement()
         let pref = triggerPrefs.hotkey
         if pref == lastGoodHotkey { return }   // 热区项变化不必反复重注册同一热键
         if hotkey.register(keyCode: pref.keyCode, modifiers: pref.carbonModifiers) {
@@ -177,13 +188,27 @@ final class NicheController {
     private func wire() {
         // 异步文件操作(recycle 完成回调)失败 → 可见提示(throws 上抛不到的路径)。
         ops.onError = { [weak self] title, error in self?.presentFailure(title: title, error: error) }
-        hotZone.onTrigger = { [weak self] _ in
-            self?.present()
+        hotZone.onTrigger = { [weak self] kind, _ in
+            self?.present(from: kind)
         }
-        // 热区跟随鼠标换屏:给定屏 → 该屏刘海/回退几何的命中矩形。
-        hotZone.resolveRect = { [weak self] screen in
-            guard let self else { return nil }
-            return NotchGeometry.hotZoneRect(from: self.screens.resolution(for: screen))
+        // 热区跟随鼠标换屏:给定屏 → 主热区(刘海/回退,宽度随设置滑杆,受 hotZoneEnabled 独立控制)
+        // + 热角 + 边缘。顺序即命中优先级:角落与边缘重叠处热角赢。
+        hotZone.resolveZones = { [weak self] screen in
+            guard let self else { return [] }
+            var zones: [HotZoneController.Zone] = []
+            if self.triggerPrefs.hotZoneEnabled {
+                let resolution = self.screens.resolution(for: screen, widthScale: self.triggerPrefs.hotZoneWidthScale)
+                zones.append(.init(kind: .primary, rect: NotchGeometry.hotZoneRect(from: resolution)))
+            }
+            // 按 allCases 固定顺序遍历(Set 无序):相邻两边共享的 4pt 角落重叠带命中结果
+            // 必须确定,不能随 Set 哈希漂移(Codex review)。
+            for corner in ScreenCorner.allCases where self.triggerPrefs.enabledHotCorners.contains(corner) {
+                zones.append(.init(kind: .corner(corner), rect: corner.rect(in: screen.frame)))
+            }
+            for side in ScreenSide.allCases where self.triggerPrefs.enabledSides.contains(side) {
+                zones.append(.init(kind: .side(side), rect: side.stripRect(in: screen.frame)))
+            }
+            return zones
         }
         autoHide.onShouldHide = { [weak self] in
             self?.hideTransient()
@@ -328,6 +353,7 @@ final class NicheController {
                 panelController.hide()
             } else {
                 panelController.revealPinned()
+                panelPresented.send()
             }
             return
         }
@@ -338,16 +364,28 @@ final class NicheController {
         }
     }
 
-    private func present() {
+    /// kind = 触发来源:决定面板从哪长出(刘海/热角/边缘;快捷键与菜单栏走默认 .primary = 顶部)。
+    private func present(from kind: HotZoneController.Zone.Kind = .primary) {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
         guard model.windowMode != .pinned else { return }
         // 幂等:面板已展开时重复呼出(hover 进面板再回刘海会再次跨界触发)应是 no-op,
         // 否则会重跑展开动画并重新 armCurrent() 触发 TCC 探针。
         guard !panelController.isTransientShown else { return }
         guard let screen = screens.activeScreen else { return }
+        let anchor: PanelAnchor
+        switch kind {
+        case .primary:
+            let resolution = screens.resolution(for: screen, widthScale: triggerPrefs.hotZoneWidthScale)
+            anchor = .top(resolution.rect)
+        case let .corner(corner):
+            anchor = .corner(corner, corner.rect(in: screen.frame))
+        case let .side(side):
+            anchor = .side(side, mouse: NSEvent.mouseLocation)
+        }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
-        panelController.presentTransient(below: screens.resolution(for: screen), itemCount: model.sortedItems.count)
+        panelController.presentTransient(anchor: anchor, on: screen, itemCount: model.sortedItems.count)
+        panelPresented.send()
         observeTransientFocus()
     }
 
@@ -439,6 +477,10 @@ final class NicheController {
     /// 保存/恢复**当前** level(非写死),嵌套(body 内再调本方法或 presentFailure)与 pinned 态都安全。
     func withModalContext(_ body: () -> Void) {
         autoHide.begin(.modalDialog)
+        // 面板是 nonactivatingPanel:从它进来时 app 大概率未激活,而未激活 app 里 runModal 的
+        // NSOpenPanel/NSAlert 成不了 key window,内容区(openAndSavePanelService 远程渲染)灰死
+        // 点不动 —— 实测"添加文件夹面板打开就变灰"。模态本来就要焦点,先显式激活。
+        NSApp.activate(ignoringOtherApps: true)
         let saved = panelController.panel?.level
         if saved != nil { panelController.panel?.level = .floating }
         defer {
