@@ -3,106 +3,85 @@ import AppKit
 
 /// 设置页(spec §M5):绑定文件夹管理(增删/排序)、触发与快捷键、隐藏文件默认、关于/更新。
 ///
-/// 结构 = 左 sidebar(书签语义)+ 右内容区,整窗坐在窗面 Liquid Glass 上(SettingsWindowController
-/// 的 NSGlassEffectView),内容透明、不再叠系统 Form 灰卡 —— 与面板同一套视觉语言,不再"像两个 App"。
+/// 结构 = 原生 `NavigationSplitView`(侧栏 List + detail)+ 原生 grouped `Form`,对齐
+/// macOS 26/27 System Settings 视觉语言(同 Clipin SettingsView.swift 的配方) —— 不再自绘
+/// 整窗玻璃 + 文字层级分组,交给系统原生材质与卡片。
 /// 宿主注入面板同一个 PanelModel/TriggerPreferences:showHidden、热区等偏好只有一个真相源。
 struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @ObservedObject var model: PanelModel
     /// 触发方式偏好(热区/延迟/快捷键)单一真相源,由 NicheController 注入并订阅应用。
     @ObservedObject var triggerPrefs: TriggerPreferences
-    @Binding var selection: SettingsSection
+    @ObservedObject var navigation: SettingsNavigationModel
     /// 添加文件夹走 NicheController 统一路径(与面板「+」一致:自动选中新 tab)。
     var onAddFolder: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 0) {
-            SettingsSidebar(selection: $selection)
-            // 导航区↔内容区极淡发丝线:只拉层次,不给 sidebar 套独立材质底板(避免"卡片套卡片")。
-            Rectangle()
-                .fill(Color.primary.opacity(0.06))
-                .frame(width: 0.5)
-                .frame(maxHeight: .infinity)
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        // 固定窗口尺寸:不让内容经 NSHostingView fitting 把窗口顶大(见 SettingsChrome.windowHeight)。
-        .frame(width: SettingsChrome.windowWidth, height: SettingsChrome.windowHeight)
-    }
-
-    @ViewBuilder private var content: some View {
-        switch selection {
-        case .folders: FoldersSettings(onAddFolder: onAddFolder)
-        case .trigger: TriggerSettings(triggerPrefs: triggerPrefs)
-        case .general: GeneralSettings(model: model)
-        case .about: AboutSettings()
+        NavigationSplitView {
+            SettingsSidebar(navigation: navigation)
+        } detail: {
+            detailPane
         }
     }
-}
 
-/// 设置窗特有的 chrome 常量(不属于通用 EdgeMetrics 单旋钮:这是窗口/titlebar 维度,
-/// 不随面板间距旋钮缩放)。收口一处,sidebar 与内容区共用,避免红绿灯让位魔法数两处漂移。
-enum SettingsChrome {
-    /// 红绿灯让位:窗口 `.fullSizeContentView` + 透明 titlebar 后内容顶到窗顶,须留标准
-    /// titlebar 高度,否则品牌区/标题被红绿灯压住。标准 macOS titlebar 高度稳定为 28pt。
-    static let titlebarInset: CGFloat = 28
-
-    /// 设置窗固定尺寸(SettingsView 与 SettingsWindowController 共用一处)。固定是必须的:
-    /// NSGlassEffectView 当 contentView 会把 NSHostingView 的 fitting size 传给窗口,若 SettingsView
-    /// 用 maxHeight:.infinity,内容多的页(文件夹 List 取 8 项 ideal 高度)会把窗口顶大、各页不等高。
-    /// 高度按内容最多的文件夹页定:容下标题/footnote/按钮 + List 滚动区。
-    static let windowWidth: CGFloat = 524
-    static let windowHeight: CGFloat = 492
-}
-
-/// 内容区外壳:统一顶部红绿灯让位 + 区标题 + 内边距,各 section 只填内容。
-/// 标题左对齐大字(像 macOS 系统设置每页顶部),与 sidebar 同源单旋钮派生间距。
-struct SettingsPane<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-    private let edge = EdgeMetrics.standard
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: edge.sectionSpacing) {
-            Text(title)
-                .font(.system(size: 18, weight: .semibold))
-                .padding(.top, SettingsChrome.titlebarInset)
-            content
-            // 不放 Spacer:内容少的页靠 frame topLeading 自然顶对齐;内容多的页(文件夹)
-            // 由其 List 的 maxHeight:.infinity 吃满剩余高度并滚动 —— Spacer 会与 List 抢剩余空间。
-        }
-        .padding(edge.panelPadding * 1.5)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-/// 设置项分组小标题(替代 Form 的 Section header):内容透明坐玻璃上,只用文字层级分组,
-/// 不画灰卡背景(禁卡片套卡片)。
-struct SettingsGroup<Content: View>: View {
-    var header: String?
-    @ViewBuilder var content: Content
-    private let edge = EdgeMetrics.standard
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: edge.itemSpacing) {
-            if let header {
-                Text(header)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+    /// 原生 System Settings 风格详情区:grouped Form 提供分组卡片 + 分隔线,顶部 paneHeader
+    /// (图标 + 标题 + 描述)对齐原生每个 pane 的头部块。
+    @ViewBuilder
+    private var detailPane: some View {
+        Form {
+            // 「关于」页第一个 Section 本身就是身份卡(图标+名字+版本),已经是它的头部,
+            // 不再叠通用 paneHeader,避免"双头"冗余(同 Clipin About 页的取舍)。
+            if navigation.selection != .about {
+                paneHeader(navigation.selection)
             }
-            content
+            switch navigation.selection {
+            case .folders: FoldersSettings(onAddFolder: onAddFolder)
+            case .trigger: TriggerSettings(triggerPrefs: triggerPrefs)
+            case .general: GeneralSettings(model: model)
+            case .about: AboutSettings()
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(navigation.selection.title)
+    }
+
+    /// 原生 System Settings 每个 pane 顶部的头部块:accent 圆角方块图标 + 一句摘要。
+    /// Section 必须带 header 文字 —— grouped Form 对无 header 的首个 Section 会在顶部留一块
+    /// 平台级空白(与内容无关,公开 API 够不着);给分区名当 header 是零自绘的解法,顺带满足
+    /// 「设置页内禁止自绘卡片,分组交给 grouped Form」这条 chrome 纪律(同 Clipin 踩过的坑)。
+    private func paneHeader(_ section: SettingsSection) -> some View {
+        Section(section.title) {
+            HStack(alignment: .center, spacing: EdgeMetrics.standard.sectionSpacing) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: EdgeMetrics.standard.controlCornerRadius, style: .continuous)
+                            .fill(Color.accentColor)
+                    )
+                Text(section.summary)
+                    .settingsCaption()
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, EdgeMetrics.standard.innerSpacing)
         }
     }
 }
 
-/// 说明性脚注(权限提示等):统一 caption 二级灰,各 section 复用。
-struct SettingsFootnote: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+/// 设置窗特有的 chrome 常量(不属于通用 EdgeMetrics 单旋钮:这是窗口维度,不随面板间距旋钮
+/// 缩放)。可调尺寸(不再固定死):`NavigationSplitView` + grouped `Form` 原生处理内容滚动,
+/// 不需要靠固定窗口尺寸规避 fitting size 顶大窗口那套(旧整窗玻璃方案的限制)。
+enum SettingsChrome {
+    static let windowSize = NSSize(width: 560, height: 480)
+    static let windowMinSize = NSSize(width: 480, height: 380)
+}
+
+extension View {
+    /// 设置页 grouped Form 里的 caption 副说明统一样式(标题下的次要说明行)。
+    /// 收口 `.font(.caption).foregroundStyle(...)` 双修饰,默认 secondary。
+    func settingsCaption(_ tint: HierarchicalShapeStyle = .secondary) -> some View {
+        self.font(.caption).foregroundStyle(tint)
     }
 }
