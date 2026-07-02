@@ -46,4 +46,15 @@ enum TestSupport {
         try contents.data(using: .utf8)!.write(to: url)
         return url
     }
+
+    /// 等待异步条件成立(arm/下钻的快照已后台化,测试不能再同步断言扫描结果)。
+    /// 轮询 + 让出主线程,让 Task.detached → MainActor.run 的发布链有机会执行;
+    /// 超时直接返回,由调用方的断言暴露失败。
+    @MainActor
+    static func waitUntil(timeout: TimeInterval = 3, _ condition: @MainActor () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+    }
 }

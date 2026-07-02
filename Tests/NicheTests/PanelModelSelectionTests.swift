@@ -19,6 +19,8 @@ final class PanelModelSelectionTests: XCTestCase {
         model = PanelModel()
         model.rebuildMirrors(from: [FolderBinding(path: dir.path)])
         model.armCurrent()
+        // 快照已后台化:等 5 个文件全部发布,否则 ids[n] 越界崩溃(异步 arm 后 sortedItems 起始为空)。
+        await TestSupport.waitUntil { self.model.sortedItems.count == 5 }
     }
 
     override func tearDown() {

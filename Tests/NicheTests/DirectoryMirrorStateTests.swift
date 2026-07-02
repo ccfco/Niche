@@ -6,7 +6,7 @@ final class DirectoryMirrorStateTests: XCTestCase {
     /// 列目录失败时镜像必须进错误态,绝不被 .ready 覆盖(armAttempt 末尾旧 bug 的核心契约)。
     /// 注:probe 通过但 capture 失败是极窄竞态、无法直接单测;此处守护 captureAndPublish 的
     /// 失败契约(失败设错误态、不设 ready),即修复依赖的核心机制。
-    func testCaptureFailureSetsErrorStateNotReady() throws {
+    func testCaptureFailureSetsErrorStateNotReady() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("niche-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -19,7 +19,8 @@ final class DirectoryMirrorStateTests: XCTestCase {
         let binding = FolderBinding(bookmarkData: nil, path: tmp.path)
         let mirror = DirectoryMirror(binding: binding, showHidden: false)
 
-        mirror.arm()
+        mirror.arm()   // 快照已后台化,等异步发布回主线程
+        await TestSupport.waitUntil { mirror.state == .ready }
         XCTAssertEqual(mirror.state, .ready, "可读目录 arm 后应 ready")
 
         // 撤销读权限,重扫 → capture 失败
@@ -31,7 +32,7 @@ final class DirectoryMirrorStateTests: XCTestCase {
 
     /// 绑定目录被删 → .missing(≠ permissionDenied:误报会引导用户去系统设置白授权);
     /// 目录恢复(如从废纸篓拖回)后 retryIfPossible → 回 ready。
-    func testDeletedDirectoryIsMissingNotDeniedAndRecovers() throws {
+    func testDeletedDirectoryIsMissingNotDeniedAndRecovers() async throws {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("niche-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -39,15 +40,17 @@ final class DirectoryMirrorStateTests: XCTestCase {
 
         let binding = FolderBinding(bookmarkData: nil, path: tmp.path)
         let mirror = DirectoryMirror(binding: binding, showHidden: false)
-        mirror.arm()
+        mirror.arm()   // 快照已后台化,等异步发布回主线程
+        await TestSupport.waitUntil { mirror.state == .ready }
         XCTAssertEqual(mirror.state, .ready)
 
         try FileManager.default.removeItem(at: tmp)
-        mirror.refresh()
+        mirror.refresh()   // refresh 保留同步语义(重命名链路依赖),可立即断言
         XCTAssertEqual(mirror.state, .missing, "目录不存在应归因 missing,不得误报权限被拒")
 
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-        mirror.retryIfPossible()
+        mirror.retryIfPossible()   // missing 分支走 armAttempt,同样已后台化
+        await TestSupport.waitUntil { mirror.state == .ready }
         XCTAssertEqual(mirror.state, .ready, "目录恢复后重试应回 ready")
     }
 }

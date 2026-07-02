@@ -75,7 +75,19 @@ final class DirectoryMirror: ObservableObject {
     }
 
     var showHidden: Bool {
-        didSet { if showHidden != oldValue, case .ready = state { refresh() } }
+        didSet {
+            guard showHidden != oldValue else { return }
+            switch state {
+            case .ready:
+                refresh()
+            case .loading:
+                // 异步 arm 在途:在途任务捕获的是旧 hidden 值,若放任其发布,开关看起来失效
+                // (Codex review)。重发新扫描,generation 自增使旧结果作废。
+                captureAndPublishAsync()
+            default:
+                break
+            }
+        }
     }
 
     private var stream: FSEventStreamWrapper?
@@ -147,7 +159,7 @@ final class DirectoryMirror: ObservableObject {
     private func rearmCurrentDirectory() {
         guard armed else { return }
         startStream()
-        captureAndPublish()
+        captureAndPublishAsync()   // 下钻/回上级同 arm:后台扫,挂死的文件系统不冻 UI
         icloud.stop()
         startICloudIfNeeded()
     }
@@ -165,11 +177,9 @@ final class DirectoryMirror: ObservableObject {
     /// 用户点"点此授权并重试":**先重试探针,仍被拒才开系统隐私设置**。
     /// 反过来(先开设置再立即重试)时序拧巴:此刻用户还没去开开关,重试必然失败,状态闪一下
     /// loading 又回 denied;而用户在系统设置开完开关回来再点时,探针直接成功、不再弹设置页。
+    /// 预检已后台化,"仍被拒才开设置"由 armAttempt 的异步归因分支兑现(语义不变,时点后移)。
     func reauthorize() {
-        armAttempt()
-        if case .permissionDenied = state {
-            TCCAccess.openPrivacySettings()
-        }
+        armAttempt(openSettingsIfDenied: true)
     }
 
     /// 卷重新挂载 / 目录从废纸篓恢复,且用户回到该 tab:重试。
@@ -177,46 +187,87 @@ final class DirectoryMirror: ObservableObject {
         switch state {
         case .volumeUnmounted, .missing: armAttempt()
         // 非权限 IO 错:直接重列,不走 armAttempt 的 TCC 探针 —— probe 是 URL 版,对软链等会
-        // 误失败再翻回 permissionDenied(captureAndPublish 已能跟随软链)。
-        case .accessFailed: _ = captureAndPublish()
+        // 误失败再翻回 permissionDenied(capture 已能跟随软链)。后台扫:错误态重试最可能再撞
+        // 挂死的文件系统,更不能放主线程。
+        case .accessFailed: captureAndPublishAsync()
         default: return
         }
     }
 
-    private func armAttempt() {
-        invalidateInFlightScans()   // 早退分支(卷/缺失/TCC)直接定错误态,不能被迟到扫描覆盖成 ready
+    /// arm 全链路(预检 + 快照)都在后台执行:isVolumeMounted(statfs)/fileExists(stat)/
+    /// TCC probe(本身就是一次列目录)在挂死的文件系统(云盘/网络卷抽风)上任何一步都可能永不
+    /// 返回,放主线程 = 冻死整个 app —— 而 accessory app 不出现在「强制退出」里,用户无自救路径
+    /// (实测踩过)。主线程只做:置 loading、建流(先建流再快照,§4.1.1)、发布状态/快照。
+    /// 过期保护沿用 scanGeneration 代次:每步回主线程都校验,旧任务的任何回写作废。
+    private func armAttempt(openSettingsIfDenied: Bool = false) {
+        invalidateInFlightScans()   // 新一轮 arm:作废在途扫描,其迟到回写不得覆盖本轮状态
         state = .loading
-
-        // 卷已卸载?进入空态(保留绑定,不删)。
-        guard VolumeMonitor.isVolumeMounted(for: resolvedURL) else {
-            state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
-            return
-        }
-        // 目录不存在(被删/移走且 bookmark 追踪不到):先于 TCC 探针判定 —— 探针对不存在
-        // 路径同样失败,会误报 permissionDenied 引导用户白授权(stat 不受 TCC 限,可区分)。
-        if !FileManager.default.fileExists(atPath: resolvedURL.path) {
-            // 恢复的下钻子目录失效但绑定根仍在 → 回退根重列,不报 missing(.missing 是给"绑定根
-            // 本身没了"的引导态;子目录被删时根还能用,跳回根才是用户预期 §4.7)。
-            if currentDirectory.standardizedFileURL != rootURL.standardizedFileURL,
-               FileManager.default.fileExists(atPath: rootURL.path) {
-                fallBackToRoot()
-            } else {
-                state = .missing
+        let generation = scanGeneration
+        let dir = resolvedURL
+        let root = rootURL
+        let atRoot = currentDirectory.standardizedFileURL == rootURL.standardizedFileURL
+        let hidden = showHidden
+        scanTask?.cancel()
+        scanTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard !Task.isCancelled else { return }
+            // 卷已卸载?进入空态(保留绑定,不删)。
+            if !VolumeMonitor.isVolumeMounted(for: dir) {
+                let name = VolumeMonitor.volumeDisplayName(for: dir)
+                await MainActor.run { [weak self] in
+                    guard let self, self.scanGeneration == generation else { return }
+                    self.armed = false
+                    self.state = .volumeUnmounted(name)
+                }
                 return
             }
-        }
-        // TCC 探针(真实访问):失败即引导。
-        guard TCCAccess.probe(resolvedURL) else {
-            state = .permissionDenied
-            return
-        }
+            // 目录不存在(被删/移走且 bookmark 追踪不到):先于 TCC 探针判定 —— 探针对不存在
+            // 路径同样失败,会误报 permissionDenied 引导用户白授权(stat 不受 TCC 限,可区分)。
+            if !FileManager.default.fileExists(atPath: dir.path) {
+                // 恢复的下钻子目录失效但绑定根仍在 → 回退根重跑 arm,不报 missing(.missing 是给
+                // "绑定根本身没了"的引导态;子目录被删时根还能用,跳回根才是用户预期 §4.7)。
+                let rootAlive = !atRoot && FileManager.default.fileExists(atPath: root.path)
+                await MainActor.run { [weak self] in
+                    guard let self, self.scanGeneration == generation else { return }
+                    if rootAlive {
+                        self.fallBackToRoot()
+                        self.armAttempt(openSettingsIfDenied: openSettingsIfDenied)   // 目录已变,重跑预检
+                    } else {
+                        self.armed = false
+                        self.state = .missing
+                    }
+                }
+                return
+            }
+            // TCC 探针(真实访问,可触发授权弹窗):失败即引导。弹窗只阻塞本后台线程,主线程活着。
+            guard TCCAccess.probe(dir) else {
+                await MainActor.run { [weak self] in
+                    guard let self, self.scanGeneration == generation else { return }
+                    self.armed = false
+                    self.state = .permissionDenied
+                    if openSettingsIfDenied { TCCAccess.openPrivacySettings() }
+                }
+                return
+            }
 
-        // arm 顺序 = 先建流再快照(§4.1.1),处理"建流到快照之间"的事件。
-        startStream()
-        guard captureAndPublish() else { return }   // 失败保留 captureAndPublish 设的错误态,不覆盖成 ready
-        startICloudIfNeeded()
-        armed = true
-        // state 已由 captureAndPublish 设为 .ready,不再无条件覆盖
+            // 预检通过 → 回主线程建流 + 置 armed(乐观:失败由 applyCaptureFailure 回退),再回
+            // 后台捕获快照(先建流再快照,处理"建流到快照之间"的事件)。
+            let proceed = await MainActor.run { [weak self] () -> Bool in
+                guard let self, self.scanGeneration == generation else { return false }
+                self.startStream()
+                self.startICloudIfNeeded()
+                self.armed = true
+                return true
+            }
+            guard proceed, !Task.isCancelled else { return }
+            let result = Result { try DirectorySnapshot.capture(directory: dir, showHidden: hidden) }
+            await MainActor.run { [weak self] in
+                guard let self, self.scanGeneration == generation else { return }
+                switch result {
+                case .success(let fresh): self.apply(fresh)
+                case .failure(let error): self.applyCaptureFailure(error)
+                }
+            }
+        }
     }
 
     // MARK: - FSEvents
@@ -272,9 +323,9 @@ final class DirectoryMirror: ObservableObject {
         scanGeneration &+= 1
     }
 
-    /// 同步重扫(**仅用户动作路径**:arm / refresh / 下钻):立即扫、立即发布——
-    /// beginRenameSafely(新建文件夹即时入列)等依赖 refresh 的同步语义,不能改异步。
-    /// 重扫目录、与旧快照 diff、发布。镜像靠比对而非增量信任。
+    /// 同步重扫(**仅 refresh 用**):beginRenameSafely(新建文件夹即时入列)依赖它的同步语义,
+    /// 不能改异步;只扫用户正浏览的目录,冻死风险面小。arm/下钻/错误重试都已改走
+    /// captureAndPublishAsync(挂死的文件系统不冻 UI)。重扫、与旧快照 diff、发布。
     @discardableResult
     private func captureAndPublish() -> Bool {
         scanGeneration &+= 1
@@ -318,6 +369,9 @@ final class DirectoryMirror: ObservableObject {
     /// (实测:软链 256/ENOTDIR、并发删除、磁盘错都非权限问题)。stat 不受 TCC 限,先据它分出
     /// 卷/缺失;再据 error 精确分出真权限错(isPermissionError),剩下归 accessFailed 暴露真因。
     private func applyCaptureFailure(_ error: Error?) {
+        // 回退 armed:保持同步时代的语义 —— 扫描失败的 mirror,用户切走再切回 tab 时 arm() 会
+        // 自动重试(armed=true 会让 arm() 幂等短路,错误态只剩手动按钮一条恢复路)。
+        armed = false
         if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
             state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
         } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
