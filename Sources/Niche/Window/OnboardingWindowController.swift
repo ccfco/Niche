@@ -35,17 +35,41 @@ final class OnboardingWindowController: NSWindowController {
     }
 
     private init(triggerDescription: String, onOpenTriggerSettings: @escaping () -> Void) {
+        // `.fullSizeContentView` 必须带上:没有它,`.titled` 会在窗口顶部保留一条系统标准
+        // titlebar 高度(28pt)的区域,SwiftUI 内容(含圆角玻璃卡片)只画在这条区域下方——
+        // titlebar 区自己也是透明背景,于是卡片顶部之上多出一条对不上圆角的透明色带
+        // (实测踩过,肉眼像"多出一条莫名的透明边")。带上此 mask 后内容铺满整个窗口,
+        // 不再有保留区。
         let window = NSWindow(
             contentRect: .zero,
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = ""
-        window.isReleasedWhenClosed = false
         super.init(window: window)
 
-        let host = NSHostingView(rootView: OnboardingView(
+        // 无交通灯的辅助浮层 chrome(同 Clipin onboarding/permission 窗口的配方):透明
+        // titlebar + 隐藏标题文字 + 隐藏红绿灯 + 原生阴影,不建 `NSGlassEffectView` 整窗玻璃——
+        // 玻璃质感交给 SwiftUI 层的 `.glassEffect`(见 OnboardingView),窗口层只负责"看起来
+        // 不像个普通窗口"。KVC `cornerRadius` 对齐面板外壳圆角,窗与内容视觉同心。
+        window.title = String(localized: "欢迎使用 Niche")
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.titlebarSeparatorStyle = .none
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+        window.isReleasedWhenClosed = false
+        [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+            window.standardWindowButton(button)?.isHidden = true
+        }
+        window.setValue(EdgeMetrics.standard.panelCornerRadius, forKey: "cornerRadius")
+
+        // 复用 PanelController 的 NicheGlassHostingView,不能用裸 NSHostingView —— 后者默认带
+        // 不透明白色背衬层(updateLayer 不清 backgroundColor),会把 SwiftUI 层的 `.glassEffect`
+        // 完全遮住,视觉上呈现"死白卡片"而非磨砂玻璃(实测踩过:整块内容看起来完全不透)。
+        let host = NicheGlassHostingView(rootView: OnboardingView(
             triggerDescription: triggerDescription,
             onOpenTriggerSettings: onOpenTriggerSettings,
             onDismiss: { [weak self] in self?.close() }
