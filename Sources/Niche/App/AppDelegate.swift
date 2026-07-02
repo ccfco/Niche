@@ -30,14 +30,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let controller else { return }
                 OnboardingWindowController.show(
                     triggerDescription: controller.onboardingTriggerDescription,
-                    onOpenTriggerSettings: { controller.openTriggerSettings() }
+                    onOpenTriggerSettings: { controller.openTriggerSettings() },
+                    panelPresented: controller.panelPresented
                 )
             }
         )
         if !OnboardingState.hasSeen {
             OnboardingWindowController.show(
                 triggerDescription: controller.onboardingTriggerDescription,
-                onOpenTriggerSettings: { [weak controller] in controller?.openTriggerSettings() }
+                onOpenTriggerSettings: { [weak controller] in controller?.openTriggerSettings() },
+                panelPresented: controller.panelPresented
             )
         }
     }

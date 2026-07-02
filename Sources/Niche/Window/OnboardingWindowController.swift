@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// 首次使用引导是否已展示过。独立于 TriggerPreferences 等业务配置的一次性 UI 标位,
@@ -16,10 +17,14 @@ enum OnboardingState {
 @MainActor
 final class OnboardingWindowController: NSWindowController {
     private static var shared: OnboardingWindowController?
+    private var panelPresentedCancellable: AnyCancellable?
 
     /// 展示引导窗(单例,重复调用只把已存在窗口前置)。onOpenTriggerSettings 由宿主注入,
-    /// 点「去设置」时跳转设置窗「触发」分区。
-    static func show(triggerDescription: String, onOpenTriggerSettings: @escaping () -> Void) {
+    /// 点「去设置」时跳转设置窗「触发」分区。panelPresented 是面板真正呈现的信号(不区分
+    /// 触发方式)——引导窗开着期间只要面板被呼出过一次就自动关闭,比"点了知道了"这种自我
+    /// 报告更可靠,验证的是真实行为。
+    static func show(triggerDescription: String, onOpenTriggerSettings: @escaping () -> Void,
+                      panelPresented: PassthroughSubject<Void, Never>) {
         if let shared {
             shared.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -27,14 +32,16 @@ final class OnboardingWindowController: NSWindowController {
         }
         let controller = OnboardingWindowController(
             triggerDescription: triggerDescription,
-            onOpenTriggerSettings: onOpenTriggerSettings
+            onOpenTriggerSettings: onOpenTriggerSettings,
+            panelPresented: panelPresented
         )
         shared = controller
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private init(triggerDescription: String, onOpenTriggerSettings: @escaping () -> Void) {
+    private init(triggerDescription: String, onOpenTriggerSettings: @escaping () -> Void,
+                 panelPresented: PassthroughSubject<Void, Never>) {
         // `.fullSizeContentView` 必须带上:没有它,`.titled` 会在窗口顶部保留一条系统标准
         // titlebar 高度(28pt)的区域,SwiftUI 内容(含圆角玻璃卡片)只画在这条区域下方——
         // titlebar 区自己也是透明背景,于是卡片顶部之上多出一条对不上圆角的透明色带
@@ -80,6 +87,10 @@ final class OnboardingWindowController: NSWindowController {
         window.setContentSize(host.fittingSize)
         window.center()
         window.delegate = self
+
+        panelPresentedCancellable = panelPresented
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.close() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
