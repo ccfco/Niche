@@ -183,8 +183,11 @@ final class DragSourceNSView: NSView, NSDraggingSource {
 
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        // 拖出到其它 app:复制/移动由目标与修饰键决定;拖回自身无操作。
-        context == .outsideApplication ? [.copy, .move] : []
+        // 应用内外都放行 copy/move:具体操作由落点与修饰键决定(DragSemantics)。此前应用内
+        // 返回 [] 想表达"拖回自身无操作",却连带把"拖进同面板的子文件夹格子"(Finder 图标视图
+        // 高频手势)整个禁掉(体检审计);"拖回原目录无意义"由 handleDrop 的同目录/环路守卫兜住,
+        // 不该在 source 层一刀切。
+        [.copy, .move]
     }
 
     func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
