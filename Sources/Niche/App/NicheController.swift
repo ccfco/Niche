@@ -343,14 +343,12 @@ final class NicheController {
 
     func toggle() {
         // 已 Pin:全局快捷键切换常驻浮窗显/隐,不跌进瞬态分支(否则会把用户拽出 Pin 态)。
-        // 隐藏时与 hideTransient 同口径收口(作废待呈现预览 + 关路径条),否则 .pathInput
-        // 抑制源跨显/隐残留,unpin 后瞬态面板永不自动收(Codex review)。
+        // 隐藏时直接复用 hideTransient 收口(panelController.hide 内部按模式分支,对 pinned
+        // 走淡出):此前这里手抄清理清单,漏掉重命名两项致 .renaming 抑制泄漏(体检审计)——
+        // "收面板前清抑制源"必须只有一份清单,禁止再手抄。
         if model.windowMode == .pinned {
             if panelController.isVisible {
-                quickLook.cancelPendingPreview()
-                model.endPathInput()
-                autoHide.end(.iconSizeSlider)   // 同 hideTransient:防 pinned 拖滑块中途隐藏致抑制泄漏,unpin 后瞬态永不收
-                panelController.hide()
+                hideTransient()
             } else {
                 panelController.revealPinned()
                 panelPresented.send()
