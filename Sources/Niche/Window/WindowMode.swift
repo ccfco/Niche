@@ -30,12 +30,6 @@ enum WindowMode: Equatable {
         }
     }
 
-    /// 失焦是否自动隐藏(瞬态是,常驻否)。注意:真正的 auto-hide 还要过 AutoHideCoordinator
-    /// 的抑制集合(Quick Look / 菜单 / 拖拽 / 重命名),不能简单绑 resignKey。
-    var hidesOnResignKey: Bool {
-        self == .transient
-    }
-
     /// 是否可成为 key window。两种模式都要 true —— 瞬态也需承载键盘导航与就地重命名
     /// 文本编辑(spec §4.6:nonactivating 面板需 canBecomeKey=true)。
     var canBecomeKey: Bool { true }

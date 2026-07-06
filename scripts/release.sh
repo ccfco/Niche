@@ -44,7 +44,7 @@ if [ -n "$NOTES_FILE" ] && [ ! -f "$NOTES_FILE" ]; then
 fi
 
 # ── 前置检查(先于任何文件改动,否则版本号写回会自己弄脏工作树挡自己) ──
-echo "▸ [1/6] 前置检查…"
+echo "▸ [1/7] 前置检查…"
 if [ -n "$(git status --porcelain)" ]; then
     echo "✘ 有未提交改动,请先 commit" >&2; exit 1
 fi
@@ -76,7 +76,7 @@ git commit -m "chore: 版本号 bump 到 $VER(build $BUILD_NUMBER)"
 echo "▸ 版本号 $VER / build $BUILD_NUMBER(已写回 project.yml 并提交)"
 
 # ── 构建 ─────────────────────────────────────────────────────
-echo "▸ [2/6] XcodeGen + Release 构建(arm64)…"
+echo "▸ [2/7] XcodeGen + Release 构建(arm64)…"
 xcodegen generate >/dev/null
 xcodebuild \
     -scheme "$APP_NAME" -configuration Release \
@@ -89,7 +89,7 @@ BUILT="$DERIVED/Build/Products/Release/${APP_NAME}.app"
 
 # ── 签名 ─────────────────────────────────────────────────────
 # 自定义 designated requirement:TCC 按 bundle ID 匹配,更新二进制后权限不丢
-echo "▸ [3/6] Ad-hoc 签名(designated requirement = bundle ID)…"
+echo "▸ [3/7] Ad-hoc 签名(designated requirement = bundle ID)…"
 xattr -cr "$BUILT"
 REQ=$(mktemp)
 echo "designated => identifier \"$BUNDLE_ID\"" | csreq -r- -b "$REQ"
@@ -98,7 +98,7 @@ rm -f "$REQ"
 codesign --verify --strict "$BUILT" && echo "  签名验证通过"
 
 # ── 打包 ─────────────────────────────────────────────────────
-echo "▸ [4/6] 打包 zip…"
+echo "▸ [4/7] 打包 zip…"
 mkdir -p "$DIST"
 ZIP="$DIST/${APP_NAME}.app.zip"
 rm -f "$ZIP"
