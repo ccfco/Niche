@@ -92,23 +92,33 @@ final class HotZoneController {
         }
     }
 
+    /// 命中判定(纯函数,回归测试钉住):按数组顺序取第一个包含鼠标的区(热角在边缘之前,
+    /// 重叠处热角赢)。含 max 边界:CGRect.contains 排除 maxX/maxY,鼠标顶到屏幕最顶
+    /// (y=maxY=屏高)恰落在被排除的上边界 → 贴边呼不出(热角/边缘同理贴屏幕最右/最下边)。
+    static func hitZone(in zones: [Zone], mouse: CGPoint) -> Zone? {
+        zones.first { zone in
+            mouse.x >= zone.rect.minX && mouse.x <= zone.rect.maxX
+                && mouse.y >= zone.rect.minY && mouse.y <= zone.rect.maxY
+        }
+    }
+
+    /// 跨区滑动是否重起 dwell 计时(纯函数,回归测试钉住):在区内滑进**另一个**区(如角落→
+    /// 相邻边缘重叠带)要重计时,不沿用旧区已积累的停留时间,否则新区会被旧区的计时提前触发
+    /// (Codex review);同一区内滑动身份不变、计时不动;从区外初进不算"跨区"(走 enter 路径)。
+    static func shouldRestartDwell(wasInside: Bool, previousKind: Zone.Kind?, hitKind: Zone.Kind) -> Bool {
+        wasInside && previousKind != hitKind
+    }
+
     /// 轻量:跨屏时换几何,否则只读全局坐标 + 矩形包含判断,只在跨边界时动作。
     private func evaluateMouse() {
         guard isEnabled else { return }
         let mouse = NSEvent.mouseLocation
         syncScreenIfNeeded(mouse: mouse)
         guard !zones.isEmpty else { return }
-        // 含上边界:CGRect.contains 排除 maxY,鼠标顶到屏幕最顶(y=maxY=屏高)恰落在被排除的
-        // 上边界 → 贴边呼不出(热角/边缘同理贴屏幕最右/最下边)。热区贴边,必须显式含 max 边。
-        let hit = zones.first { zone in
-            mouse.x >= zone.rect.minX && mouse.x <= zone.rect.maxX
-                && mouse.y >= zone.rect.minY && mouse.y <= zone.rect.maxY
-        }
+        let hit = Self.hitZone(in: zones, mouse: mouse)
         let inside = hit != nil
         if let hit {
-            // 跨区滑动(如角落→相邻边缘重叠带):重起 dwell 计时,不沿用旧区已积累的停留时间,
-            // 否则新区会被旧区的计时提前触发(Codex review)。同一区内滑动身份不变、计时不动。
-            if insideHotZone, activeKind != hit.kind {
+            if Self.shouldRestartDwell(wasInside: insideHotZone, previousKind: activeKind, hitKind: hit.kind) {
                 hoverIntent.exit()
                 hoverIntent.enter()
             }

@@ -154,17 +154,7 @@ final class UpdateChecker: ObservableObject {
             xmlParser.delegate = parser
             guard xmlParser.parse() else { throw URLError(.cannotParseResponse) }
 
-            // appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);挑 build number
-            // 最大的一条——必须按 build number(Sparkle 的真实判断依据)排序,不能按 marketing
-            // 版本号,否则"同 marketing version、不同 build"的条目会被错误地并列/丢弃。
-            let candidate = parser.items
-                .compactMap { item -> (version: String, buildNumber: Int, downloadURL: URL, pubDate: Date?)? in
-                    guard let version = item.version, Self.isNumericVersion(version),
-                          let buildNumber = item.buildNumber,
-                          let downloadURL = item.downloadURL else { return nil }
-                    return (version, buildNumber, downloadURL, item.pubDate)
-                }
-                .max { $0.buildNumber < $1.buildNumber }
+            let candidate = Self.bestCandidate(from: parser.items)
 
             if let candidate, candidate.buildNumber > currentBuildNumber {
                 latestRelease = ReleaseInfo(
@@ -184,6 +174,23 @@ final class UpdateChecker: ObservableObject {
             Log.updates.error("更新检查失败: \(error.localizedDescription, privacy: .public)")
             didLastCheckFail = true
         }
+    }
+
+    /// appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);挑 build number
+    /// 最大的一条——必须按 build number(Sparkle 的真实判断依据)排序,不能按 marketing
+    /// 版本号,否则"同 marketing version、不同 build"的条目会被错误地并列/丢弃。
+    /// 抽成纯函数供回归测试钉住(历史事故见上)。
+    static func bestCandidate(
+        from items: [AppcastParser.Item]
+    ) -> (version: String, buildNumber: Int, downloadURL: URL, pubDate: Date?)? {
+        items
+            .compactMap { item -> (version: String, buildNumber: Int, downloadURL: URL, pubDate: Date?)? in
+                guard let version = item.version, isNumericVersion(version),
+                      let buildNumber = item.buildNumber,
+                      let downloadURL = item.downloadURL else { return nil }
+                return (version, buildNumber, downloadURL, item.pubDate)
+            }
+            .max { $0.buildNumber < $1.buildNumber }
     }
 
     /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc 等非数字段，仅用于显示前的
@@ -206,7 +213,9 @@ struct ReleaseInfo: Equatable {
 
 /// Sparkle appcast(标准 RSS + sparkle 命名空间)的最小化解析器,只取 UpdateChecker 需要的四个字段。
 /// 不用 shouldProcessNamespaces,elementName 直接拿到 "sparkle:shortVersionString" 这种限定名。
-private final class AppcastParser: NSObject, XMLParserDelegate {
+/// internal(非 private):踩过两次真实解析事故(缩进混入版本号 / 按 marketing version 排序),
+/// 由 AppcastParserTests 回归钉住。
+final class AppcastParser: NSObject, XMLParserDelegate {
     struct Item {
         var version: String?
         var buildNumber: Int?
