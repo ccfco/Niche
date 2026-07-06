@@ -79,11 +79,18 @@ final class DirectoryMirror: ObservableObject {
             guard showHidden != oldValue else { return }
             switch state {
             case .ready:
-                refresh()
-            case .loading:
-                // 异步 arm 在途:在途任务捕获的是旧 hidden 值,若放任其发布,开关看起来失效
-                // (Codex review)。重发新扫描,generation 自增使旧结果作废。
+                // 异步重扫,不走同步 refresh():该开关经 PanelModel 广播到全部 tab 的 mirror,
+                // 任一目录挂在抽风的云盘/网络卷上,同步列目录就冻死主线程(同步版仅保留给
+                // "新建文件夹→立即重命名"一条路径)。
                 captureAndPublishAsync()
+            case .loading:
+                // 异步 arm 在途:armAttempt() 调用时已捕获旧 hidden 值,放任其发布开关看似失效
+                // (Codex review)。但不能用 captureAndPublishAsync()——它与 arm 共享 scanTask,
+                // 会在建流/置 armed 之前把在途 arm 绞杀,留下 ready 却无 FSEvents 监听的幽灵态。
+                // 重跑完整 arm:此刻 mirror 本就处于用户动作触发的 arm 中,不新增 TCC 触达面。
+                // 续传在途 arm 的 openSettingsIfDenied(reauthorize 传 true):否则重跑用默认
+                // false 作废前一轮,"探针仍被拒 → 打开隐私设置"的引导被静默丢弃(Codex review)。
+                armAttempt(openSettingsIfDenied: inFlightOpenSettingsIfDenied)
             default:
                 break
             }
@@ -199,7 +206,11 @@ final class DirectoryMirror: ObservableObject {
     /// 返回,放主线程 = 冻死整个 app —— 而 accessory app 不出现在「强制退出」里,用户无自救路径
     /// (实测踩过)。主线程只做:置 loading、建流(先建流再快照,§4.1.1)、发布状态/快照。
     /// 过期保护沿用 scanGeneration 代次:每步回主线程都校验,旧任务的任何回写作废。
+    /// 在途 arm 的"探针失败即打开隐私设置"意图(见 showHidden `.loading` 分支的续传)。
+    private var inFlightOpenSettingsIfDenied = false
+
     private func armAttempt(openSettingsIfDenied: Bool = false) {
+        inFlightOpenSettingsIfDenied = openSettingsIfDenied
         invalidateInFlightScans()   // 新一轮 arm:作废在途扫描,其迟到回写不得覆盖本轮状态
         state = .loading
         let generation = scanGeneration
@@ -272,6 +283,12 @@ final class DirectoryMirror: ObservableObject {
 
     // MARK: - FSEvents
 
+    private func stopStream() {
+        stream?.stop()
+        stream = nil
+        isWatching = false
+    }
+
     private func startStream() {
         stream?.stop()
         let wrapper = FSEventStreamWrapper(path: currentDirectory.path) { [weak self] batch in
@@ -284,8 +301,7 @@ final class DirectoryMirror: ObservableObject {
     private func handle(_ batch: FSEventBatch) {
         if batch.unmounted, !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
             invalidateInFlightScans()   // 卸载前已起飞的后台扫描不得回头把状态覆盖成 ready
-            stream?.stop(); stream = nil
-            isWatching = false
+            stopStream()
             state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
             return
         }
@@ -373,10 +389,16 @@ final class DirectoryMirror: ObservableObject {
         // 自动重试(armed=true 会让 arm() 幂等短路,错误态只剩手动按钮一条恢复路)。
         armed = false
         if !VolumeMonitor.isVolumeMounted(for: resolvedURL) {
+            // 卷/目录已消失 → 停流,与 handle 卸载分支/volumeDidUnmount 同口径(流指向的路径
+            // 不复存在,留着只喂无意义回调)。恢复走 retryIfPossible → armAttempt 重建流。
+            stopStream()
             state = .volumeUnmounted(VolumeMonitor.volumeDisplayName(for: resolvedURL))
         } else if !FileManager.default.fileExists(atPath: resolvedURL.path) {
+            stopStream()
             state = .missing
         } else if let error, Self.isPermissionError(error) {
+            // 权限/IO 错**不停流**:路径仍在,retryIfPossible(.accessFailed) 是直接重列(不重建流),
+            // 恢复后的实时同步靠这条存活的流;瞬时 IO 错也可由后续 FSEvents 重扫自愈。
             state = .permissionDenied
         } else {
             Log.files.error("列目录失败(非权限):\(error?.localizedDescription ?? "未知", privacy: .public)")
@@ -433,8 +455,7 @@ final class DirectoryMirror: ObservableObject {
     func volumeDidUnmount(_ volumeURL: URL) {
         guard Self.contains(ancestor: volumeURL, descendant: rootURL) else { return }
         invalidateInFlightScans()   // 同 handle 卸载分支:迟到扫描不得覆盖卸载态
-        stream?.stop(); stream = nil
-        isWatching = false
+        stopStream()
         // 卷名取通知里的挂载点名,不取绑定目录末段(深层子目录会把子目录名当卷名展示)。
         state = .volumeUnmounted(volumeURL.lastPathComponent)
     }
