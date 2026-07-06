@@ -159,8 +159,13 @@ final class FileOperations {
     @discardableResult
     func newFolder(in directory: URL, name: String = String(localized: "未命名文件夹")) throws -> URL {
         try ensureWritable(directory)
-        let dest = ConflictResolver.uniqueURL(for: directory.appendingPathComponent(name), in: directory)
-        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: false)
+        // 目标尚不存在,appendingPathComponent 拼出的是无尾斜杠 URL;而镜像快照
+        // (contentsOfDirectory)对目录产出带尾斜杠 URL,FileItem.id 按 `URL ==` 比对会不相等
+        // → 新建后 selectSingle/beginRename 全部落空(重命名框永不出现)。创建成功后重构为
+        // 带目录 hint 的 URL,与快照 id 同构。
+        let proposed = ConflictResolver.uniqueURL(for: directory.appendingPathComponent(name), in: directory)
+        try FileManager.default.createDirectory(at: proposed, withIntermediateDirectories: false)
+        let dest = URL(fileURLWithPath: proposed.path, isDirectory: true)
         undo.record(.init(kind: .copy(created: dest)))   // 撤销 = 删除该空文件夹(进废纸篓)
         return dest
     }

@@ -32,7 +32,13 @@ struct DirectorySnapshot: Equatable {
             includingPropertiesForKeys: Array(FileItem.resourceKeys),
             options: options
         )
-        let needsRebase = listDir != directory
+        // 快照 id(=子项 URL)必须恒以 directory 为基底,与 newFolder 等"directory 拼子名"
+        // 产出的 URL 同构。仅比 listDir != directory 不够:/var、/tmp 这类系统别名
+        // resolvingSymlinksInPath 拒绝解析(listDir == directory),contentsOfDirectory 却把
+        // 子项规范化成 /private/... —— canonicalPath 与传入路径不一致时同样要 rebase。
+        let canonicalDir = (try? directory.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath)
+            ?? directory.path
+        let needsRebase = listDir != directory || canonicalDir != directory.path
         let items = urls.map { child -> FileItem in
             FileItem.load(url: needsRebase ? directory.appendingPathComponent(child.lastPathComponent) : child)
         }
