@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// 自拼右键菜单(spec §4.5 / §8.3:用 NSMenu 覆盖 ~95% 常用项,每项调系统 API;
 /// Finder 右键菜单本体与 Get Info 是系统硬边界,不做)。
@@ -122,6 +123,12 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
             item.image = icon
             submenu.addItem(item)
         }
+        // 「其他…」长尾出口(对齐访达):推荐列表对无注册 UTI 的扩展名(如 .env)可能只有
+        // 一两项甚至为空,系统应用选择面板兜底任选 app 打开;有它子菜单永不为空。
+        if !submenu.items.isEmpty { submenu.addItem(.separator()) }
+        let other = NSMenuItem(title: String(localized: "其他…"), action: #selector(doOpenWithOther), keyEquivalent: "")
+        other.target = self
+        submenu.addItem(other)
         parent.submenu = submenu
         return parent
     }
@@ -176,6 +183,22 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
         guard let appURL = sender.representedObject as? URL,
               let target = context?.selection.first else { return }
         ops.open(target, withApplicationAt: appURL)
+    }
+
+    /// 「其他…」:系统应用选择面板(NSOpenPanel 限定 .application,起点 /Applications)任选 app
+    /// 打开选区首项。经 presentModal 防瞬态面板遮挡(同「移动到…」)。.app 是 bundle 目录,
+    /// allowedContentTypes 限定后面板把它当单个可选项呈现,无需动 canChooseDirectories。
+    @objc private func doOpenWithOther() {
+        guard let target = context?.selection.first else { return }
+        presentModal { [ops] in
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.application]
+            panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+            panel.prompt = String(localized: "打开")
+            panel.message = String(localized: "选取用来打开「\(target.lastPathComponent)」的应用")
+            guard panel.runModal() == .OK, let appURL = panel.url else { return }
+            ops.open(target, withApplicationAt: appURL)
+        }
     }
 
     @objc private func doReveal() { if let urls = context?.selection { ops.revealInFinder(urls) } }

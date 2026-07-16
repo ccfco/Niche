@@ -251,6 +251,16 @@
         }
       }
     },
+    "其他…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other…"
+          }
+        }
+      }
+    },
     "分享…": {
       "localizations": {
         "en": {
@@ -1527,6 +1537,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit Niche"
+          }
+        }
+      }
+    },
+    "选取用来打开「%@」的应用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an application to open \"%@\""
           }
         }
       }
