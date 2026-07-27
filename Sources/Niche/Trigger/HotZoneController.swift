@@ -49,6 +49,22 @@ final class HotZoneController {
         hoverIntent.delay = delay
     }
 
+    /// 面板收起后由宿主调:复位热区进出状态,消除「一次性 dwell」死区。
+    ///
+    /// dwell 只在鼠标**进入**热区的瞬间起计时;面板在「鼠标仍停在热区里」时被关掉(hover 呼出后
+    /// 按 Esc / 快捷键 toggle / 点顶部菜单栏失焦收回),insideHotZone 仍为 true,区内再怎么移动
+    /// 都不会有第二发——热区成死区,必须把鼠标拉出再回来。修 maxY 边界前这个缺口被「贴顶每事件
+    /// 强制重置」的 bug 歪打正着掩盖(晃一下就重新武装),修掉后首次暴露(实报「更难呼出了」)。
+    /// 复位后**不立即 enter**:下一次区内 mouseMoved 走正常 false→true 转移重新起 dwell——
+    /// 「关掉后原地一晃即可再呼出」,鼠标不动则不会自动重开(尊重用户刚做的关闭动作)。
+    func rearmAfterDismiss() {
+        guard insideHotZone else { return }
+        Log.trigger.info("面板收起时鼠标仍在热区内,复位进出状态等待下一次移动重新武装")
+        insideHotZone = false
+        activeKind = nil
+        hoverIntent.exit()
+    }
+
     private var globalMonitor: Any?
     private var localMonitor: Any?
     /// 当前屏所有生效热区(主热区 + 热角 + 边缘)。鼠标进入任一个即起 hover intent。
@@ -63,6 +79,7 @@ final class HotZoneController {
         hoverIntent = HoverIntent(delay: hoverDelay)
         hoverIntent.onConfirmed = { [weak self] in
             guard let self else { return }
+            Log.trigger.info("dwell 到点,发出呼出信号 kind=\(String(describing: self.activeKind), privacy: .public)")
             self.onTrigger?(self.activeKind ?? .primary, false)
         }
         // 拖拽迎上:窗口的 NSDraggingDestination 立即触发(不等防抖)。窗口只在主热区,身份必为 .primary。
@@ -136,9 +153,13 @@ final class HotZoneController {
         }
         guard inside != insideHotZone else { return }
         insideHotZone = inside
+        // 只在进出转移时打点(不逐事件),排障「呼不出」时对表:有进入无 dwell 到点=计时被打断,
+        // 连进入都没有=命中判定/监听层问题,有信号无面板=present 侧被吞。
         if inside {
+            Log.trigger.info("进入热区 kind=\(String(describing: hit?.kind), privacy: .public),起 dwell 计时")
             hoverIntent.enter()
         } else {
+            Log.trigger.info("离开热区")
             activeKind = nil
             hoverIntent.exit()
         }

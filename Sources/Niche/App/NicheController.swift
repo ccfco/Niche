@@ -365,8 +365,14 @@ final class NicheController {
     /// kind = 触发来源:决定面板从哪长出(刘海/热角/边缘;快捷键与菜单栏走默认 .primary = 顶部)。
     private func present(from kind: HotZoneController.Zone.Kind = .primary) {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
-        guard model.windowMode != .pinned else { return }
-        guard let screen = screens.activeScreen else { return }
+        guard model.windowMode != .pinned else {
+            Log.trigger.info("呼出信号被吞:当前为 Pin 常驻模式")
+            return
+        }
+        guard let screen = screens.activeScreen else {
+            Log.trigger.error("呼出信号被吞:activeScreen 为 nil")
+            return
+        }
         let anchor: PanelAnchor
         switch kind {
         case .primary:
@@ -382,7 +388,11 @@ final class NicheController {
         // (或正收回于)另一块屏时,这里的触发是「在新屏呼出」,吞掉会导致跨屏死活呼不出、
         // 面板滞留旧屏——dwell 一次性,鼠标不离开热区不会再有第二发。
         if PanelAnchor.shouldSwallowTrigger(current: panelController.activeTransient,
-                                            target: anchor, targetScreenFrame: screen.frame) { return }
+                                            target: anchor, targetScreenFrame: screen.frame) {
+            Log.trigger.info("呼出信号被吞:同屏同锚点重复触发(面板已展开)")
+            return
+        }
+        Log.trigger.info("present 通过守卫,呼出面板 kind=\(String(describing: kind), privacy: .public)")
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
         panelController.presentTransient(anchor: anchor, on: screen, itemCount: model.sortedItems.count)
@@ -399,6 +409,10 @@ final class NicheController {
                                            // 防 .iconSizeSlider 跨次泄漏(end 对未配对调用幂等);松手再 end 也短路
         panelController.hide()
         teardownTransientFocusObserver()
+        // 收面板时鼠标可能仍停在热区里(Esc/快捷键关面板、顶部点击失焦收回都如此):复位热区
+        // 进出状态,下一次区内移动即重新起 dwell。不复位则 dwell 一次性语义让热区成死区,
+        // 必须把鼠标拉出再回来才能呼出(修 maxY 边界后该缺口首次暴露,实报「更难呼出了」)。
+        hotZone.rearmAfterDismiss()
     }
 
     private func observeTransientFocus() {
