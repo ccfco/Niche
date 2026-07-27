@@ -366,9 +366,6 @@ final class NicheController {
     private func present(from kind: HotZoneController.Zone.Kind = .primary) {
         // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
         guard model.windowMode != .pinned else { return }
-        // 幂等:面板已展开时重复呼出(hover 进面板再回刘海会再次跨界触发)应是 no-op,
-        // 否则会重跑展开动画并重新 armCurrent() 触发 TCC 探针。
-        guard !panelController.isTransientShown else { return }
         guard let screen = screens.activeScreen else { return }
         let anchor: PanelAnchor
         switch kind {
@@ -380,6 +377,12 @@ final class NicheController {
         case let .side(side):
             anchor = .side(side, mouse: NSEvent.mouseLocation)
         }
+        // 幂等只吞「同屏同锚点重复触发」(hover 进面板再回刘海的重复跨界),避免重跑展开动画 +
+        // 重新 armCurrent() 触发 TCC 探针。判据必须是触发目标而非「面板可见」:面板还开在
+        // (或正收回于)另一块屏时,这里的触发是「在新屏呼出」,吞掉会导致跨屏死活呼不出、
+        // 面板滞留旧屏——dwell 一次性,鼠标不离开热区不会再有第二发。
+        if PanelAnchor.shouldSwallowTrigger(current: panelController.activeTransient,
+                                            target: anchor, targetScreenFrame: screen.frame) { return }
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
         panelController.presentTransient(anchor: anchor, on: screen, itemCount: model.sortedItems.count)

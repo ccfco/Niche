@@ -102,6 +102,16 @@ final class HotZoneController {
         }
     }
 
+    /// 鼠标是否仍在给定屏 frame 内(纯函数,回归测试钉住):贴屏幕顶/右边时 mouseLocation 恰落在
+    /// frame 的 max 边上,`CGRect.contains` 排除 max 边会把「贴顶」误判成「跨屏」——每个 mouseMoved
+    /// 都走慢路径重置 insideHotZone/dwell,贴顶滑动期间计时永远到不了点,呼出偶发失灵
+    /// (与 hitZone 含 max 边是同一类坑)。故四边全含;空 frame(.zero 缓存初值)不含任何点。
+    static func screenContainsMouse(frame: CGRect, mouse: CGPoint) -> Bool {
+        !frame.isEmpty
+            && mouse.x >= frame.minX && mouse.x <= frame.maxX
+            && mouse.y >= frame.minY && mouse.y <= frame.maxY
+    }
+
     /// 跨区滑动是否重起 dwell 计时(纯函数,回归测试钉住):在区内滑进**另一个**区(如角落→
     /// 相邻边缘重叠带)要重计时,不沿用旧区已积累的停留时间,否则新区会被旧区的计时提前触发
     /// (Codex review);同一区内滑动身份不变、计时不动;从区外初进不算"跨区"(走 enter 路径)。
@@ -136,8 +146,9 @@ final class HotZoneController {
 
     /// 鼠标跨屏时把热区几何换到新屏并重定位拖拽窗口。仍在已跟踪屏内走快路径直接返回。
     private func syncScreenIfNeeded(mouse: CGPoint) {
-        if trackedScreenFrame.contains(mouse) { return }
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+        // 判「仍在原屏」与找屏共用同一含 max 边谓词:贴顶(y=maxY)是热区常态位置,不能被判成跨屏。
+        if Self.screenContainsMouse(frame: trackedScreenFrame, mouse: mouse) { return }
+        guard let screen = NSScreen.screens.first(where: { Self.screenContainsMouse(frame: $0.frame, mouse: mouse) }) ?? NSScreen.main else { return }
         trackedScreenFrame = screen.frame
         // 换屏即作废旧屏的进出态:显式 exit 取消可能在跑的 hover intent timer,
         // 避免旧屏 enter 未配对 exit 导致防抖卡住(跨屏不保证落点仍在热区会触发 exit)。

@@ -23,9 +23,14 @@ final class ScreenObserver: ObservableObject {
     }
 
     /// 鼠标当前所在屏(spec §4.2:在鼠标活跃屏触发);回退主屏。
+    /// 找屏谓词与 HotZoneController 共用同一个(四边含 max 边):触发侧解析热区的屏和呈现侧
+    /// 定锚点的屏必须是同一套判定,否则鼠标贴边(坐标恰在 frame 的 max 边)时两侧可能各选一块屏,
+    /// 面板从错误的屏长出(NSMouseInRect 排除 x=maxX/y=minY,贴右/贴底会踩)。
     var activeScreen: NSScreen? {
         let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        return NSScreen.screens.first {
+            HotZoneController.screenContainsMouse(frame: $0.frame, mouse: mouse)
+        } ?? NSScreen.main
     }
 
     /// 解析某屏的刘海/回退几何。widthScale 见 NotchGeometry.resolve。

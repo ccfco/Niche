@@ -89,6 +89,35 @@ enum PanelAnchor: Equatable {
         }
     }
 
+    /// 触发去重意义上的「同锚点」(纯函数,回归测试钉住):present 的幂等守卫只吞同锚点重复触发
+    /// (hover 进面板再回刘海的重复跨界),异触发区 = 用户想让面板挪过去,必须重新 present。
+    /// 判等只比「面板会落在哪」的决定要素,不比整个携带值:
+    /// - `.top` 只比 midX/minY(targetFrame 只用这两项;widthScale 调宽热区不挪面板,不算异锚点);
+    /// - `.side` 忽略鼠标位置(同一条边即同锚点,鼠标微移不该反复重放动画)。
+    /// 本函数不含屏幕身份(`.side`/`.corner` 携带值区分不了异屏同侧/同角),
+    /// 异屏判定由 `shouldSwallowTrigger` 比对屏 frame 承担,两者必须配套使用。
+    static func isSameTriggerTarget(_ a: PanelAnchor, _ b: PanelAnchor) -> Bool {
+        switch (a, b) {
+        case let (.top(r1), .top(r2)): return r1.midX == r2.midX && r1.minY == r2.minY
+        case let (.side(sideA, _), .side(sideB, _)): return sideA == sideB
+        default: return a == b
+        }
+    }
+
+    /// 触发到达时是否该吞掉(纯函数,回归测试钉住):
+    /// - 无已展开瞬态(含收回动画中,anchor 传 nil)→ 不吞(收回中重触发 = 把面板叫回来);
+    /// - 已展开但脱锚(unpin 回瞬态后 lastAnchor 为 nil)→ 吞,热区触发不把浮着的面板拽回锚点;
+    /// - 已展开且有锚 → 仅「同屏 + 同锚点」吞,异屏/异触发区重新 present 把面板挪过去
+    ///   (修「跨屏呼出被吞、面板滞留旧屏」;屏幕身份靠 frame 比对,锚点携带值不含它)。
+    static func shouldSwallowTrigger(
+        current: (anchor: PanelAnchor?, screenFrame: CGRect)?,
+        target: PanelAnchor, targetScreenFrame: CGRect
+    ) -> Bool {
+        guard let current else { return false }
+        guard let anchor = current.anchor else { return true }
+        return current.screenFrame == targetScreenFrame && isSameTriggerTarget(anchor, target)
+    }
+
     /// 高度变化时的生长方向:底部锚定(下边缘/下角)保持底边不动向上长,其余保持顶边不动(现状)。
     var growsUpward: Bool {
         switch self {

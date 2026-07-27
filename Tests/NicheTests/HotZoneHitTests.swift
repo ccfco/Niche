@@ -33,6 +33,22 @@ final class HotZoneHitTests: XCTestCase {
         XCTAssertNil(HotZoneController.hitZone(in: [corner, side, primary], mouse: CGPoint(x: 500, y: 500)))
     }
 
+    // MARK: - 已跟踪屏包含判定(跨屏快路径)
+
+    /// 贴屏幕顶(y == frame.maxY)必须算"仍在已跟踪屏"——CGRect.contains 排除 max 边,
+    /// 曾把贴顶滑动误判成跨屏,每个 mouseMoved 都重置 dwell,呼出偶发失灵。
+    func testTrackedScreenIncludesMaxEdges() {
+        let frame = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        XCTAssertTrue(HotZoneController.screenContainsMouse(frame: frame, mouse: CGPoint(x: 800, y: 1000)), "贴顶(y=maxY)仍在本屏")
+        XCTAssertTrue(HotZoneController.screenContainsMouse(frame: frame, mouse: CGPoint(x: 1600, y: 500)), "贴右边(x=maxX)仍在本屏")
+        XCTAssertFalse(HotZoneController.screenContainsMouse(frame: frame, mouse: CGPoint(x: 1601, y: 500)), "屏外不算")
+    }
+
+    /// 初始 .zero 缓存(refreshPlacement 作废后)不得包含任何点,否则鼠标恰在 (0,0) 时跳过重解析。
+    func testZeroTrackedFrameContainsNothing() {
+        XCTAssertFalse(HotZoneController.screenContainsMouse(frame: .zero, mouse: .zero))
+    }
+
     // MARK: - 跨区 dwell 重置
 
     /// 区内滑进另一个区:重起计时,不沿用旧区已积累的停留时间。

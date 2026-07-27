@@ -67,6 +67,17 @@ final class PanelController {
     var mode: WindowMode { panel?.mode ?? .transient }
     var isTransientShown: Bool { isVisible && mode == .transient }
 
+    /// 瞬态已展开且**不在收回动画中**时的(锚点, 所在屏 frame);其余情况 nil(收回中重触发是
+    /// 「把面板叫回来」,不算已展开——presentTransient 的 showGeneration 抢占本就支持中断收回)。
+    /// 供宿主喂给 `PanelAnchor.shouldSwallowTrigger` 做触发去重:锚点携带值不含屏幕身份
+    /// (异屏同侧/同角区分不了),必须连同呈现时的屏 frame 一起比对。anchor 为 nil = 脱锚
+    /// (unpin 回瞬态后)的浮面板。
+    var activeTransient: (anchor: PanelAnchor?, screenFrame: CGRect)? {
+        guard isTransientShown, !isHiding else { return nil }
+        return (lastAnchor, presentedScreenFrame)
+    }
+    private var presentedScreenFrame: CGRect = .zero
+
     /// 固定列数:宽度 = 6 列单元格精确和(永不裁切半格,派生自 EdgeMetrics)。两模式共用、Pin 不改。
     private let columns = 6
 
@@ -148,6 +159,7 @@ final class PanelController {
         let size = CGSize(width: panelWidth, height: panelHeight(itemCount: itemCount))
         let target = anchor.targetFrame(panelSize: size, visible: screen.visibleFrame)
         lastAnchor = anchor
+        presentedScreenFrame = screen.frame   // 触发去重要连屏幕身份一起比(见 activeTransient)
         anchorRect = anchor.corridorRect(target: target, screenFrame: screen.frame)
         // 起始:贴锚一侧的细条 → 向内长到标准尺寸。
         let start = anchor.collapsedFrame(target: target)
@@ -158,13 +170,17 @@ final class PanelController {
         panel.makeKey()
         let dur = motion.reduceMotion ? 0.16 : 0.3
         isPresenting = true   // 生长动画期间抑制 relayout,避免与展开动画打架(#14)
+        let gen = showGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = dur
             ctx.timingFunction = CAMediaTimingFunction(name: motion.reduceMotion ? .easeOut : .easeInEaseOut)
             panel.animator().setFrame(target, display: true)
             panel.animator().alphaValue = 1
         }, completionHandler: { [weak self] in
-            self?.isPresenting = false
+            // 代次守卫(与 hide completion 对称):动画中被新一轮 present 抢占时,过期 completion
+            // 不得提前清掉新回合的 isPresenting,否则 relayout 会在新动画中途改 frame 打架。
+            guard let self, gen == self.showGeneration else { return }
+            self.isPresenting = false
         })
         startMouseLeaveMonitor()
     }
