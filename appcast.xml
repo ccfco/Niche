@@ -3,6 +3,15 @@
     <channel>
         <title>Niche</title>
         <item>
+            <title>0.1.8</title>
+            <pubDate>Tue, 28 Jul 2026 09:08:25 +0800</pubDate>
+            <sparkle:version>168</sparkle:version>
+            <sparkle:shortVersionString>0.1.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/ccfco/Niche/releases/download/v0.1.8/Niche.app.zip" length="3388916" type="application/octet-stream" sparkle:edSignature="jYlX4utRM3Rs9POoWSZnsuYOf7atOrgWKbM6SpWgio6TyMBRJjikAWbBCMN2ZNoR2Ic6dSNxl3bX8AQYJCs3AA=="/>
+        </item>
+        <item>
             <title>0.1.7</title>
             <pubDate>Thu, 02 Jul 2026 17:35:23 +0800</pubDate>
             <sparkle:version>156</sparkle:version>
@@ -19,15 +28,6 @@
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/ccfco/Niche/releases/download/v0.1.6/Niche.app.zip" length="1929385" type="application/octet-stream" sparkle:edSignature="wWNfCEKMN6nSVd5ctud/Drri1D2eqPHtojvQBvtLjtXEwL+V1GpnN9PEbev5giEA45tsyGZ78sLM1ckp1NRUAw=="/>
-        </item>
-        <item>
-            <title>0.1.5</title>
-            <pubDate>Wed, 01 Jul 2026 16:30:29 +0800</pubDate>
-            <sparkle:version>128</sparkle:version>
-            <sparkle:shortVersionString>0.1.5</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/ccfco/Niche/releases/download/v0.1.5/Niche.app.zip" length="1920385" type="application/octet-stream" sparkle:edSignature="7qLdZ4JpI5L6+I5I0QDarWUGijyVvioXazDqx3TkFHlShyn2YBnK1RVq8to9H2DsLzhQ4SnrlZaSbXTXORW7Aw=="/>
         </item>
     </channel>
 </rss>
