@@ -72,7 +72,11 @@ sed -i '' \
     -e "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" \
     project.yml
 git add project.yml
-git commit -m "chore: 版本号 bump 到 $VER(build $BUILD_NUMBER)"
+git commit \
+    -m "chore: 版本号 bump 到 $VER(build $BUILD_NUMBER)" \
+    -m "【根因/背景】发版需要同步更新营销版本与 Sparkle 用于判断新旧的单调 build number。" \
+    -m "【踩坑记录】仅修改营销版本不足以触发 Sparkle 更新；build number 必须随每次发布递增。" \
+    -m "【改动范围】更新 project.yml 的 MARKETING_VERSION 与 CURRENT_PROJECT_VERSION。"
 echo "▸ 版本号 $VER / build $BUILD_NUMBER(已写回 project.yml 并提交)"
 
 # ── 构建 ─────────────────────────────────────────────────────
@@ -173,7 +177,11 @@ echo "  ✓ HTTP 可达性确认通过"
 
 echo "▸ 推送 appcast（资产已就位，此刻暴露才安全）…"
 git add appcast.xml
-git commit -m "chore: 更新 appcast ${TAG}（资产已确认可下载）"
+git commit \
+    -m "chore: 更新 appcast ${TAG}（资产已确认可下载）" \
+    -m "【根因/背景】Sparkle 只能在 GitHub Release 资产真实可下载后安全暴露新版本。" \
+    -m "【踩坑记录】先推 appcast 会让客户端短暂拿到指向不存在资产的下载地址，破坏更新链。" \
+    -m "【改动范围】在资产状态与 HTTP 可达性均验证通过后更新并推送 appcast.xml。"
 git push origin main
 
 echo "✔ 已发布 ${APP_NAME} ${TAG}"
