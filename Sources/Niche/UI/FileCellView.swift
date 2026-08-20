@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 /// - 就地重命名:isRenaming 时显示 TextField。
 struct FileCellView: View {
     let item: FileItem
+    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     let isSelected: Bool
     let isRenaming: Bool
     /// dataless 按需下载中:显 spinner 替代 iCloud 角标(#13)。
@@ -180,21 +181,21 @@ struct FileCellView: View {
             }
     }
 
-    /// 静态文件名:2 行中间截断(Finder 图标视图同款);全名靠系统 hover tooltip(.help)与进重命名
-    /// 时的多行框查看——不在格子里自造展开浮层(那既不原生、又挤布局)。
+    /// 静态文件名:2 行中间截断(Finder 图标视图同款);只有真实截断时才向面板根层注册全名速览。
     private var staticLabel: some View {
         // 标签色点放名称左侧(Finder 图标视图惯例);整组居中。
         HStack(spacing: 3) {
             if !item.tags.isEmpty { TagDotsView(tags: item.tags, diameter: 9) }
-            Text(item.name)
-                // 文件名 12pt = 访达图标视图 textSize 实测值(读自 Finder plist IconViewSettings);
-                // 此前用 .caption 实测仅 10pt。图标尺寸交由 iconSize 滑块,字号固定按访达(同访达:缩放
-                // 图标不改文字大小)。
-                .font(.system(size: 12))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .help(item.name)
+            FullNamePeekTarget(coordinator: fullNamePeek, id: item.id, name: item.name, layout: .grid) {
+                Text(item.name)
+                    // 文件名 12pt = 访达图标视图 textSize 实测值(读自 Finder plist IconViewSettings);
+                    // 此前用 .caption 实测仅 10pt。图标尺寸交由 iconSize 滑块,字号固定按访达(同访达:缩放
+                    // 图标不改文字大小)。
+                    .font(.system(size: 12))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
         }
         .frame(maxWidth: .infinity)
     }

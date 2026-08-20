@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 /// 网格视图(spec §4.4)。展示 + 选中 + 双击打开/下钻 + 拖出 + 右键 + 就地重命名 + 拖入落地。
 struct FileGridView: View {
     @ObservedObject var model: PanelModel
+    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     @EnvironmentObject private var motion: MotionPreferences
     let edge: EdgeMetrics
     var actions = PanelActions()
@@ -87,6 +88,7 @@ struct FileGridView: View {
     private func baseCell(_ item: FileItem) -> some View {
         FileCellView(
             item: item,
+            fullNamePeek: fullNamePeek,
             isSelected: model.selectedIDs.contains(item.id),
             isRenaming: model.renamingItemID == item.id,
             isDownloading: model.downloadingIDs.contains(item.id),
@@ -133,7 +135,7 @@ struct FileGridView: View {
             dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] },
             // 慢速单击重命名:点中已是唯一选中项才触发(与 Finder 一致;多选/未选中不触发)。
             isSoleSelection: { model.selectedIDs == [item.id] },
-            onBeginRename: { model.beginRename(item.url) },
+            onBeginRename: { fullNamePeek.dismiss(); model.beginRename(item.url) },
             armToken: { model.renameArmToken }
         )
     }

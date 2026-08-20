@@ -38,6 +38,7 @@ final class PanelController {
     private let model: PanelModel
     private let motion: MotionPreferences
     private let actions: PanelActions
+    private let fullNamePeek: FullNamePeekCoordinator
     private let edge = EdgeMetrics.standard
 
     /// 瞬态下鼠标离开"面板↔刘海"走廊(宿主据此过 AutoHideCoordinator 抑制判定后收回)。
@@ -72,10 +73,12 @@ final class PanelController {
     /// 露出 → 玻璃 bounds 全程不变,无 morph(见 ensurePanel / snapGlass / presentTransient)。
     private var glass: NSGlassEffectView?
 
-    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
+    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions,
+         fullNamePeek: FullNamePeekCoordinator) {
         self.model = model
         self.motion = motion
         self.actions = actions
+        self.fullNamePeek = fullNamePeek
     }
 
     /// 兜底:controller 释放时若 monitor 仍在,移除避免泄漏(直接访问存储属性 + nonisolated
@@ -243,6 +246,7 @@ final class PanelController {
     func hide() {
         stopMouseLeaveMonitor()
         stopKeyMonitor()
+        fullNamePeek.dismiss()
         guard let panel, panel.isVisible, !isHiding else { return }
         isHiding = true
         let gen = showGeneration
@@ -368,7 +372,9 @@ final class PanelController {
         let glass = NSGlassEffectView()
         glass.cornerRadius = edge.panelCornerRadius   // 外壳同心圆基准(= 底栏按钮 16 + gap 8)
         glass.autoresizingMask = [.minYMargin, .minXMargin, .maxXMargin]   // 顶部居中锚定,宽高固定
-        let host = NicheGlassHostingView(rootView: ContentPanelView(model: model, motion: motion, actions: actions))
+        let host = NicheGlassHostingView(rootView: ContentPanelView(
+            model: model, motion: motion, fullNamePeek: fullNamePeek, actions: actions
+        ))
         glass.contentView = host
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)))

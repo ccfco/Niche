@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// 列:名称(图标+名)/ 大小 / 种类。原生单击选中、双击打开/下钻、拖出即走、右键菜单、就地重命名。
 struct FileListView: View {
     @ObservedObject var model: PanelModel
+    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     let edge: EdgeMetrics
     var actions = PanelActions()
     /// 让 Table 成为第一响应者:PanelController 的 keyDown monitor 把列表方向键**放行**给响应链,
@@ -135,12 +136,14 @@ struct FileListView: View {
                     }
                 )
             } else {
-                // 列表用尾部省略(中间省略在窄列表里读着怪)+ 全名 tooltip(#17)。
+                // 列表用尾部省略(中间省略在窄列表里读着怪);真实截断时由面板根层显示全名速览。
                 // 慢速单击重命名只挂在文字上(Finder:点类型图标只选中,点文件名文字才改名);
                 // contentShape 让文字整块可命中。
-                Text(item.name).lineLimit(1).truncationMode(.tail).help(item.name)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(TapGesture(count: 1).onEnded { scheduleListRename(item) })
+                FullNamePeekTarget(coordinator: fullNamePeek, id: item.id, name: item.name, layout: .list) {
+                    Text(item.name).lineLimit(1).truncationMode(.tail)
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(TapGesture(count: 1).onEnded { scheduleListRename(item) })
+                }
                 // 标签色点放名称右侧(Finder 列表视图惯例),Spacer 推到名称列右缘。
                 if !item.tags.isEmpty {
                     Spacer(minLength: 4)
@@ -163,6 +166,7 @@ struct FileListView: View {
         // 驱动 .contextMenu auto-hide 抑制(菜单期间面板不收)。弃用阉割版 SwiftUI .contextMenu(#3)。
         // RightClickCatcher 只认领右键/control-左键,左键(原生选中/双击/拖出)透传不冲突。
         .overlay(RightClickCatcher(makeMenu: { anchor in
+            fullNamePeek.dismiss()
             // 右键未选中的行 → 单选它;已在多选内 → 保留多选(Finder 语义:菜单作用于整组选中)。
             if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
             return actions.onContextMenu(model.selectionURLs, anchor)
@@ -212,6 +216,7 @@ struct FileListView: View {
             // 触发时二次确认仍是唯一选中本项(期间双击/切走 → 放弃),与图标模式的二次校验对称;
             // 并比对代次——面板已收起则放弃,不在隐藏后置 renamingItemID(Codex review)。
             if model.renameArmToken == token, model.selectedIDs == [item.id], model.renamingItemID == nil {
+                fullNamePeek.dismiss()
                 model.beginRename(item.url)
             }
         }

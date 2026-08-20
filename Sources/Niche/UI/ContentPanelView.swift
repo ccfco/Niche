@@ -7,6 +7,7 @@ import SwiftUI
 struct ContentPanelView: View {
     @ObservedObject var model: PanelModel
     @ObservedObject var motion: MotionPreferences
+    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     private let edge = EdgeMetrics.standard
 
     /// 宿主注入的动作集合(解耦 UI 与 AppKit 控制器)。
@@ -40,6 +41,16 @@ struct ContentPanelView: View {
         .panelBackground()
         .clipShape(RoundedRectangle(cornerRadius: edge.panelCornerRadius, style: .continuous))
         .environmentObject(motion)
+        .overlayPreferenceValue(FullNameAnchorPreferenceKey.self) { anchors in
+            FullNamePeekOverlay(coordinator: fullNamePeek, motion: motion,
+                                anchors: anchors, edge: edge)
+        }
+        .onAppear { fullNamePeek.selectionChanged(to: model.cursorID) }
+        .onChange(of: model.cursorID) { _, id in fullNamePeek.selectionChanged(to: id) }
+        .onChange(of: model.currentTab) { _, _ in fullNamePeek.dismiss() }
+        .onChange(of: model.viewMode) { _, _ in fullNamePeek.dismiss() }
+        .onChange(of: model.renamingItemID) { _, id in if id != nil { fullNamePeek.dismiss() } }
+        .onChange(of: model.pathInputVisible) { _, visible in if visible { fullNamePeek.dismiss() } }
         // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。
         .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)
         // 键盘导航统一由 PanelController 的 keyDown monitor 处理(面板键盘权威),
@@ -90,8 +101,8 @@ struct ContentPanelView: View {
                            onAuthorize: { model.currentMirror?.retryIfPossible() })
         case .ready:
             switch model.viewMode {
-            case .list: FileListView(model: model, edge: edge, actions: actions)
-            case .icon: FileGridView(model: model, edge: edge, actions: actions)
+            case .list: FileListView(model: model, fullNamePeek: fullNamePeek, edge: edge, actions: actions)
+            case .icon: FileGridView(model: model, fullNamePeek: fullNamePeek, edge: edge, actions: actions)
             }
         }
     }
