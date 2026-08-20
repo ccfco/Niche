@@ -94,7 +94,7 @@ final class PanelModel: ObservableObject {
 
     /// 路径输入条是否展开(⌘⇧G / 键入 `/`、`~` 弹出;Esc/前往成功收起)。
     @Published private(set) var pathInputVisible = false
-    /// 弹出时带入的首字符(键入 `/`、`~` 触发时不丢第一击)。
+    /// 弹出时带入的首字符:`/` 是纯唤起快捷键、保持空;`~` 是 Home 路径起手式、予以保留。
     private(set) var pathInputInitial = ""
     /// 聚焦代次:条已开但焦点回到列表后再次 ⌘⇧G/键入 `/` → 自增让输入框重新夺焦
     /// (NSView 无法被 model 直接夺焦,经 updateNSView 对比代次驱动)。

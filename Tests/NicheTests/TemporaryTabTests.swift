@@ -59,12 +59,13 @@ final class TemporaryTabTests: XCTestCase {
 
     func testPathInputStateLifecycle() {
         XCTAssertFalse(model.pathInputVisible)
-        model.beginPathInput(initial: "/")
+        model.beginPathInput()                       // `/` 快捷键只唤起,输入框默认空
         XCTAssertTrue(model.pathInputVisible)
-        XCTAssertEqual(model.pathInputInitial, "/")
+        XCTAssertEqual(model.pathInputInitial, "")
         let token = model.pathInputFocusToken
-        model.beginPathInput(initial: "~")          // 再次触发 → 聚焦代次自增
+        model.beginPathInput(initial: "~")          // `~` 是路径起手式,保留首字符
         XCTAssertGreaterThan(model.pathInputFocusToken, token)
+        XCTAssertEqual(model.pathInputInitial, "~")
         model.endPathInput()
         XCTAssertFalse(model.pathInputVisible)
         XCTAssertEqual(model.pathInputInitial, "")

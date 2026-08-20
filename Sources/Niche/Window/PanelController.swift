@@ -535,9 +535,14 @@ final class PanelController {
         if !cmd, !option, !flags.contains(.control),
            TypeAheadBuffer.isTypeAheadInput(event.charactersIgnoringModifiers) {
             let chars = event.charactersIgnoringModifiers ?? ""
-            // `/` 必是路径(文件名不可能含);`~` 仅在新一轮输入(有效缓冲空)时视为路径起手
-            // —— 两者转入路径输入条并带入首字符,不进 type-ahead。
-            if chars == "/" || (chars == "~" && typeAhead.activeBuffer().isEmpty) {
+            // `/` 是纯唤起快捷键:用户只做了“打开路径输入”这一步,输入框应为空,不把快捷键
+            // 偷偷变成输入内容。`~` 则是明确的 Home 路径起手式,仅在新一轮输入(有效缓冲空)
+            // 时转入路径输入条并保留首字符。两者都不进 type-ahead。
+            if chars == "/" {
+                model.beginPathInput()
+                return nil
+            }
+            if chars == "~", typeAhead.activeBuffer().isEmpty {
                 model.beginPathInput(initial: chars)
                 return nil
             }
