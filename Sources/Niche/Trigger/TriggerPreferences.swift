@@ -1,8 +1,8 @@
 import Foundation
 
 /// 触发方式偏好的**唯一真相源**(设置页与触发系统共绑):刘海热区开关、hover 触发延迟、
-/// 全局快捷键。didSet 持久化;应用到 HotZoneController/GlobalHotkey 由 NicheController
-/// 订阅驱动(本类纯偏好状态,不持有触发组件)。
+/// 全局快捷键。离散项 didSet 持久化；连续滑杆在编辑结束时落盘。应用到
+/// HotZoneController/GlobalHotkey 由 NicheController 订阅驱动(本类纯偏好状态,不持有触发组件)。
 @MainActor
 final class TriggerPreferences: ObservableObject {
     /// 刘海热区触发开关(关掉后仅剩菜单栏图标 + 全局快捷键呼出)。
@@ -12,14 +12,42 @@ final class TriggerPreferences: ObservableObject {
 
     /// hover 意图延迟(秒):鼠标停留多久算"想呼出"。默认 0.3s 对齐成熟刘海工具的稳态手感；
     /// 已保存的旧灵敏值原样保留，不在升级时静默改写用户选择。
-    @Published var hoverDelay: Double {
-        didSet { UserDefaults.standard.set(hoverDelay, forKey: "niche.hoverDelay") }
+    @Published var hoverDelay: Double
+
+    func persistHoverDelay() {
+        UserDefaults.standard.set(hoverDelay, forKey: "niche.hoverDelay")
+    }
+
+    /// 设置页连续滑杆使用对数映射：0.1–0.5s 的常用区获得足够行程，同时仍可覆盖到 5s。
+    static let hoverDelayRange: ClosedRange<Double> = 0.1...5
+
+    static func sliderPosition(for delay: Double) -> Double {
+        let range = hoverDelayRange
+        let clamped = min(max(delay, range.lowerBound), range.upperBound)
+        return log(clamped / range.lowerBound) / log(range.upperBound / range.lowerBound)
+    }
+
+    static func hoverDelay(forSliderPosition position: Double) -> Double {
+        let range = hoverDelayRange
+        let clamped = min(max(position, 0), 1)
+        return range.lowerBound * pow(range.upperBound / range.lowerBound, clamped)
+    }
+
+    func enablesPrimaryZone(hasNotch: Bool) -> Bool {
+        hotZoneEnabled && (hasNotch || fallbackHotZoneEnabled)
     }
 
     /// 无刘海屏回退热区的宽度缩放(1.0 = 按屏宽 16% 的默认比例)。真实刘海不受此项影响,
     /// 见 NotchGeometry.resolve。
-    @Published var hotZoneWidthScale: Double {
-        didSet { UserDefaults.standard.set(hotZoneWidthScale, forKey: "niche.hotZoneWidthScale") }
+    @Published var hotZoneWidthScale: Double
+
+    func persistHotZoneWidthScale() {
+        UserDefaults.standard.set(hotZoneWidthScale, forKey: "niche.hotZoneWidthScale")
+    }
+
+    /// 外接显示器/无刘海 Mac 的顶部中央回退热区可独立关闭；真实刘海不受影响。
+    @Published var fallbackHotZoneEnabled: Bool {
+        didSet { UserDefaults.standard.set(fallbackHotZoneEnabled, forKey: "niche.fallbackHotZoneEnabled") }
     }
 
     /// 启用的热角(默认空,对齐 macOS 原生 Hot Corners「出厂不配置任何角」的心智)。
@@ -44,20 +72,14 @@ final class TriggerPreferences: ObservableObject {
         didSet { hotkey.save() }
     }
 
-    /// 触发延迟的预设档(设置页 Picker;自由滑杆对 0.18 这种手感值反而难选准)。
-    static let hoverDelayPresets: [(label: String, value: Double)] = [
-        (String(localized: "极灵敏(0.1s)"), 0.1),
-        (String(localized: "灵敏(0.18s)"), 0.18),
-        (String(localized: "标准(0.3s)"), 0.3),
-        (String(localized: "稳重(0.4s)"), 0.4),
-        (String(localized: "最稳(0.5s)"), 0.5),
-    ]
-
     init() {
         let defaults = UserDefaults.standard
         hotZoneEnabled = defaults.object(forKey: "niche.hotZoneEnabled") as? Bool ?? true
-        hoverDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.3
-        hotZoneWidthScale = defaults.object(forKey: "niche.hotZoneWidthScale") as? Double ?? 1.0
+        let savedDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.3
+        hoverDelay = min(max(savedDelay, Self.hoverDelayRange.lowerBound), Self.hoverDelayRange.upperBound)
+        let savedWidthScale = defaults.object(forKey: "niche.hotZoneWidthScale") as? Double ?? 1.0
+        hotZoneWidthScale = min(max(savedWidthScale, 0.6), 2)
+        fallbackHotZoneEnabled = defaults.object(forKey: "niche.fallbackHotZoneEnabled") as? Bool ?? true
         let rawCorners = defaults.stringArray(forKey: "niche.enabledHotCorners") ?? []
         enabledHotCorners = Set(rawCorners.compactMap(ScreenCorner.init(rawValue:)))
         let rawSides = defaults.stringArray(forKey: "niche.enabledScreenSides") ?? []

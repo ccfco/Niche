@@ -37,7 +37,8 @@ struct SettingsView: View {
             switch navigation.selection {
             case .folders: FoldersSettings(onAddFolder: onAddFolder)
             case .trigger: TriggerSettings(triggerPrefs: triggerPrefs)
-            case .general: GeneralSettings(model: model)
+            case .panel: PanelSettings(model: model)
+            case .general: GeneralSettings()
             case .about: AboutSettings()
             }
         }

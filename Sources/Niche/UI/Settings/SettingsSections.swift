@@ -69,14 +69,17 @@ struct TriggerSettings: View {
 
     var body: some View {
         Section {
-            Toggle("刘海热区触发", isOn: $triggerPrefs.hotZoneEnabled)
-            Picker("悬停确认", selection: $triggerPrefs.hoverDelay) {
-                ForEach(TriggerPreferences.hoverDelayPresets, id: \.value) { preset in
-                    Text(preset.label).tag(preset.value)
-                }
-            }
-            // 延迟作用于所有 hover 触发(主热区/热角/边缘),任一开启就可调 —— 只绑主热区会出现
-            // "只开热角时延迟在生效却改不了"。
+            Toggle("顶部悬停触发", isOn: $triggerPrefs.hotZoneEnabled)
+            PreferenceSliderRow(
+                title: String(localized: "悬停确认"),
+                valueText: hoverDelayText,
+                value: hoverPosition,
+                range: 0...1,
+                tickCount: 5,
+                minimumLabel: String(localized: "灵敏 0.1 秒"),
+                maximumLabel: String(localized: "最稳 5 秒"),
+                onEditingEnded: { triggerPrefs.persistHoverDelay() }
+            )
             .disabled(!triggerPrefs.hotZoneEnabled
                       && triggerPrefs.enabledHotCorners.isEmpty
                       && triggerPrefs.enabledSides.isEmpty)
@@ -88,12 +91,25 @@ struct TriggerSettings: View {
         }
 
         Section {
-            Slider(value: $triggerPrefs.hotZoneWidthScale, in: 0.6...2.0, step: 0.1) {
-                Text("热区宽度")
+            Toggle("顶部中央触发", isOn: $triggerPrefs.fallbackHotZoneEnabled)
+                .disabled(!triggerPrefs.hotZoneEnabled)
+            if triggerPrefs.fallbackHotZoneEnabled {
+                PreferenceSliderRow(
+                    title: String(localized: "顶部热区宽度"),
+                    valueText: "\(Int((triggerPrefs.hotZoneWidthScale * 100).rounded()))%",
+                    value: $triggerPrefs.hotZoneWidthScale,
+                    range: 0.6...2,
+                    tickCount: 5,
+                    minimumLabel: String(localized: "窄"),
+                    maximumLabel: String(localized: "宽"),
+                    onEditingEnded: { triggerPrefs.persistHotZoneWidthScale() }
+                )
+                .disabled(!triggerPrefs.hotZoneEnabled)
             }
-            .disabled(!triggerPrefs.hotZoneEnabled)
+        } header: {
+            Text("无刘海屏幕")
         } footer: {
-            Text("仅影响无刘海屏幕的回退热区,真实刘海按物理宽度显示,不受此项影响。").settingsCaption()
+            Text("只影响外接显示器和无刘海 Mac；真实刘海始终按物理范围命中。关闭后这些屏幕仍可使用快捷键、热角或边缘触发。").settingsCaption()
         }
 
         Section {
@@ -117,6 +133,19 @@ struct TriggerSettings: View {
         }
     }
 
+    private var hoverPosition: Binding<Double> {
+        Binding(
+            get: { TriggerPreferences.sliderPosition(for: triggerPrefs.hoverDelay) },
+            set: { triggerPrefs.hoverDelay = TriggerPreferences.hoverDelay(forSliderPosition: $0) }
+        )
+    }
+
+    private var hoverDelayText: String {
+        let delay = triggerPrefs.hoverDelay
+        if delay < 1 { return String(format: "%.2f 秒", delay) }
+        return String(format: "%.1f 秒", delay)
+    }
+
     private func hotCornerBinding(_ corner: ScreenCorner) -> Binding<Bool> {
         Binding(
             get: { triggerPrefs.enabledHotCorners.contains(corner) },
@@ -138,19 +167,105 @@ struct TriggerSettings: View {
     }
 }
 
-/// 通用:显示隐藏文件、开机自启。直接绑面板 PanelModel(showHidden 单真相源,改了面板立即生效)。
-struct GeneralSettings: View {
+/// 面板:尺寸直接保存为点数，与列/行数解耦；内容密度与现场底栏共用 PanelModel 单一真相源。
+struct PanelSettings: View {
     @ObservedObject var model: PanelModel
+
+    var body: some View {
+        Section {
+            PreferenceSliderRow(
+                title: String(localized: "面板宽度"),
+                valueText: "\(Int(model.preferredPanelWidth.rounded())) pt",
+                value: widthBinding,
+                range: Double(PanelModel.panelWidthRange.lowerBound)...Double(PanelModel.panelWidthRange.upperBound),
+                tickCount: 6,
+                minimumLabel: String(localized: "紧凑"),
+                maximumLabel: String(localized: "宽"),
+                onEditingEnded: { model.persistPanelSize() }
+            )
+            PreferenceSliderRow(
+                title: String(localized: "面板高度"),
+                valueText: "\(Int(model.preferredPanelHeight.rounded())) pt",
+                value: heightBinding,
+                range: Double(PanelModel.panelHeightRange.lowerBound)...Double(PanelModel.panelHeightRange.upperBound),
+                tickCount: 6,
+                minimumLabel: String(localized: "紧凑"),
+                maximumLabel: String(localized: "高"),
+                onEditingEnded: { model.persistPanelSize() }
+            )
+        } header: {
+            Text("尺寸")
+        } footer: {
+            Text("滑杆连续可调，刻度只作参考、不强制吸附。面板在较小屏幕上会自动夹取到可见区域内，不改写你的偏好。").settingsCaption()
+        }
+
+        Section {
+            Picker("文件视图", selection: $model.viewMode) {
+                Text("图标").tag(FileViewMode.icon)
+                Text("列表").tag(FileViewMode.list)
+            }
+            Picker("文件名行数", selection: $model.filenameLineLimit) {
+                Text("1 行").tag(1)
+                Text("2 行").tag(2)
+                Text("3 行").tag(3)
+            }
+            if model.viewMode == .icon {
+                PreferenceSliderRow(
+                    title: String(localized: "图标大小"),
+                    valueText: "\(Int(model.iconSize.rounded())) pt",
+                    value: iconSizeBinding,
+                    range: Double(PanelModel.iconSizeRange.lowerBound)...Double(PanelModel.iconSizeRange.upperBound),
+                    tickCount: 5,
+                    minimumLabel: String(localized: "小"),
+                    maximumLabel: String(localized: "大"),
+                    onEditingEnded: { model.persistIconSize() }
+                )
+            }
+            Toggle("显示项目信息", isOn: $model.showItemInfo)
+            Toggle("显示隐藏文件", isOn: $model.showHidden)
+        } header: {
+            Text("内容")
+        } footer: {
+            Text("文件名只有真实被截断时才显示系统完整名称提示；图标大小也可以在面板底栏现场调整。").settingsCaption()
+        }
+
+        Section {
+            Picker("鼠标离开后收起", selection: $model.autoHideDelay) {
+                ForEach(PanelModel.autoHideDelayOptions, id: \.value) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            Button("恢复面板默认设置") { model.restorePanelDefaults() }
+        } header: {
+            Text("行为")
+        } footer: {
+            Text("Pin 后面板保持常驻，不受自动收起设置影响。").settingsCaption()
+        }
+    }
+
+    private var widthBinding: Binding<Double> {
+        Binding(get: { Double(model.preferredPanelWidth) },
+                set: { model.preferredPanelWidth = CGFloat($0) })
+    }
+
+    private var heightBinding: Binding<Double> {
+        Binding(get: { Double(model.preferredPanelHeight) },
+                set: { model.preferredPanelHeight = CGFloat($0) })
+    }
+
+    private var iconSizeBinding: Binding<Double> {
+        Binding(get: { Double(model.iconSize) }, set: { model.iconSize = CGFloat($0) })
+    }
+}
+
+/// 通用:应用级行为。面板显示偏好已集中到独立「面板」页。
+struct GeneralSettings: View {
     /// SMAppService 状态是系统侧真相,本地只留 UI 镜像;失败弹提示并回读真实状态(不静默)。
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var launchError: String?
 
     var body: some View {
         Section {
-            // 与面板 eye 按钮同一真相源,改了立即生效 —— 不是"默认值",别写"默认"误导。
-            Toggle("显示隐藏文件", isOn: $model.showHidden)
-            // 图标视图名称下显副信息(分辨率/时长/项目数/大小),同访达「显示项目简介」。
-            Toggle("显示项目简介(分辨率 / 时长 / 项目数)", isOn: $model.showItemInfo)
             Toggle("开机自启", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, enabled in
                     guard enabled != LaunchAtLogin.isEnabled else { return }

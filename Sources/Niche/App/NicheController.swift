@@ -205,11 +205,13 @@ final class NicheController {
             var zones: [HotZoneController.Zone] = []
             if self.triggerPrefs.hotZoneEnabled {
                 let resolution = self.screens.resolution(for: screen, widthScale: self.triggerPrefs.hotZoneWidthScale)
-                zones.append(.init(
-                    kind: .primary,
-                    rect: NotchGeometry.hoverZoneRect(from: resolution),
-                    dragRect: NotchGeometry.dragZoneRect(from: resolution)
-                ))
+                if self.triggerPrefs.enablesPrimaryZone(hasNotch: resolution.hasNotch) {
+                    zones.append(.init(
+                        kind: .primary,
+                        rect: NotchGeometry.hoverZoneRect(from: resolution),
+                        dragRect: NotchGeometry.dragZoneRect(from: resolution)
+                    ))
+                }
             }
             // 按 allCases 固定顺序遍历(Set 无序):相邻两边共享的 4pt 角落重叠带命中结果
             // 必须确定,不能随 Set 哈希漂移(Codex review)。
@@ -290,11 +292,11 @@ final class NicheController {
                 self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: index)
             }
 
-        // 内容/视图模式/下钻态变化 → 面板高度自适应重算(#14)。objectWillChange 高频,但
-        // relayoutHeight 内部高度无变化即跳过,选中等不改高度的变更天然 no-op。
+        // 面板偏好变化 → 以实际屏幕安全夹取宽高；其余 model 变化虽也发布，relayoutSize 的
+        // 尺寸相等守卫会直接跳过，不触发无意义 frame 更新。
         relayoutCancellable = model.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.panelController.relayoutHeight() }
+            .sink { [weak self] in self?.panelController.relayoutSize() }
 
         // 路径输入条展开中 → .pathInput 抑制(输入路径常要对照别处,鼠标离开不该抽走面板)。
         pathInputCancellable = model.$pathInputVisible

@@ -32,11 +32,70 @@ final class PanelModel: ObservableObject {
         }
     }
     /// 图标视图「显示项目简介」(名称下副行:分辨率/时长/项目数/大小),持久化。纯显示态,不动 mirror。
-    @Published var showItemInfo: Bool = UserDefaults.standard.bool(forKey: "niche.showItemInfo") {
+    @Published var showItemInfo: Bool = UserDefaults.standard.object(forKey: "niche.showItemInfo") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showItemInfo, forKey: "niche.showItemInfo") }
     }
     @Published var windowMode: WindowMode = .transient
     @Published var columns = 4
+    /// 面板几何偏好直接保存点数，与网格列数/文件数量解耦。列数只由真实宽度与图标大小派生；
+    /// 呈现到窄屏时由 PanelGridGeometry 做安全夹取，不回写用户偏好。
+    static let defaultPanelWidth = PanelGridGeometry.preferredPanelWidth(edge: .standard)
+    static let defaultPanelHeight: CGFloat = 450
+
+    @Published var preferredPanelWidth: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "niche.panelWidth")
+        let value = saved > 0 ? CGFloat(saved) : PanelModel.defaultPanelWidth
+        return min(max(value, PanelModel.panelWidthRange.lowerBound), PanelModel.panelWidthRange.upperBound)
+    }()
+    @Published var preferredPanelHeight: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "niche.panelHeight")
+        let value = saved > 0 ? CGFloat(saved) : PanelModel.defaultPanelHeight
+        return min(max(value, PanelModel.panelHeightRange.lowerBound), PanelModel.panelHeightRange.upperBound)
+    }()
+    static let panelWidthRange: ClosedRange<CGFloat> = 480...1200
+    static let panelHeightRange: ClosedRange<CGFloat> = 300...760
+
+    func persistPanelSize() {
+        UserDefaults.standard.set(Double(preferredPanelWidth), forKey: "niche.panelWidth")
+        UserDefaults.standard.set(Double(preferredPanelHeight), forKey: "niche.panelHeight")
+    }
+
+    /// 图标视图文件名行数。1–3 行是用户可理解的密度偏好；截断检测与真实 lineLimit 共用此值。
+    @Published var filenameLineLimit: Int = {
+        let saved = UserDefaults.standard.integer(forKey: "niche.filenameLineLimit")
+        return (1...3).contains(saved) ? saved : 2
+    }() {
+        didSet { UserDefaults.standard.set(filenameLineLimit, forKey: "niche.filenameLineLimit") }
+    }
+
+    /// 鼠标离开面板走廊后的收起等待。Pin 模式不走此路径，故不提供“永不收起”重复语义。
+    @Published var autoHideDelay: Double = {
+        let saved = UserDefaults.standard.object(forKey: "niche.autoHideDelay") as? Double
+        guard let saved else { return 0.35 }
+        return PanelModel.autoHideDelayOptions.min {
+            abs($0.value - saved) < abs($1.value - saved)
+        }?.value ?? 0.35
+    }() {
+        didSet { UserDefaults.standard.set(autoHideDelay, forKey: "niche.autoHideDelay") }
+    }
+    static let autoHideDelayOptions: [(label: String, value: Double)] = [
+        (String(localized: "立即"), 0),
+        (String(localized: "标准"), 0.35),
+        (String(localized: "从容"), 0.8),
+    ]
+
+    func restorePanelDefaults() {
+        preferredPanelWidth = Self.defaultPanelWidth
+        preferredPanelHeight = Self.defaultPanelHeight
+        filenameLineLimit = 2
+        autoHideDelay = 0.35
+        iconSize = 52
+        showItemInfo = true
+        showHidden = false
+        viewMode = .icon
+        persistPanelSize()
+        persistIconSize()
+    }
     /// 图标视图图标边长(pt),底栏滑块无极调节(对齐访达缩放条:面板尺寸不变,只改图标大小+列数)。
     /// 默认 52：保持瞬态面板的内容密度。列宽/列数由 PanelGridGeometry 以「文件名最小可读宽度
     /// + 图标尺寸」共同派生，放大图标会自然减列，不再反向压缩名称。

@@ -72,4 +72,50 @@ final class OnboardingStateTests: XCTestCase {
         UserDefaults.standard.set(0.18, forKey: "niche.hoverDelay")
         XCTAssertEqual(TriggerPreferences().hoverDelay, 0.18, accuracy: 0.001)
     }
+
+    func testHoverDelayLogScaleRoundTripsAndCoversFiveSeconds() {
+        for delay in [0.1, 0.18, 0.3, 1, 2, 5] {
+            let position = TriggerPreferences.sliderPosition(for: delay)
+            XCTAssertGreaterThanOrEqual(position, 0)
+            XCTAssertLessThanOrEqual(position, 1)
+            XCTAssertEqual(TriggerPreferences.hoverDelay(forSliderPosition: position), delay,
+                           accuracy: 0.000_1)
+        }
+        XCTAssertEqual(TriggerPreferences.hoverDelay(forSliderPosition: -1), 0.1, accuracy: 0.000_1)
+        XCTAssertEqual(TriggerPreferences.hoverDelay(forSliderPosition: 2), 5, accuracy: 0.000_1)
+    }
+
+    func testFallbackTopZoneCanBeDisabledWithoutDisablingRealNotch() {
+        let originalHotZone = UserDefaults.standard.object(forKey: "niche.hotZoneEnabled")
+        let originalFallback = UserDefaults.standard.object(forKey: "niche.fallbackHotZoneEnabled")
+        defer {
+            restore(originalHotZone, key: "niche.hotZoneEnabled")
+            restore(originalFallback, key: "niche.fallbackHotZoneEnabled")
+        }
+
+        let prefs = TriggerPreferences()
+        prefs.hotZoneEnabled = true
+        prefs.fallbackHotZoneEnabled = false
+        XCTAssertTrue(prefs.enablesPrimaryZone(hasNotch: true))
+        XCTAssertFalse(prefs.enablesPrimaryZone(hasNotch: false))
+
+        prefs.hotZoneEnabled = false
+        XCTAssertFalse(prefs.enablesPrimaryZone(hasNotch: true))
+    }
+
+    func testFallbackWidthScaleClampsLegacyOutOfRangeValues() {
+        let original = UserDefaults.standard.object(forKey: "niche.hotZoneWidthScale")
+        defer { restore(original, key: "niche.hotZoneWidthScale") }
+
+        UserDefaults.standard.set(9, forKey: "niche.hotZoneWidthScale")
+        XCTAssertEqual(TriggerPreferences().hotZoneWidthScale, 2, accuracy: 0.001)
+
+        UserDefaults.standard.set(0.1, forKey: "niche.hotZoneWidthScale")
+        XCTAssertEqual(TriggerPreferences().hotZoneWidthScale, 0.6, accuracy: 0.001)
+    }
+
+    private func restore(_ value: Any?, key: String) {
+        if let value { UserDefaults.standard.set(value, forKey: key) }
+        else { UserDefaults.standard.removeObject(forKey: key) }
+    }
 }

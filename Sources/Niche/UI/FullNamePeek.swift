@@ -5,7 +5,7 @@ import SwiftUI
 enum FilenameTruncation {
     enum Layout: Equatable {
         case list
-        case grid
+        case grid(lineLimit: Int)
 
         fileprivate var font: NSFont {
             switch self {
@@ -22,7 +22,7 @@ enum FilenameTruncation {
         case .list:
             let natural = ceil((name as NSString).size(withAttributes: attributes).width)
             return natural > floor(width) + 1
-        case .grid:
+        case let .grid(lineLimit):
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineBreakMode = .byCharWrapping
             let rect = (name as NSString).boundingRect(
@@ -30,7 +30,8 @@ enum FilenameTruncation {
                 options: [.usesLineFragmentOrigin, .usesFontLeading],
                 attributes: [.font: layout.font, .paragraphStyle: paragraph]
             )
-            return ceil(rect.height) > ceil(layout.font.boundingRectForFont.height * 2) + 1
+            let lines = max(1, lineLimit)
+            return ceil(rect.height) > ceil(layout.font.boundingRectForFont.height * CGFloat(lines)) + 1
         }
     }
 }

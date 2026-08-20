@@ -6,9 +6,11 @@ final class FilenameTruncationTests: XCTestCase {
         XCTAssertFalse(FilenameTruncation.isTruncated("短名", width: 120, layout: .list))
         XCTAssertTrue(FilenameTruncation.isTruncated(String(repeating: "W", count: 30),
                                                       width: 60, layout: .list))
-        XCTAssertFalse(FilenameTruncation.isTruncated("两行以内", width: 120, layout: .grid))
+        XCTAssertFalse(FilenameTruncation.isTruncated("两行以内", width: 120, layout: .grid(lineLimit: 2)))
         XCTAssertTrue(FilenameTruncation.isTruncated(String(repeating: "很长的文件名", count: 12),
-                                                     width: 70, layout: .grid))
+                                                     width: 70, layout: .grid(lineLimit: 2)))
+        XCTAssertFalse(FilenameTruncation.isTruncated("第一行第二行第三行", width: 54,
+                                                      layout: .grid(lineLimit: 3)))
     }
 
     func testReadableGridWidthReducesRealisticFilenameTruncation() {
@@ -19,8 +21,8 @@ final class FilenameTruncationTests: XCTestCase {
             "周报_2026年第31期.docx",
             "Tgent-2.1.3505.dmg",
         ]
-        let cramped = names.filter { FilenameTruncation.isTruncated($0, width: 68, layout: .grid) }
-        let readable = names.filter { FilenameTruncation.isTruncated($0, width: 96, layout: .grid) }
+        let cramped = names.filter { FilenameTruncation.isTruncated($0, width: 68, layout: .grid(lineLimit: 2)) }
+        let readable = names.filter { FilenameTruncation.isTruncated($0, width: 96, layout: .grid(lineLimit: 2)) }
 
         XCTAssertLessThan(readable.count, cramped.count)
     }

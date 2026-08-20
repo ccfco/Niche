@@ -18,6 +18,8 @@ struct FileCellView: View {
     var showItemInfo: Bool = false
     /// 图标边长(pt),由 model.iconSize 注入(底栏滑块可调)。缩略图按 ×2 取像素(Retina)。
     var iconSize: CGFloat = 64
+    /// 文件名最多显示行数(1–3)，同时驱动真实截断检测。
+    var filenameLineLimit: Int = 2
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}
@@ -158,7 +160,7 @@ struct FileCellView: View {
         return Color.clear
     }
 
-    /// 名称区:静态名(2 行中间截断,占位稳定)。重命名时静态名隐藏但保留占位,改名框走 overlay
+    /// 名称区:静态名按用户 1–3 行偏好中间截断。重命名时静态名隐藏但保留占位,改名框走 overlay
     /// **不占位**浮在其上、向下溢出压住下方格子(由宿主网格抬该格 zIndex)→ 格子高度不变,不挤压
     /// 网格布局(Finder 图标视图重命名同款:框浮于上方,不顶开其它图标)。
     @ViewBuilder private var nameArea: some View {
@@ -176,19 +178,19 @@ struct FileCellView: View {
             }
     }
 
-    /// 静态文件名:2 行中间截断(Finder 图标视图同款);只有真实截断时才在文字上挂系统 Help Tag。
+    /// 静态文件名:1–3 行中间截断;只有真实截断时才在文字上挂系统 Help Tag。
     private var staticLabel: some View {
         // 标签色点放名称左侧(Finder 图标视图惯例);整组居中。
         HStack(spacing: 3) {
             if !item.tags.isEmpty { TagDotsView(tags: item.tags, diameter: 9) }
-            TruncatedFilenameHelp(name: item.name, layout: .grid) {
+            TruncatedFilenameHelp(name: item.name, layout: .grid(lineLimit: filenameLineLimit)) {
                 Text(item.name)
                     // 文件名 12pt = 访达图标视图 textSize 实测值(读自 Finder plist IconViewSettings);
                     // 此前用 .caption 实测仅 10pt。图标尺寸交由 iconSize 滑块,字号固定按访达(同访达:缩放
                     // 图标不改文字大小)。
                     .font(.system(size: 12))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .lineLimit(filenameLineLimit)
                     .truncationMode(.middle)
             }
             .frame(maxWidth: .infinity)

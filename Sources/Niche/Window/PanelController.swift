@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// 替代了旧的 NotchExpansion(DNK 黑底刘海板,吞玻璃)+ PinnedPanelController(另一个 titled 窗)。
 ///
-/// - 尺寸:以文件名最小可读宽度为硬约束，按触发屏幕自适应列数;两模式共用,Pin 不改、不可 resize。
+/// - 尺寸:用户宽高偏好与列/行数解耦；窄屏只做安全夹取，列数由真实宽度与图标大小派生。
 /// - 瞬态:从刘海下方"长出来"(frame 动画)+ 鼠标离开"面板↔刘海"走廊即收。
 /// - 常驻:就地变 floating、可激活、可拖动(detach);不长出、不改尺寸。
 @MainActor
@@ -40,7 +40,8 @@ final class PanelController {
     private let actions: PanelActions
     private let edge = EdgeMetrics.standard
     /// 当前窗口宽度：每次瞬态呈现按触发屏 visibleFrame 解析，Pin 后保持不变。
-    private var panelWidth = PanelGridGeometry.preferredPanelWidth(edge: .standard)
+    private var panelWidth: CGFloat
+    private var panelHeight: CGFloat
 
     /// 瞬态下鼠标离开"面板↔刘海"走廊(宿主据此过 AutoHideCoordinator 抑制判定后收回)。
     var onMouseExitedTransient: (() -> Void)?
@@ -67,7 +68,7 @@ final class PanelController {
     /// 淡出竞态守卫:每次显示自增;hide 淡出回调若被新一次显示抢占(代次不符)则放弃 orderOut。
     private var showGeneration = 0
     private var isHiding = false
-    /// 瞬态生长动画进行中:抑制 relayoutHeight,避免高度重算与展开动画相互覆盖(#14)。
+    /// 瞬态生长动画进行中:抑制 relayoutSize,避免偏好更新与展开动画相互覆盖。
     private var isPresenting = false
     /// 窗面玻璃:**不直接当 contentView**(那样会随窗口逐帧 resize → NSGlassEffectView 自带液态
     /// morph,呼出动画又慢又横扫)。改作 clipsToBounds 容器内的顶部锚定子视图,尺寸固定、只被裁切
@@ -78,6 +79,8 @@ final class PanelController {
         self.model = model
         self.motion = motion
         self.actions = actions
+        panelWidth = model.preferredPanelWidth
+        panelHeight = model.preferredPanelHeight
     }
 
     /// 兜底:controller 释放时若 monitor 仍在,移除避免泄漏(直接访问存储属性 + nonisolated
@@ -110,59 +113,40 @@ final class PanelController {
         PanelGridGeometry.columnCount(panelWidth: panelWidth, iconSize: model.iconSize, edge: edge)
     }
 
-    /// 高度按条目数 + 视图模式自适应:有几行就多高(消灭空白),超出上限滚动。
-    /// 列表行矮(~26)、行数=条目数;图标行高(~98)、行数=ceil(条目/列)。chrome 含 tab/工具栏/分隔(列表多表头)。
-    /// 下钻后多一行面包屑(#7 加的路径栏),计入 chrome 否则内容被挤压(#14)。
-    private func panelHeight(itemCount: Int) -> CGFloat {
-        let count = max(itemCount, 1)
-        let breadcrumb: CGFloat = ((model.currentMirror?.canGoUp == true) ? 34 : 0)
-                                + (model.pathInputVisible ? 34 : 0)   // 路径输入条同行高
-        if model.viewMode == .list {
-            let rowHeight: CGFloat = 26
-            let chrome: CGFloat = 112        // tab + 表头 + 底栏 + 分隔 + padding
-            let rows = max(4, min(12, count))
-            return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
-        } else {
-            // 图标 + 两行名称 + 可选项目简介 + 格间距的真实占位。旧值 98 会让第三行只露图标，
-            // 文件名被底栏截掉；118 与当前默认图标尺寸及简介开启态对齐。
-            let rowHeight: CGFloat = 118
-            let chrome: CGFloat = 96
-            // 瞬态工具优先保持轻量：最多三行，其余滚动，避免长成迷你 Finder。
-            let rows = max(2, min(3, Int(ceil(Double(count) / Double(gridColumns)))))
-            return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
-        }
-    }
-
-    /// 内容/视图模式/下钻态变化后重算高度并动画到新高度(#14)。顶边固定(从刘海向下生长;
-    /// pinned 保持顶左固定,避免和用户拖动后的位置冲突 —— 只改高度不改顶点)。高度无变化即跳过。
-    func relayoutHeight() {
+    /// 偏好变化后按当前屏幕重算宽高。宽高是独立点数；列数只在真实宽度确定后派生。
+    /// 贴锚瞬态重新按锚点定位；Pin/脱锚窗口保持左上角，避免用户拖动后位置漂移。
+    func relayoutSize() {
         guard let panel, panel.isVisible, !isHiding, !isPresenting else { return }
-        // 用未排序 items.count(高度只关心条目数,与顺序无关)——避免每次 relayout 触发 sortedItems
-        // 全量排序(objectWillChange 高频,选中移动也触发,排序代价不该白花,Codex review)。
-        let count = model.currentMirror?.items.count ?? 0
-        let newHeight = panelHeight(itemCount: count)
+        guard let screen = panel.screen ?? NSScreen.main else { return }
+        let newWidth = PanelGridGeometry.panelWidth(
+            preferredWidth: model.preferredPanelWidth,
+            visibleWidth: screen.visibleFrame.width,
+            edge: edge
+        )
+        let newHeight = PanelGridGeometry.panelHeight(
+            preferredHeight: model.preferredPanelHeight,
+            visibleHeight: screen.visibleFrame.height,
+            edge: edge
+        )
         let frame = panel.frame
-        guard abs(frame.height - newHeight) > 1 else { return }
+        guard abs(frame.width - newWidth) > 1 || abs(frame.height - newHeight) > 1 else { return }
+        panelWidth = newWidth
+        panelHeight = newHeight
+        model.columns = gridColumns
         let newFrame: NSRect
-        if lastAnchor?.growsUpward == true, panel.mode == .transient {
-            // 底部锚定(下边缘/下角触发):底边不动向上长,顶边不越可视区上沿。
-            let bottom = frame.minY
-            var top = bottom + newHeight
-            if let screenMaxY = panel.screen?.visibleFrame.maxY, top > screenMaxY {
-                top = screenMaxY
-            }
-            newFrame = NSRect(x: frame.origin.x, y: bottom, width: frame.width, height: top - bottom)
+        if let lastAnchor, panel.mode == .transient {
+            newFrame = lastAnchor.targetFrame(
+                panelSize: CGSize(width: newWidth, height: newHeight),
+                visible: screen.visibleFrame
+            )
+            anchorRect = lastAnchor.corridorRect(target: newFrame, screenFrame: screen.frame)
         } else {
-            let top = frame.maxY   // 顶边不动
-            var originY = top - newHeight
-            // 屏幕底部夹取:pinned 拖到屏幕下方后向下生长可能越界,保证不低于可视区下沿(Codex review)。
-            if let screenMinY = panel.screen?.visibleFrame.minY, originY < screenMinY {
-                originY = screenMinY
-            }
-            newFrame = NSRect(x: frame.origin.x, y: originY, width: frame.width,
-                              height: top - originY)
+            let visible = screen.visibleFrame
+            let x = min(max(frame.minX, visible.minX), visible.maxX - newWidth)
+            let y = min(max(frame.maxY - newHeight, visible.minY), visible.maxY - newHeight)
+            newFrame = NSRect(x: x, y: y, width: newWidth, height: newHeight)
         }
-        snapGlass(toContentHeight: newFrame.height)   // 同 present:玻璃先到新高度,窗口裁切露出(无 morph)
+        snapGlass(toContentHeight: newFrame.height)
         if motion.reduceMotion {
             panel.setFrame(newFrame, display: true)
         } else {
@@ -178,17 +162,26 @@ final class PanelController {
 
     /// 呼出瞬态:面板从锚点(刘海/热角/边缘)处"长出来"(nonactivating 取键焦点做导航但不抢前台)
     /// + 起鼠标离开监听。锚点决定目标位置、生长细条方向与走廊(见 PanelAnchor)。
-    func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount: Int,
+    func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount _: Int,
                           source: PresentationSource = .standard) {
         // 先按触发屏幕解析宽度，再创建/重排面板：异屏可见区不同时不沿用旧屏宽度。
-        panelWidth = PanelGridGeometry.panelWidth(visibleWidth: screen.visibleFrame.width, edge: edge)
+        panelWidth = PanelGridGeometry.panelWidth(
+            preferredWidth: model.preferredPanelWidth,
+            visibleWidth: screen.visibleFrame.width,
+            edge: edge
+        )
+        panelHeight = PanelGridGeometry.panelHeight(
+            preferredHeight: model.preferredPanelHeight,
+            visibleHeight: screen.visibleFrame.height,
+            edge: edge
+        )
         model.columns = gridColumns   // 在取键前就与真实网格一致，避免首个方向键按旧列数跳。
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
         startKeyMonitor()
         panel.mode = .transient
-        let size = CGSize(width: panelWidth, height: panelHeight(itemCount: itemCount))
+        let size = CGSize(width: panelWidth, height: panelHeight)
         let target = anchor.targetFrame(panelSize: size, visible: screen.visibleFrame)
         lastAnchor = anchor
         presentedScreenFrame = screen.frame   // 触发去重要连屏幕身份一起比(见 activeTransient)
@@ -350,8 +343,8 @@ final class PanelController {
         // 玻璃在内圆到 24,四角"圆角外、窗框内"的小三角会露系统阴影 = 尖角灰线。.titled 窗有
         // 系统 frame view,可被 KVC cornerRadius 圆角,与玻璃严丝合缝 → 无三角、无灰线。
         let p = NichePanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)),
-            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],   // 自适应高度:不带 .resizable
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
+            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],   // 尺寸由设置滑杆控制，不开放系统 resize chrome
             backing: .buffered, defer: false
         )
         p.isOpaque = false
@@ -378,7 +371,7 @@ final class PanelController {
         ))
         glass.contentView = host
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight(itemCount: 12)))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
         container.wantsLayer = true
         container.layer?.masksToBounds = true   // 裁掉露出范围外的玻璃(生长动画的"开口"由此实现)
         glass.frame = container.bounds          // 初始铺满(稳态);呼出/relayout 前 snapGlass 会改写
@@ -597,7 +590,7 @@ final class PanelController {
     /// 而非盲目兑现抑制期间记下的 pendingHide —— 鼠标已回走廊内就不收(关 QL 不连带收面板)。
     func reevaluateAutoHide() { evaluateLeave() }
 
-    /// 鼠标在"面板 ∪ anchorRect"走廊内 → 取消待收;离开 → 起 0.35s 延时收回(被抑制由宿主拦)。
+    /// 鼠标在"面板 ∪ anchorRect"走廊内 → 取消待收;离开 → 按用户偏好延时收回(被抑制由宿主拦)。
     private func evaluateLeave() {
         guard let panel, panel.mode == .transient, panel.isVisible else { return }
         let region = panel.frame.union(anchorRect).insetBy(dx: -8, dy: -8)
@@ -610,7 +603,7 @@ final class PanelController {
                 self?.onMouseExitedTransient?()
             }
             leaveWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + model.autoHideDelay, execute: work)
         }
     }
 }

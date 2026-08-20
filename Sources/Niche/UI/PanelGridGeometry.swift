@@ -22,10 +22,16 @@ enum PanelGridGeometry {
             + edge.panelPadding * 2
     }
 
-    /// 常见屏幕取 736pt；窄屏保留 16pt 双侧余量并让列数自然下降，绝不越过可视区。
-    static func panelWidth(visibleWidth: CGFloat, edge: EdgeMetrics) -> CGFloat {
+    /// 宽度直接采用用户点数偏好；窄屏保留双侧余量并让列数自然下降，绝不越过可视区。
+    static func panelWidth(preferredWidth: CGFloat, visibleWidth: CGFloat, edge: EdgeMetrics) -> CGFloat {
         let fitsScreen = max(1, visibleWidth - edge.sectionSpacing * 2)
-        return min(preferredPanelWidth(edge: edge), fitsScreen)
+        return min(max(preferredWidth, 1), fitsScreen)
+    }
+
+    /// 高度是独立窗口偏好，不再由文件数量/目标行数间接决定；仅在当前屏幕放不下时安全夹取。
+    static func panelHeight(preferredHeight: CGFloat, visibleHeight: CGFloat, edge: EdgeMetrics) -> CGFloat {
+        let fitsScreen = max(1, visibleHeight - edge.sectionSpacing * 2)
+        return min(max(preferredHeight, 1), fitsScreen)
     }
 
     static func columnCount(panelWidth: CGFloat, iconSize: CGFloat, edge: EdgeMetrics) -> Int {

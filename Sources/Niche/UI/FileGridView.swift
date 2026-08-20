@@ -89,6 +89,7 @@ struct FileGridView: View {
             isDropTarget: model.dropTargetID == item.id,
             showItemInfo: model.showItemInfo,
             iconSize: model.iconSize,
+            filenameLineLimit: model.filenameLineLimit,
             edge: edge,
             onRenameCommit: { newName in
                 // 失败(空名/非法字符)保持编辑态(Codex review)。

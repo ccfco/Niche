@@ -4,7 +4,7 @@ import AppKit
 /// 设置页左侧导航分区(书签语义:稳定、用户钦定)。顺序即视觉顺序,改这里即改 sidebar。
 /// 「触发」从旧 GeneralSettings 拆出独立成页 —— 触发是 Niche 的灵魂交互,值得单列。
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case folders, trigger, general, about
+    case folders, trigger, panel, general, about
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .folders: return String(localized: "文件夹")
         case .trigger: return String(localized: "触发")
+        case .panel: return String(localized: "面板")
         case .general: return String(localized: "通用")
         case .about: return String(localized: "关于")
         }
@@ -21,6 +22,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .folders: return "folder"
         case .trigger: return "bolt"
+        case .panel: return "macwindow"
         case .general: return "gearshape"
         case .about: return "info.circle"
         }
@@ -31,8 +33,9 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .folders: return String(localized: "管理从刘海滑出的绑定文件夹(增删/排序)。")
-        case .trigger: return String(localized: "刘海热区开关、hover 灵敏度、全局呼出快捷键。")
-        case .general: return String(localized: "隐藏文件显示、项目简介、开机自启等默认行为。")
+        case .trigger: return String(localized: "调整顶部悬停、备用热区与全局呼出快捷键。")
+        case .panel: return String(localized: "调整窗口尺寸、内容密度与自动收起手感。")
+        case .general: return String(localized: "管理开机自启等应用级行为。")
         case .about: return String(localized: "版本、自动更新、开源仓库与许可信息。")
         }
     }
