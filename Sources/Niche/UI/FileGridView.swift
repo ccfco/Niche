@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 /// 网格视图(spec §4.4)。展示 + 选中 + 双击打开/下钻 + 拖出 + 右键 + 就地重命名 + 拖入落地。
 struct FileGridView: View {
     @ObservedObject var model: PanelModel
-    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     @EnvironmentObject private var motion: MotionPreferences
     let edge: EdgeMetrics
     var actions = PanelActions()
@@ -59,11 +58,7 @@ struct FileGridView: View {
     }
 
     private func columnCount(for width: CGFloat) -> Int {
-        let usable = width - edge.panelPadding * 2
-        // 列宽随 iconSize 派生(图标 + 左右余量容文字)→ 拖大图标列数自然变少,面板宽度不变(同访达)。
-        // 注:面板「标准宽度」仍用 edge.cellWidth 基准(PanelController),此处只决定内容区列数。
-        let unit = (model.iconSize + edge.base * 4) + edge.itemSpacing
-        return max(1, Int((usable + edge.itemSpacing) / unit))
+        PanelGridGeometry.columnCount(panelWidth: width, iconSize: model.iconSize, edge: edge)
     }
 
     private func gridItems(_ count: Int) -> [GridItem] {
@@ -88,7 +83,6 @@ struct FileGridView: View {
     private func baseCell(_ item: FileItem) -> some View {
         FileCellView(
             item: item,
-            fullNamePeek: fullNamePeek,
             isSelected: model.selectedIDs.contains(item.id),
             isRenaming: model.renamingItemID == item.id,
             isDownloading: model.downloadingIDs.contains(item.id),
@@ -135,7 +129,7 @@ struct FileGridView: View {
             dragURLs: { model.selectedIDs.contains(item.id) ? model.selectionURLs : [item.url] },
             // 慢速单击重命名:点中已是唯一选中项才触发(与 Finder 一致;多选/未选中不触发)。
             isSoleSelection: { model.selectedIDs == [item.id] },
-            onBeginRename: { fullNamePeek.dismiss(); model.beginRename(item.url) },
+            onBeginRename: { model.beginRename(item.url) },
             armToken: { model.renameArmToken }
         )
     }

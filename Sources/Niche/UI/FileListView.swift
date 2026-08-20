@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 /// 列:名称(图标+名)/ 大小 / 种类。原生单击选中、双击打开/下钻、拖出即走、右键菜单、就地重命名。
 struct FileListView: View {
     @ObservedObject var model: PanelModel
-    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     let edge: EdgeMetrics
     var actions = PanelActions()
     /// 让 Table 成为第一响应者:PanelController 的 keyDown monitor 把列表方向键**放行**给响应链,
@@ -136,10 +135,10 @@ struct FileListView: View {
                     }
                 )
             } else {
-                // 列表用尾部省略(中间省略在窄列表里读着怪);真实截断时由面板根层显示全名速览。
+                // 列表用尾部省略(中间省略在窄列表里读着怪);真实截断时只在文字上挂系统 Help Tag。
                 // 慢速单击重命名只挂在文字上(Finder:点类型图标只选中,点文件名文字才改名);
                 // contentShape 让文字整块可命中。
-                FullNamePeekTarget(coordinator: fullNamePeek, id: item.id, name: item.name, layout: .list) {
+                TruncatedFilenameHelp(name: item.name, layout: .list) {
                     Text(item.name).lineLimit(1).truncationMode(.tail)
                         .contentShape(Rectangle())
                         .simultaneousGesture(TapGesture(count: 1).onEnded { scheduleListRename(item) })
@@ -160,8 +159,6 @@ struct FileListView: View {
         // 展开态会把原 Text 视觉隐藏；显式保留名称列语义，避免原生 Table 行的 VoiceOver
         // 只剩大小/种类/日期而丢失文件名。
         .accessibilityLabel(item.name)
-        // 名称列整格命中；Table 其余列也各自上报同一 item，合起来覆盖完整原生行。
-        .onHover { fullNamePeek.hoverChanged(id: item.id, hovering: $0) }
         // 双击打开/下钻(Table 原生单击负责选中,叠加双击手势不冲突;activate 内会取消挂起的重命名)。
         // 慢速单击重命名不挂整行,只挂上面的 Text(Finder:点文件名文字才改名,点图标只选中)。
         .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
@@ -171,7 +168,6 @@ struct FileListView: View {
         // 驱动 .contextMenu auto-hide 抑制(菜单期间面板不收)。弃用阉割版 SwiftUI .contextMenu(#3)。
         // RightClickCatcher 只认领右键/control-左键,左键(原生选中/双击/拖出)透传不冲突。
         .overlay(RightClickCatcher(makeMenu: { anchor in
-            fullNamePeek.dismiss()
             // 右键未选中的行 → 单选它;已在多选内 → 保留多选(Finder 语义:菜单作用于整组选中)。
             if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
             return actions.onContextMenu(model.selectionURLs, anchor)
@@ -187,10 +183,8 @@ struct FileListView: View {
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .onHover { fullNamePeek.hoverChanged(id: item.id, hovering: $0) }
                 .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
                 .overlay(RightClickCatcher(makeMenu: { anchor in
-                    fullNamePeek.dismiss()
                     if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
                     return actions.onContextMenu(model.selectionURLs, anchor)
                 }))
@@ -223,7 +217,6 @@ struct FileListView: View {
             // 触发时二次确认仍是唯一选中本项(期间双击/切走 → 放弃),与图标模式的二次校验对称;
             // 并比对代次——面板已收起则放弃,不在隐藏后置 renamingItemID(Codex review)。
             if model.renameArmToken == token, model.selectedIDs == [item.id], model.renamingItemID == nil {
-                fullNamePeek.dismiss()
                 model.beginRename(item.url)
             }
         }

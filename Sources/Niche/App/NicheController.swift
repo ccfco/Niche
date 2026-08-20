@@ -49,9 +49,6 @@ final class NicheController {
     )
     /// 底栏排序菜单(NSMenu+抑制),见 SortMenuPresenter.swift。
     private lazy var sortMenu = SortMenuPresenter(autoHide: autoHide, model: model)
-    /// 文件名速览是 UI 暂态,独立于窗口与文件模型；宿主动作和 PanelController 共用它以统一收口。
-    private let fullNamePeek = FullNamePeekCoordinator()
-
     private lazy var actions = PanelActions(
         onOpen: { [weak self] in self?.open($0) },
         onTogglePin: { [weak self] in self?.togglePin() },
@@ -68,7 +65,6 @@ final class NicheController {
         onSortMenu: { [weak self] anchor in self?.sortMenu.present(from: anchor) },
         onRemoveFolder: { [weak self] in self?.removeFolder($0) },
         onQuickLook: { [weak self] urls, index in
-            self?.fullNamePeek.dismiss()
             self?.quickLook.preview(urls: urls, at: index)
         },
         isQuickLookActive: { [weak self] in self?.quickLook.isActive ?? false },
@@ -78,7 +74,6 @@ final class NicheController {
             self.quickLook.syncCurrentIndex(index)
         },
         onContextMenu: { [weak self] urls, anchor in
-            self?.fullNamePeek.dismiss()
             return self?.makeContextMenu(urls, anchor)
         },
         onContextMenuBackground: { [weak self] anchor in self?.makeBackgroundMenu(anchor) },
@@ -101,7 +96,6 @@ final class NicheController {
         onMoveTab: { [weak self] from, to in self?.moveTab(from: from, to: to) },
         onDropFolders: { [weak self] urls, index in self?.dropFolders(urls, at: index) },
         onDragBegin: { [weak self] in
-            self?.fullNamePeek.dismiss()
             self?.autoHide.begin(.draggingOut)
         },
         onDragEnd: { [weak self] in self?.autoHide.end(.draggingOut) },
@@ -109,9 +103,7 @@ final class NicheController {
             editing ? self?.autoHide.begin(.iconSizeSlider) : self?.autoHide.end(.iconSizeSlider)
         }
     )
-    private lazy var panelController = PanelController(
-        model: model, motion: motion, actions: actions, fullNamePeek: fullNamePeek
-    )
+    private lazy var panelController = PanelController(model: model, motion: motion, actions: actions)
     /// 自管设置窗口(SwiftUI Settings scene 在 accessory app 无法编程打开,见 SettingsWindowController)。
     /// 注入同一个 PanelModel(showHidden 单真相源)与统一的 addFolder 路径。
     private lazy var settingsWindow = SettingsWindowController(

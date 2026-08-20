@@ -8,7 +8,6 @@ import UniformTypeIdentifiers
 /// - 就地重命名:isRenaming 时显示 TextField。
 struct FileCellView: View {
     let item: FileItem
-    @ObservedObject var fullNamePeek: FullNamePeekCoordinator
     let isSelected: Bool
     let isRenaming: Bool
     /// dataless 按需下载中:显 spinner 替代 iCloud 角标(#13)。
@@ -106,14 +105,9 @@ struct FileCellView: View {
                     .strokeBorder(Color.accentColor, lineWidth: 2)
             }
         }
-        // 整格都是 hover 命中区：图标、名称、项目简介与留白任一处停留都能查看完整名称；
-        // 浮层视觉锚点仍由名称标签提供，降低操作精度要求但不牺牲归属感。
-        .onHover { hovering in
-            isHovered = hovering
-            fullNamePeek.hoverChanged(id: item.id, hovering: hovering)
-        }
+        // 整格 hover 只提供轻反馈；完整名称仅由下方真实被截断的文字挂系统 Help Tag。
+        .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
-        .animation(.easeOut(duration: 0.1), value: isNameExpanded)
         .overlay(alignment: .topTrailing) {
             if isDownloading {
                 ProgressView().controlSize(.small).padding(edge.badgeInset)
@@ -160,14 +154,8 @@ struct FileCellView: View {
     /// 整格只表达落点和轻 hover。选择聚焦在文件名区域，避免图标、名称、元信息一起变成大卡片。
     private var cellFill: Color {
         if isDropTarget { return Color.accentColor.opacity(GlassTokens.dropTargetFill) }
-        // 名称已经用自身状态底承接 hover 时，撤掉外层整格状态，避免形成卡片套卡片。
-        if isNameExpanded { return Color.clear }
         if isHovered { return Color.primary.opacity(GlassTokens.hoverFill) }
         return Color.clear
-    }
-
-    private var isNameExpanded: Bool {
-        fullNamePeek.presentation?.id == item.id
     }
 
     /// 名称区:静态名(2 行中间截断,占位稳定)。重命名时静态名隐藏但保留占位,改名框走 overlay
@@ -188,12 +176,12 @@ struct FileCellView: View {
             }
     }
 
-    /// 静态文件名:2 行中间截断(Finder 图标视图同款);只有真实截断时才向面板根层注册全名速览。
+    /// 静态文件名:2 行中间截断(Finder 图标视图同款);只有真实截断时才在文字上挂系统 Help Tag。
     private var staticLabel: some View {
         // 标签色点放名称左侧(Finder 图标视图惯例);整组居中。
         HStack(spacing: 3) {
             if !item.tags.isEmpty { TagDotsView(tags: item.tags, diameter: 9) }
-            FullNamePeekTarget(coordinator: fullNamePeek, id: item.id, name: item.name, layout: .grid) {
+            TruncatedFilenameHelp(name: item.name, layout: .grid) {
                 Text(item.name)
                     // 文件名 12pt = 访达图标视图 textSize 实测值(读自 Finder plist IconViewSettings);
                     // 此前用 .caption 实测仅 10pt。图标尺寸交由 iconSize 滑块,字号固定按访达(同访达:缩放

@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// 替代了旧的 NotchExpansion(DNK 黑底刘海板,吞玻璃)+ PinnedPanelController(另一个 titled 窗)。
 ///
-/// - 尺寸:单一**标准尺寸**(宽恰容 6 列单元格,派生自网格;两模式共用,Pin 不改、不可 resize)。
+/// - 尺寸:以文件名最小可读宽度为硬约束，按触发屏幕自适应列数;两模式共用,Pin 不改、不可 resize。
 /// - 瞬态:从刘海下方"长出来"(frame 动画)+ 鼠标离开"面板↔刘海"走廊即收。
 /// - 常驻:就地变 floating、可激活、可拖动(detach);不长出、不改尺寸。
 @MainActor
@@ -38,8 +38,9 @@ final class PanelController {
     private let model: PanelModel
     private let motion: MotionPreferences
     private let actions: PanelActions
-    private let fullNamePeek: FullNamePeekCoordinator
     private let edge = EdgeMetrics.standard
+    /// 当前窗口宽度：每次瞬态呈现按触发屏 visibleFrame 解析，Pin 后保持不变。
+    private var panelWidth = PanelGridGeometry.preferredPanelWidth(edge: .standard)
 
     /// 瞬态下鼠标离开"面板↔刘海"走廊(宿主据此过 AutoHideCoordinator 抑制判定后收回)。
     var onMouseExitedTransient: (() -> Void)?
@@ -73,12 +74,10 @@ final class PanelController {
     /// 露出 → 玻璃 bounds 全程不变,无 morph(见 ensurePanel / snapGlass / presentTransient)。
     private var glass: NSGlassEffectView?
 
-    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions,
-         fullNamePeek: FullNamePeekCoordinator) {
+    init(model: PanelModel, motion: MotionPreferences, actions: PanelActions) {
         self.model = model
         self.motion = motion
         self.actions = actions
-        self.fullNamePeek = fullNamePeek
     }
 
     /// 兜底:controller 释放时若 monitor 仍在,移除避免泄漏(直接访问存储属性 + nonisolated
@@ -107,11 +106,8 @@ final class PanelController {
     }
     private var presentedScreenFrame: CGRect = .zero
 
-    /// 固定列数:宽度 = 6 列单元格精确和(永不裁切半格,派生自 EdgeMetrics)。两模式共用、Pin 不改。
-    private let columns = 6
-
-    private var panelWidth: CGFloat {
-        CGFloat(columns) * edge.cellWidth + CGFloat(columns - 1) * edge.itemSpacing + edge.panelPadding * 2
+    private var gridColumns: Int {
+        PanelGridGeometry.columnCount(panelWidth: panelWidth, iconSize: model.iconSize, edge: edge)
     }
 
     /// 高度按条目数 + 视图模式自适应:有几行就多高(消灭空白),超出上限滚动。
@@ -131,8 +127,8 @@ final class PanelController {
             // 文件名被底栏截掉；118 与当前默认图标尺寸及简介开启态对齐。
             let rowHeight: CGFloat = 118
             let chrome: CGFloat = 96
-            // 瞬态工具优先保持轻量：最多三行（18 项），其余滚动，避免在 MacBook 上长成迷你 Finder。
-            let rows = max(2, min(3, Int(ceil(Double(count) / Double(columns)))))
+            // 瞬态工具优先保持轻量：最多三行，其余滚动，避免长成迷你 Finder。
+            let rows = max(2, min(3, Int(ceil(Double(count) / Double(gridColumns)))))
             return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
         }
     }
@@ -184,6 +180,9 @@ final class PanelController {
     /// + 起鼠标离开监听。锚点决定目标位置、生长细条方向与走廊(见 PanelAnchor)。
     func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount: Int,
                           source: PresentationSource = .standard) {
+        // 先按触发屏幕解析宽度，再创建/重排面板：异屏可见区不同时不沿用旧屏宽度。
+        panelWidth = PanelGridGeometry.panelWidth(visibleWidth: screen.visibleFrame.width, edge: edge)
+        model.columns = gridColumns   // 在取键前就与真实网格一致，避免首个方向键按旧列数跳。
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
@@ -249,7 +248,6 @@ final class PanelController {
     func hide() {
         stopMouseLeaveMonitor()
         stopKeyMonitor()
-        fullNamePeek.dismiss()
         guard let panel, panel.isVisible, !isHiding else { return }
         isHiding = true
         let gen = showGeneration
@@ -376,7 +374,7 @@ final class PanelController {
         glass.cornerRadius = edge.panelCornerRadius   // 外壳同心圆基准(= 底栏按钮 16 + gap 8)
         glass.autoresizingMask = [.minYMargin, .minXMargin, .maxXMargin]   // 顶部居中锚定,宽高固定
         let host = NicheGlassHostingView(rootView: ContentPanelView(
-            model: model, motion: motion, fullNamePeek: fullNamePeek, actions: actions
+            model: model, motion: motion, actions: actions
         ))
         glass.contentView = host
 

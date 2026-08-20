@@ -32,6 +32,4 @@ struct EdgeMetrics: Equatable {
     /// 单元角标(下载 spinner / iCloud 云标)相对单元角的内缩；纯渲染细节，刻意不挂 base。
     var badgeInset: CGFloat { 2 }
 
-    /// 网格单元目标宽度。网格列数计算与面板标准宽度共用同一来源(禁两处魔法数 84)。
-    var cellWidth: CGFloat { base * 10.5 }   // 8 * 10.5 = 84
 }
