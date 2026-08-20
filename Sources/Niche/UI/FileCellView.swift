@@ -109,8 +109,12 @@ struct FileCellView: View {
                     .strokeBorder(Color.accentColor, lineWidth: 2)
             }
         }
-        // hover 高亮:鼠标移入给一层比选中态更淡的底,提示可点(选中态优先)。
-        .onHover { hovering in isHovered = hovering }
+        // 整格都是 hover 命中区：图标、名称、项目简介与留白任一处停留都能查看完整名称；
+        // 浮层视觉锚点仍由名称标签提供，降低操作精度要求但不牺牲归属感。
+        .onHover { hovering in
+            isHovered = hovering
+            fullNamePeek.hoverChanged(id: item.id, hovering: hovering)
+        }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .overlay(alignment: .topTrailing) {
             if isDownloading {

@@ -48,7 +48,11 @@ struct ContentPanelView: View {
         .onAppear { fullNamePeek.selectionChanged(to: model.cursorID) }
         .onChange(of: model.cursorID) { _, id in fullNamePeek.selectionChanged(to: id) }
         .onChange(of: model.currentTab) { _, _ in fullNamePeek.dismiss() }
-        .onChange(of: model.viewMode) { _, _ in fullNamePeek.dismiss() }
+        .onChange(of: model.viewMode) { _, _ in
+            fullNamePeek.dismiss()
+            // Table / LazyVGrid 会重建名称锚点；保留当前光标意图，等新目标注册后重新原位展开。
+            fullNamePeek.selectionChanged(to: model.cursorID)
+        }
         .onChange(of: model.renamingItemID) { _, id in if id != nil { fullNamePeek.dismiss() } }
         .onChange(of: model.pathInputVisible) { _, visible in if visible { fullNamePeek.dismiss() } }
         // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。

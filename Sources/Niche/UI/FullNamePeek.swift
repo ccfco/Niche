@@ -11,12 +11,12 @@ final class FullNamePeekCoordinator: ObservableObject {
         let id: FileItem.ID
         let name: String
         let origin: Origin
+        let layout: FilenameTruncation.Layout
     }
 
     struct Timing: Equatable {
-        var hoverDelay: TimeInterval = 0.22
-        var selectionDelay: TimeInterval = 0.18
-        var selectionDuration: TimeInterval = 1.6
+        var hoverDelay: TimeInterval = 0.4
+        var selectionDelay: TimeInterval = 0.15
         var exitDelay: TimeInterval = 0.1
     }
 
@@ -24,6 +24,7 @@ final class FullNamePeekCoordinator: ObservableObject {
         let token: UUID
         let name: String
         let isTruncated: Bool
+        let layout: FilenameTruncation.Layout
     }
 
     @Published private(set) var presentation: Presentation?
@@ -42,8 +43,9 @@ final class FullNamePeekCoordinator: ObservableObject {
         self.scheduler = scheduler
     }
 
-    func updateTarget(id: FileItem.ID, token: UUID, name: String, isTruncated: Bool) {
-        let next = Target(token: token, name: name, isTruncated: isTruncated)
+    func updateTarget(id: FileItem.ID, token: UUID, name: String, isTruncated: Bool,
+                      layout: FilenameTruncation.Layout) {
+        let next = Target(token: token, name: name, isTruncated: isTruncated, layout: layout)
         guard targets[id] != next else { return }
         targets[id] = next
         if !isTruncated, presentation?.id == id {
@@ -67,12 +69,12 @@ final class FullNamePeekCoordinator: ObservableObject {
             hoveredID = id
             hoverWork?.cancel()
             hideWork?.cancel()
-            selectionWork?.cancel()
             hoverWork = scheduler.schedule(after: timing.hoverDelay) { [weak self] in
                 guard let self, self.hoveredID == id,
                       let current = self.targets[id], current.isTruncated else { return }
                 self.hoverWork = nil
-                self.presentation = Presentation(id: id, name: current.name, origin: .hover)
+                self.presentation = Presentation(id: id, name: current.name, origin: .hover,
+                                                 layout: current.layout)
             }
         } else {
             guard hoveredID == id else { return }
@@ -80,7 +82,7 @@ final class FullNamePeekCoordinator: ObservableObject {
             hoverWork?.cancel()
             hoverWork = nil
             guard presentation?.id == id, presentation?.origin == .hover else { return }
-            scheduleHide(after: timing.exitDelay, matching: id)
+            scheduleHoverExit(after: timing.exitDelay, matching: id)
         }
     }
 
@@ -91,10 +93,14 @@ final class FullNamePeekCoordinator: ObservableObject {
         selectionWork = nil
         hideWork?.cancel()
         hideWork = nil
+        if presentation?.origin == .selection, presentation?.id != id {
+            presentation = nil
+        }
         guard let id else {
-            if presentation?.origin == .selection { presentation = nil }
             return
         }
+        // 鼠标正在临时查看另一项时不抢回浮层；移出后恢复新选中的光标项。
+        if presentation?.origin == .hover || hoveredID != nil { return }
         scheduleSelection(for: id)
     }
 
@@ -115,24 +121,26 @@ final class FullNamePeekCoordinator: ObservableObject {
             guard let self, self.selectedID == id,
                   let current = self.targets[id], current.isTruncated else { return }
             self.selectionWork = nil
-            self.presentation = Presentation(id: id, name: current.name, origin: .selection)
-            self.scheduleHide(after: self.timing.selectionDuration, matching: id)
+            self.presentation = Presentation(id: id, name: current.name, origin: .selection,
+                                             layout: current.layout)
         }
     }
 
-    private func scheduleHide(after delay: TimeInterval, matching id: FileItem.ID) {
+    private func scheduleHoverExit(after delay: TimeInterval, matching id: FileItem.ID) {
         hideWork?.cancel()
         hideWork = scheduler.schedule(after: delay) { [weak self] in
             guard let self, self.presentation?.id == id, self.hoveredID != id else { return }
             self.hideWork = nil
             self.presentation = nil
+            guard let selectedID = self.selectedID else { return }
+            self.scheduleSelection(for: selectedID)
         }
     }
 }
 
 /// 两种文件名排版的截断合同。用与展示态相同的 AppKit 字体测量，不依赖字符串长度猜测。
 enum FilenameTruncation {
-    enum Layout {
+    enum Layout: Equatable {
         case list
         case grid
 
@@ -164,7 +172,7 @@ enum FilenameTruncation {
     }
 }
 
-/// 文件名单元只报告截断状态、hover 与锚点；浮层本体由 ContentPanelView 在面板根层统一绘制。
+/// 文件名只报告截断状态与原位锚点；整个文件单元的 hover 由调用方上报，避免要求用户精准指向文字。
 struct FullNamePeekTarget<Label: View>: View {
     @ObservedObject var coordinator: FullNamePeekCoordinator
     let id: FileItem.ID
@@ -189,7 +197,8 @@ struct FullNamePeekTarget<Label: View>: View {
                 }
             }
             .anchorPreference(key: FullNameAnchorPreferenceKey.self, value: .bounds) { [id: $0] }
-            .onHover { coordinator.hoverChanged(id: id, hovering: $0) }
+            // 展开态替代原截断文本，不同时显示两份名称；布局占位仍保留，网格不会跳动。
+            .opacity(coordinator.presentation?.id == id ? 0 : 1)
             .onAppear { register() }
             .onChange(of: renderedWidth) { _, _ in register() }
             .onChange(of: name) { _, _ in register() }
@@ -197,7 +206,8 @@ struct FullNamePeekTarget<Label: View>: View {
     }
 
     private func register() {
-        coordinator.updateTarget(id: id, token: registrationToken, name: name, isTruncated: isTruncated)
+        coordinator.updateTarget(id: id, token: registrationToken, name: name,
+                                 isTruncated: isTruncated, layout: layout)
     }
 }
 
@@ -220,7 +230,7 @@ struct FullNamePeekOverlay: View {
         GeometryReader { proxy in
             if let presentation = coordinator.presentation,
                let anchor = anchors[presentation.id] {
-                PositionedFullNameBubble(name: presentation.name, anchorRect: proxy[anchor],
+                PositionedFullNameBubble(presentation: presentation, anchorRect: proxy[anchor],
                                          containerSize: proxy.size, edge: edge)
                     .id(presentation.id)
                     .transition(motion.reduceMotion
@@ -237,51 +247,66 @@ struct FullNamePeekOverlay: View {
 
 struct FullNamePeekPlacement {
     static func origin(anchor: CGRect, bubble: CGSize, container: CGSize,
-                       margin: CGFloat, gap: CGFloat) -> CGPoint {
+                       margin: CGFloat, layout: FilenameTruncation.Layout) -> CGPoint {
         let maxX = max(margin, container.width - margin - bubble.width)
-        let x = min(max(anchor.midX - bubble.width / 2, margin), maxX)
-        let below = anchor.maxY + gap
-        let above = anchor.minY - gap - bubble.height
-        let y: CGFloat
-        if below + bubble.height <= container.height - margin {
-            y = below
-        } else if above >= margin {
-            y = above
-        } else {
-            y = min(max(below, margin), max(margin, container.height - margin - bubble.height))
-        }
+        let preferredX = layout == .grid ? anchor.midX - bubble.width / 2 : anchor.minX - margin / 2
+        let x = min(max(preferredX, margin), maxX)
+        // 覆盖原文件名而非另起一条提示：图标模式顶边对齐，列表模式垂直居中。
+        let preferredY = layout == .grid ? anchor.minY - margin / 2 : anchor.midY - bubble.height / 2
+        let maxY = max(margin, container.height - margin - bubble.height)
+        let y = min(max(preferredY, margin), maxY)
         return CGPoint(x: x, y: y)
     }
 }
 
 private struct PositionedFullNameBubble: View {
-    let name: String
+    let presentation: FullNamePeekCoordinator.Presentation
     let anchorRect: CGRect
     let containerSize: CGSize
     let edge: EdgeMetrics
     @State private var bubbleSize: CGSize = .zero
 
-    private var maxWidth: CGFloat {
-        min(edge.base * 40, max(edge.base * 18, containerSize.width - edge.panelPadding * 2))
+    private var bubbleWidth: CGFloat {
+        let font = presentation.layout.font
+        let natural = ceil((presentation.name as NSString).size(withAttributes: [.font: font]).width)
+        let available = containerSize.width - edge.panelPadding * 2
+        switch presentation.layout {
+        case .grid:
+            // 图标模式守住当前列的归属感：宽度只比标准格略宽，长名称向下换行，禁止再横跨数列。
+            let minimum = edge.cellWidth + edge.itemSpacing * 2
+            let cap = min(edge.cellWidth + edge.sectionSpacing * 2, available)
+            return min(max(anchorRect.width + edge.itemSpacing * 2, minimum), cap)
+        case .list:
+            // 列表行天然横向阅读，按内容增长更易扫读，但仍限制在紧凑的面板内浮层宽度。
+            let cap = min(edge.base * 32.5, available)
+            return min(natural + edge.itemSpacing * 2, cap)
+        }
     }
 
     private var origin: CGPoint {
         FullNamePeekPlacement.origin(anchor: anchorRect, bubble: bubbleSize, container: containerSize,
-                                     margin: edge.panelPadding, gap: edge.innerSpacing)
+                                     margin: edge.panelPadding, layout: presentation.layout)
     }
 
     var body: some View {
-        Text(name)
+        Text(presentation.name)
             .font(.system(size: 12))
-            .multilineTextAlignment(.leading)
+            .multilineTextAlignment(presentation.layout == .grid ? .center : .leading)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, edge.itemSpacing)
-            .padding(.vertical, edge.innerSpacing * 1.5)
-            .frame(maxWidth: maxWidth, alignment: .leading)
-            .glassEffect(.regular,
-                         in: RoundedRectangle(cornerRadius: edge.controlCornerRadius, style: .continuous))
-            .shadow(color: .black.opacity(0.18), radius: edge.innerSpacing, y: edge.innerSpacing / 2)
+            .padding(.vertical, edge.innerSpacing)
+            .frame(width: bubbleWidth,
+                   alignment: presentation.layout == .grid ? .center : .leading)
+            .background(.regularMaterial,
+                        in: RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
+                    .strokeBorder(presentation.origin == .selection
+                                  ? Color.accentColor.opacity(0.28)
+                                  : Color.primary.opacity(0.08), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(0.08), radius: edge.innerSpacing, y: edge.innerSpacing / 2)
             .background {
                 GeometryReader { geometry in
                     Color.clear

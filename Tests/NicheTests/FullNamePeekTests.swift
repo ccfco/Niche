@@ -37,7 +37,8 @@ final class FullNamePeekTests: XCTestCase {
         let scheduler = ManualScheduler()
         let peek = FullNamePeekCoordinator(scheduler: scheduler)
         let token = UUID()
-        peek.updateTarget(id: longID, token: token, name: "完整文件名.txt", isTruncated: true)
+        peek.updateTarget(id: longID, token: token, name: "完整文件名.txt",
+                          isTruncated: true, layout: .grid)
 
         peek.hoverChanged(id: longID, hovering: true)
         XCTAssertNil(peek.presentation)
@@ -50,7 +51,8 @@ final class FullNamePeekTests: XCTestCase {
     func testUntruncatedNameNeverPresents() {
         let scheduler = ManualScheduler()
         let peek = FullNamePeekCoordinator(scheduler: scheduler)
-        peek.updateTarget(id: longID, token: UUID(), name: "短名", isTruncated: false)
+        peek.updateTarget(id: longID, token: UUID(), name: "短名",
+                          isTruncated: false, layout: .grid)
 
         peek.hoverChanged(id: longID, hovering: true)
         peek.selectionChanged(to: longID)
@@ -62,8 +64,10 @@ final class FullNamePeekTests: XCTestCase {
     func testRapidSelectionOnlyPresentsFinalSettledItem() {
         let scheduler = ManualScheduler()
         let peek = FullNamePeekCoordinator(scheduler: scheduler)
-        peek.updateTarget(id: longID, token: UUID(), name: "第一个很长的文件名", isTruncated: true)
-        peek.updateTarget(id: otherID, token: UUID(), name: "最终停稳的很长文件名", isTruncated: true)
+        peek.updateTarget(id: longID, token: UUID(), name: "第一个很长的文件名",
+                          isTruncated: true, layout: .grid)
+        peek.updateTarget(id: otherID, token: UUID(), name: "最终停稳的很长文件名",
+                          isTruncated: true, layout: .grid)
 
         peek.selectionChanged(to: longID)
         peek.selectionChanged(to: otherID)
@@ -71,12 +75,32 @@ final class FullNamePeekTests: XCTestCase {
 
         XCTAssertEqual(peek.presentation?.id, otherID)
         XCTAssertEqual(peek.presentation?.origin, .selection)
+
+        // 选中代表明确关注，完整名称保持到选择或其他交互发生，不再定时消失。
+        scheduler.fireAll()
+        XCTAssertEqual(peek.presentation?.id, otherID)
+    }
+
+    func testChangingSelectionClearsPreviousPersistentNameImmediately() {
+        let scheduler = ManualScheduler()
+        let peek = FullNamePeekCoordinator(scheduler: scheduler)
+        peek.updateTarget(id: longID, token: UUID(), name: "第一个很长的文件名",
+                          isTruncated: true, layout: .grid)
+        peek.updateTarget(id: otherID, token: UUID(), name: "另一个很长的文件名",
+                          isTruncated: true, layout: .grid)
+        peek.selectionChanged(to: longID)
+        scheduler.fireNext()
+
+        peek.selectionChanged(to: otherID)
+
+        XCTAssertNil(peek.presentation)
     }
 
     func testDismissCancelsPendingPresentation() {
         let scheduler = ManualScheduler()
         let peek = FullNamePeekCoordinator(scheduler: scheduler)
-        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名", isTruncated: true)
+        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名",
+                          isTruncated: true, layout: .grid)
         peek.hoverChanged(id: longID, hovering: true)
 
         peek.dismiss()
@@ -88,14 +112,29 @@ final class FullNamePeekTests: XCTestCase {
     func testDismissClearsSelectionIntentAcrossTargetReregistration() {
         let scheduler = ManualScheduler()
         let peek = FullNamePeekCoordinator(scheduler: scheduler)
-        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名", isTruncated: true)
+        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名",
+                          isTruncated: true, layout: .grid)
         peek.selectionChanged(to: longID)
         peek.dismiss()
 
-        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名", isTruncated: true)
+        peek.updateTarget(id: longID, token: UUID(), name: "完整文件名",
+                          isTruncated: true, layout: .grid)
         scheduler.fireAll()
 
         XCTAssertNil(peek.presentation)
+    }
+
+    func testSelectionIntentWaitsForTargetRegistrationAfterViewSwitch() {
+        let scheduler = ManualScheduler()
+        let peek = FullNamePeekCoordinator(scheduler: scheduler)
+        peek.selectionChanged(to: longID)
+
+        peek.updateTarget(id: longID, token: UUID(), name: "新视图里的完整文件名",
+                          isTruncated: true, layout: .list)
+        scheduler.fireAll()
+
+        XCTAssertEqual(peek.presentation?.id, longID)
+        XCTAssertEqual(peek.presentation?.layout, .list)
     }
 
     func testTruncationUsesRenderedWidthInsteadOfCharacterCount() {
@@ -107,16 +146,38 @@ final class FullNamePeekTests: XCTestCase {
                                                      width: 70, layout: .grid))
     }
 
-    func testPlacementStaysInsidePanelAndFlipsAboveNearBottom() {
+    func testHoverTemporarilyOverridesAndThenRestoresSelection() {
+        let scheduler = ManualScheduler()
+        let peek = FullNamePeekCoordinator(scheduler: scheduler)
+        peek.updateTarget(id: longID, token: UUID(), name: "已选中的完整文件名",
+                          isTruncated: true, layout: .grid)
+        peek.updateTarget(id: otherID, token: UUID(), name: "鼠标停留的完整文件名",
+                          isTruncated: true, layout: .grid)
+        peek.selectionChanged(to: longID)
+        scheduler.fireNext()
+
+        peek.hoverChanged(id: otherID, hovering: true)
+        scheduler.fireNext()
+        XCTAssertEqual(peek.presentation?.id, otherID)
+        XCTAssertEqual(peek.presentation?.origin, .hover)
+
+        peek.hoverChanged(id: otherID, hovering: false)
+        scheduler.fireNext()
+        scheduler.fireNext()
+        XCTAssertEqual(peek.presentation?.id, longID)
+        XCTAssertEqual(peek.presentation?.origin, .selection)
+    }
+
+    func testPlacementOverlaysNameAndStaysInsidePanel() {
         let container = CGSize(width: 400, height: 260)
         let bubble = CGSize(width: 220, height: 70)
         let anchor = CGRect(x: 340, y: 220, width: 40, height: 20)
         let origin = FullNamePeekPlacement.origin(anchor: anchor, bubble: bubble,
-                                                  container: container, margin: 12, gap: 4)
+                                                  container: container, margin: 12, layout: .grid)
 
         XCTAssertGreaterThanOrEqual(origin.x, 12)
         XCTAssertLessThanOrEqual(origin.x + bubble.width, container.width - 12)
-        XCTAssertLessThan(origin.y, anchor.minY)
         XCTAssertGreaterThanOrEqual(origin.y, 12)
+        XCTAssertLessThanOrEqual(origin.y + bubble.height, container.height - 12)
     }
 }

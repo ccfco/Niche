@@ -157,6 +157,11 @@ struct FileListView: View {
             }
         }
         .contentShape(Rectangle())
+        // 展开态会把原 Text 视觉隐藏；显式保留名称列语义，避免原生 Table 行的 VoiceOver
+        // 只剩大小/种类/日期而丢失文件名。
+        .accessibilityLabel(item.name)
+        // 名称列整格命中；Table 其余列也各自上报同一 item，合起来覆盖完整原生行。
+        .onHover { fullNamePeek.hoverChanged(id: item.id, hovering: $0) }
         // 双击打开/下钻(Table 原生单击负责选中,叠加双击手势不冲突;activate 内会取消挂起的重命名)。
         // 慢速单击重命名不挂整行,只挂上面的 Text(Finder:点文件名文字才改名,点图标只选中)。
         .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
@@ -182,8 +187,10 @@ struct FileListView: View {
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .onHover { fullNamePeek.hoverChanged(id: item.id, hovering: $0) }
                 .simultaneousGesture(TapGesture(count: 2).onEnded { activate(item) })
                 .overlay(RightClickCatcher(makeMenu: { anchor in
+                    fullNamePeek.dismiss()
                     if !model.selectedIDs.contains(item.id) { model.selectSingle(item.id) }
                     return actions.onContextMenu(model.selectionURLs, anchor)
                 }))
