@@ -6,20 +6,12 @@ import CoreGraphics
 /// 固定列数继续压缩名称。PanelController 用它算窗口尺寸/行数，FileGridView 用它画真实列数，
 /// 两边必须始终调用同一公式，否则键盘跨行和面板高度会与画面脱节。
 enum PanelGridGeometry {
-    static let preferredColumns = 6
-
     static func minimumCellWidth(edge: EdgeMetrics) -> CGFloat {
         edge.base * 14   // 112pt；扣除两层 4pt 内边距后，文件名仍约有 96pt。
     }
 
     static func cellWidthFloor(iconSize: CGFloat, edge: EdgeMetrics) -> CGFloat {
         max(minimumCellWidth(edge: edge), iconSize + edge.base * 4)
-    }
-
-    static func preferredPanelWidth(edge: EdgeMetrics) -> CGFloat {
-        CGFloat(preferredColumns) * minimumCellWidth(edge: edge)
-            + CGFloat(preferredColumns - 1) * edge.itemSpacing
-            + edge.panelPadding * 2
     }
 
     /// 宽度直接采用用户点数偏好；窄屏保留双侧余量并让列数自然下降，绝不越过可视区。

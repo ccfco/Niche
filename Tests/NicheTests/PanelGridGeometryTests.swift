@@ -1,14 +1,18 @@
 import XCTest
 @testable import Niche
 
+@MainActor
 final class PanelGridGeometryTests: XCTestCase {
     private let edge = EdgeMetrics.standard
 
-    func testPreferredWidthFitsSixReadableCellsExactly() {
-        let width = PanelGridGeometry.preferredPanelWidth(edge: edge)
+    func testNewUserDefaultWidthKeepsReadableCellsWithoutEncodingAColumnTarget() {
+        let width = PanelModel.defaultPanelWidth
 
-        XCTAssertEqual(width, 736, accuracy: 0.001)
-        XCTAssertEqual(PanelGridGeometry.columnCount(panelWidth: width, iconSize: 52, edge: edge), 6)
+        XCTAssertEqual(width, 680, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(
+            (width - edge.panelPadding * 2 - edge.itemSpacing * 4) / 5,
+            PanelGridGeometry.minimumCellWidth(edge: edge)
+        )
     }
 
     func testLegacyWidthDropsColumnsInsteadOfCompressingNames() {
@@ -16,10 +20,10 @@ final class PanelGridGeometryTests: XCTestCase {
     }
 
     func testLargerIconsReduceColumnsWithoutChangingReadableFloor() {
-        let width = PanelGridGeometry.preferredPanelWidth(edge: edge)
+        let width = PanelModel.defaultPanelWidth
 
-        XCTAssertEqual(PanelGridGeometry.columnCount(panelWidth: width, iconSize: 96, edge: edge), 5)
-        XCTAssertEqual(PanelGridGeometry.columnCount(panelWidth: width, iconSize: 128, edge: edge), 4)
+        XCTAssertEqual(PanelGridGeometry.columnCount(panelWidth: width, iconSize: 96, edge: edge), 4)
+        XCTAssertEqual(PanelGridGeometry.columnCount(panelWidth: width, iconSize: 128, edge: edge), 3)
     }
 
     func testNarrowScreenClampsPanelAndKeepsItInsideVisibleWidth() {

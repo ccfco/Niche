@@ -19,7 +19,7 @@ struct FileCellView: View {
     /// 图标边长(pt),由 model.iconSize 注入(底栏滑块可调)。缩略图按 ×2 取像素(Retina)。
     var iconSize: CGFloat = 64
     /// 文件名最多显示行数(1–3)，同时驱动真实截断检测。
-    var filenameLineLimit: Int = 2
+    var filenameLineLimit: Int = 3
     let edge: EdgeMetrics
     var onRenameCommit: (String) -> Void = { _ in }
     var onRenameCancel: () -> Void = {}

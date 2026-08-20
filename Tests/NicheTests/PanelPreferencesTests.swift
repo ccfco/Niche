@@ -39,7 +39,7 @@ final class PanelPreferencesTests: XCTestCase {
 
         XCTAssertEqual(model.preferredPanelWidth, PanelModel.defaultPanelWidth, accuracy: 0.001)
         XCTAssertEqual(model.preferredPanelHeight, PanelModel.defaultPanelHeight, accuracy: 0.001)
-        XCTAssertEqual(model.filenameLineLimit, 2)
+        XCTAssertEqual(model.filenameLineLimit, 3)
         XCTAssertEqual(model.autoHideDelay, 0.35, accuracy: 0.001)
         XCTAssertEqual(model.iconSize, 52, accuracy: 0.001)
         XCTAssertTrue(model.showItemInfo)
@@ -47,15 +47,28 @@ final class PanelPreferencesTests: XCTestCase {
         XCTAssertEqual(model.viewMode, .icon)
     }
 
-    func testContinuousPanelSizePersistsWithoutEncodingColumnTargets() {
+    func testExistingPanelPreferencesSurviveModelRecreationAndNewDefaults() {
         let model = PanelModel()
         model.preferredPanelWidth = 843
         model.preferredPanelHeight = 537
+        model.filenameLineLimit = 1
+        model.autoHideDelay = 0.8
+        model.iconSize = 96
+        model.showItemInfo = false
+        model.showHidden = true
+        model.viewMode = .list
         model.persistPanelSize()
+        model.persistIconSize()
 
         let restored = PanelModel()
         XCTAssertEqual(restored.preferredPanelWidth, 843, accuracy: 0.001)
         XCTAssertEqual(restored.preferredPanelHeight, 537, accuracy: 0.001)
+        XCTAssertEqual(restored.filenameLineLimit, 1)
+        XCTAssertEqual(restored.autoHideDelay, 0.8, accuracy: 0.001)
+        XCTAssertEqual(restored.iconSize, 96, accuracy: 0.001)
+        XCTAssertFalse(restored.showItemInfo)
+        XCTAssertTrue(restored.showHidden)
+        XCTAssertEqual(restored.viewMode, .list)
     }
 
     func testRestorePanelDefaultsWritesAllManagedPreferences() {
@@ -73,7 +86,7 @@ final class PanelPreferencesTests: XCTestCase {
 
         XCTAssertEqual(model.preferredPanelWidth, PanelModel.defaultPanelWidth, accuracy: 0.001)
         XCTAssertEqual(model.preferredPanelHeight, PanelModel.defaultPanelHeight, accuracy: 0.001)
-        XCTAssertEqual(model.filenameLineLimit, 2)
+        XCTAssertEqual(model.filenameLineLimit, 3)
         XCTAssertEqual(model.autoHideDelay, 0.35, accuracy: 0.001)
         XCTAssertEqual(model.iconSize, 52, accuracy: 0.001)
         XCTAssertTrue(model.showItemInfo)

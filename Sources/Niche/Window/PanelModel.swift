@@ -39,7 +39,9 @@ final class PanelModel: ObservableObject {
     @Published var columns = 4
     /// 面板几何偏好直接保存点数，与网格列数/文件数量解耦。列数只由真实宽度与图标大小派生；
     /// 呈现到窄屏时由 PanelGridGeometry 做安全夹取，不回写用户偏好。
-    static let defaultPanelWidth = PanelGridGeometry.preferredPanelWidth(edge: .standard)
+    /// 新用户默认宽度是独立点数，不以目标列数编码。680pt 比原 736pt 更轻巧，默认图标下
+    /// 仍能保持文件名的可读宽度；已有保存值始终优先，不随版本默认值变化。
+    static let defaultPanelWidth: CGFloat = 680
     static let defaultPanelHeight: CGFloat = 450
 
     @Published var preferredPanelWidth: CGFloat = {
@@ -63,7 +65,7 @@ final class PanelModel: ObservableObject {
     /// 图标视图文件名行数。1–3 行是用户可理解的密度偏好；截断检测与真实 lineLimit 共用此值。
     @Published var filenameLineLimit: Int = {
         let saved = UserDefaults.standard.integer(forKey: "niche.filenameLineLimit")
-        return (1...3).contains(saved) ? saved : 2
+        return (1...3).contains(saved) ? saved : 3
     }() {
         didSet { UserDefaults.standard.set(filenameLineLimit, forKey: "niche.filenameLineLimit") }
     }
@@ -87,7 +89,7 @@ final class PanelModel: ObservableObject {
     func restorePanelDefaults() {
         preferredPanelWidth = Self.defaultPanelWidth
         preferredPanelHeight = Self.defaultPanelHeight
-        filenameLineLimit = 2
+        filenameLineLimit = 3
         autoHideDelay = 0.35
         iconSize = 52
         showItemInfo = true
