@@ -2,6 +2,7 @@ import XCTest
 import AppKit
 @testable import Niche
 
+@MainActor
 final class WindowModeTests: XCTestCase {
     func testToggleSwitchesBetweenModes() {
         XCTAssertEqual(WindowMode.transient.toggled, .pinned)
@@ -28,5 +29,20 @@ final class WindowModeTests: XCTestCase {
         let behavior = WindowMode.transient.collectionBehavior
         XCTAssertTrue(behavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(behavior.contains(.ignoresCycle))
+    }
+
+    func testDraggingFilePresentationIsFasterThanHoverPresentation() {
+        let hover = PanelController.presentationAnimation(source: .standard, reduceMotion: false)
+        let drag = PanelController.presentationAnimation(source: .draggingFile, reduceMotion: false)
+        XCTAssertTrue(hover.animatesFrame)
+        XCTAssertTrue(drag.animatesFrame)
+        XCTAssertLessThan(drag.duration, hover.duration)
+    }
+
+    func testReduceMotionPresentationAndDismissalNeverAnimateFrame() {
+        let present = PanelController.presentationAnimation(source: .standard, reduceMotion: true)
+        let dismiss = PanelController.dismissalAnimation(reduceMotion: true)
+        XCTAssertFalse(present.animatesFrame)
+        XCTAssertFalse(dismiss.animatesFrame)
     }
 }

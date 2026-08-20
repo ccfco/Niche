@@ -11,6 +11,7 @@ import SwiftUI
 /// 键盘仍由 `PanelController` 的 `keyDown` monitor 单一权威接管(面板键盘纪律);
 /// 本控件只接鼠标点选,不加 `.onKeyPress`/`.focusable` 抢键。
 struct NicheSegmentedGlass<Value: Hashable>: View {
+    @EnvironmentObject private var motion: MotionPreferences
     struct Segment: Identifiable {
         let value: Value
         let systemImage: String
@@ -24,7 +25,9 @@ struct NicheSegmentedGlass<Value: Hashable>: View {
 
     @State private var hovered: Value?
     private let edge = EdgeMetrics.standard
-    private let feedback = Animation.spring(response: 0.22, dampingFraction: 0.82)
+    private var feedback: Animation? {
+        motion.reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -47,7 +50,8 @@ struct NicheSegmentedGlass<Value: Hashable>: View {
         }
         .buttonStyle(SegmentStyle(isSelected: seg.value == selection,
                                   isHovered: hovered == seg.value,
-                                  edge: edge))
+                                  edge: edge,
+                                  reduceMotion: motion.reduceMotion))
         .onHover { hovering in
             withAnimation(feedback) {
                 if hovering { hovered = seg.value }
@@ -65,7 +69,10 @@ struct NicheSegmentedGlass<Value: Hashable>: View {
         let isSelected: Bool
         let isHovered: Bool
         let edge: EdgeMetrics
-        private let feedback = Animation.spring(response: 0.22, dampingFraction: 0.82)
+        let reduceMotion: Bool
+        private var feedback: Animation? {
+            reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82)
+        }
 
         func makeBody(configuration: Configuration) -> some View {
             let pressed = configuration.isPressed
@@ -79,7 +86,7 @@ struct NicheSegmentedGlass<Value: Hashable>: View {
                 .padding(.horizontal, edge.itemSpacing * 1.25)   // 同 compact 档:10
                 .padding(.vertical, edge.itemSpacing * 0.75)      // 同 compact 档:6
                 .glassHighlight(strength, edge: edge)
-                .scaleEffect(pressed ? 0.97 : 1)
+                .scaleEffect(pressed && !reduceMotion ? 0.97 : 1)
                 .contentShape(RoundedRectangle(cornerRadius: control - inset, style: .continuous))
                 .animation(feedback, value: pressed)
         }

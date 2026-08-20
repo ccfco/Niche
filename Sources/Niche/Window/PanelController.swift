@@ -11,6 +11,29 @@ import SwiftUI
 /// - 常驻:就地变 floating、可激活、可拖动(detach);不长出、不改尺寸。
 @MainActor
 final class PanelController {
+    /// 呼出来源只影响普通动态效果的节奏。拖着文件靠近时窗口要更快迎上,不能把来源标记
+    /// 在接线层丢掉后与 hover 共用一套 300ms 动画。
+    enum PresentationSource {
+        case standard
+        case draggingFile
+    }
+
+    /// 把无障碍与触发来源收口成可单测的动画合同,避免以后只改时长又把 Reduce Motion
+    /// 退化成“更快地做完整位移动画”。
+    struct AnimationPlan: Equatable {
+        let duration: TimeInterval
+        let animatesFrame: Bool
+    }
+
+    static func presentationAnimation(source: PresentationSource, reduceMotion: Bool) -> AnimationPlan {
+        if reduceMotion { return AnimationPlan(duration: 0.12, animatesFrame: false) }
+        return AnimationPlan(duration: source == .draggingFile ? 0.16 : 0.22, animatesFrame: true)
+    }
+
+    static func dismissalAnimation(reduceMotion: Bool) -> AnimationPlan {
+        AnimationPlan(duration: reduceMotion ? 0.1 : 0.16, animatesFrame: !reduceMotion)
+    }
+
     private(set) var panel: NichePanel?
     private let model: PanelModel
     private let motion: MotionPreferences
@@ -65,7 +88,10 @@ final class PanelController {
 
     var isVisible: Bool { panel?.isVisible ?? false }
     var mode: WindowMode { panel?.mode ?? .transient }
-    var isTransientShown: Bool { isVisible && mode == .transient }
+    /// “已呈现”不含收回动画中:菜单栏点按会先让面板 resignKey→进入 hide,菜单 action 随后才到;
+    /// 若把 isHiding 仍算 shown,「呼出 Niche」会误判无需动作,最终继续收掉。排除后 present 可用
+    /// showGeneration 正常中断旧 hide completion,把窗口叫回来。
+    var isTransientShown: Bool { isVisible && mode == .transient && !isHiding }
 
     /// 瞬态已展开且**不在收回动画中**时的(锚点, 所在屏 frame);其余情况 nil(收回中重触发是
     /// 「把面板叫回来」,不算已展开——presentTransient 的 showGeneration 抢占本就支持中断收回)。
@@ -150,7 +176,8 @@ final class PanelController {
 
     /// 呼出瞬态:面板从锚点(刘海/热角/边缘)处"长出来"(nonactivating 取键焦点做导航但不抢前台)
     /// + 起鼠标离开监听。锚点决定目标位置、生长细条方向与走廊(见 PanelAnchor)。
-    func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount: Int) {
+    func presentTransient(anchor: PanelAnchor, on screen: NSScreen, itemCount: Int,
+                          source: PresentationSource = .standard) {
         let panel = ensurePanel()
         showGeneration += 1
         isHiding = false
@@ -161,20 +188,24 @@ final class PanelController {
         lastAnchor = anchor
         presentedScreenFrame = screen.frame   // 触发去重要连屏幕身份一起比(见 activeTransient)
         anchorRect = anchor.corridorRect(target: target, screenFrame: screen.frame)
-        // 起始:贴锚一侧的细条 → 向内长到标准尺寸。
-        let start = anchor.collapsedFrame(target: target)
-        panel.setFrame(start, display: false)
+        // Reduce Motion 必须真正降级为淡入:直接落到目标 frame,禁止只是把完整几何伸缩加速。
+        // 普通模式才从贴锚细条长出;拖拽来源沿用空间连续性,但用更短节奏迎上。
+        let animation = Self.presentationAnimation(source: source, reduceMotion: motion.reduceMotion)
+        if !animation.animatesFrame {
+            panel.setFrame(target, display: false)
+        } else {
+            panel.setFrame(anchor.collapsedFrame(target: target), display: false)
+        }
         snapGlass(toContentHeight: target.height)   // 玻璃先到目标尺寸,窗口长大只是裁切露出(无 morph)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         panel.makeKey()
-        let dur = motion.reduceMotion ? 0.16 : 0.3
         isPresenting = true   // 生长动画期间抑制 relayout,避免与展开动画打架(#14)
         let gen = showGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = dur
-            ctx.timingFunction = CAMediaTimingFunction(name: motion.reduceMotion ? .easeOut : .easeInEaseOut)
-            panel.animator().setFrame(target, display: true)
+            ctx.duration = animation.duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            if animation.animatesFrame { panel.animator().setFrame(target, display: true) }
             panel.animator().alphaValue = 1
         }, completionHandler: { [weak self] in
             // 代次守卫(与 hide completion 对称):动画中被新一轮 present 抢占时,过期 completion
@@ -215,14 +246,14 @@ final class PanelController {
         guard let panel, panel.isVisible, !isHiding else { return }
         isHiding = true
         let gen = showGeneration
-        let dur = motion.reduceMotion ? 0.12 : 0.18
+        let animation = Self.dismissalAnimation(reduceMotion: motion.reduceMotion)
         // 瞬态:收回目标 = 贴锚一侧的细条(present start 的镜像);常驻或已脱离锚(unpin 过)不收
         // (飞回边缘口反而突兀),只淡出。
-        let collapse: NSRect? = (panel.mode == .transient)
+        let collapse: NSRect? = (animation.animatesFrame && panel.mode == .transient)
             ? lastAnchor?.collapsedFrame(target: panel.frame)
             : nil
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = dur
+            ctx.duration = animation.duration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)   // 加速收进刘海
             if let collapse { panel.animator().setFrame(collapse, display: true) }
             panel.animator().alphaValue = 0

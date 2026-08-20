@@ -25,8 +25,10 @@ final class HotZoneController {
     private let window = HotZoneWindow()
     private let hoverIntent: HoverIntent
 
-    /// 确认呼出。kind 是触发来源;`draggingFile=true` 表示拖拽迎上(只可能来自 .primary)。
-    var onTrigger: ((_ kind: Zone.Kind, _ draggingFile: Bool) -> Void)?
+    /// 确认呼出。screen 是**本次热区实际命中的屏幕**,呈现层必须沿用它,不能在 dwell 到点后
+    /// 再读鼠标位置猜一次屏幕:多显示器共享边界 / 全屏 Space 切换时两次解析可能选到不同屏。
+    /// `draggingFile=true` 表示拖拽迎上(只可能来自 .primary)。
+    var onTrigger: ((_ kind: Zone.Kind, _ draggingFile: Bool, _ screen: NSScreen) -> Void)?
 
     /// 给定屏 → 该屏所有生效热区(全局坐标,原点左下)。宿主注入(ScreenObserver + NotchGeometry +
     /// 热角/边缘)。约定第一个是 .primary(承载拖拽落点识别的 HotZoneWindow);命中按数组顺序取
@@ -73,20 +75,25 @@ final class HotZoneController {
     private var activeKind: Zone.Kind?
     /// 已解析热区的那块屏的 frame;鼠标离开它才重新搜屏(快路径,避免每次移动都遍历屏幕列表)。
     private var trackedScreenFrame: CGRect = .zero
+    /// 与 trackedScreenFrame 同代的真实 NSScreen。触发回调把它作为本次呈现的屏幕 authority。
+    private weak var trackedScreen: NSScreen?
     private var insideHotZone = false
 
     init(hoverDelay: TimeInterval = 0.18) {
         hoverIntent = HoverIntent(delay: hoverDelay)
         hoverIntent.onConfirmed = { [weak self] in
-            guard let self else { return }
+            guard let self, let screen = self.trackedScreen else { return }
             Log.trigger.info("dwell 到点,发出呼出信号 kind=\(String(describing: self.activeKind), privacy: .public)")
-            self.onTrigger?(self.activeKind ?? .primary, false)
+            self.onTrigger?(self.activeKind ?? .primary, false, screen)
         }
         // 拖拽迎上:窗口的 NSDraggingDestination 立即触发(不等防抖)。窗口只在主热区,身份必为 .primary。
         window.onDragEntered = { [weak self] in
             guard let self, self.isEnabled else { return }
             self.hoverIntent.exit()
-            self.onTrigger?(.primary, true)
+            // 拖拽期间普通 mouseMoved 不可靠,优先取真正接到 draggingEntered 的热区窗口所在屏;
+            // trackedScreen 仅作窗口尚未归属屏幕时的同代兜底。
+            guard let screen = self.window.screen ?? self.trackedScreen else { return }
+            self.onTrigger?(.primary, true, screen)
         }
         startMouseMonitor()
     }
@@ -95,6 +102,7 @@ final class HotZoneController {
     /// 平时跟随由鼠标移动驱动;此方法覆盖"屏变了但鼠标没动"的情形。
     func refreshPlacement() {
         trackedScreenFrame = .zero   // 作废缓存,下面立即重解析
+        trackedScreen = nil
         evaluateMouse()
     }
 
@@ -171,6 +179,7 @@ final class HotZoneController {
         if Self.screenContainsMouse(frame: trackedScreenFrame, mouse: mouse) { return }
         guard let screen = NSScreen.screens.first(where: { Self.screenContainsMouse(frame: $0.frame, mouse: mouse) }) ?? NSScreen.main else { return }
         trackedScreenFrame = screen.frame
+        trackedScreen = screen
         // 换屏即作废旧屏的进出态:显式 exit 取消可能在跑的 hover intent timer,
         // 避免旧屏 enter 未配对 exit 导致防抖卡住(跨屏不保证落点仍在热区会触发 exit)。
         insideHotZone = false

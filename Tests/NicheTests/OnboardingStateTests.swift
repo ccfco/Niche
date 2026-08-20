@@ -3,9 +3,23 @@ import XCTest
 
 @MainActor
 final class OnboardingStateTests: XCTestCase {
+    private var originalHasSeen: Any?
+
     override func setUp() {
         super.setUp()
+        // 宿主测试与生产 app 共用 com.ccfco.Niche 的 UserDefaults.standard。测试 false/true 合同前
+        // 必须快照,tearDown 原样恢复;否则每次全量测试都会把老用户重置成首次使用、部署后重新弹引导。
+        originalHasSeen = UserDefaults.standard.object(forKey: "niche.onboarding.hasSeen")
         UserDefaults.standard.removeObject(forKey: "niche.onboarding.hasSeen")
+    }
+
+    override func tearDown() {
+        if let originalHasSeen {
+            UserDefaults.standard.set(originalHasSeen, forKey: "niche.onboarding.hasSeen")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "niche.onboarding.hasSeen")
+        }
+        super.tearDown()
     }
 
     func testDefaultsToFalse() {

@@ -10,6 +10,7 @@ import AppKit
 /// 这是 SwiftUI `DragGesture` 解决不了的:左键事件穿透到 NSHostingView,窗口在 SwiftUI 手势之前
 /// 就发起了移动。沿用 `DragSourceView` 同款"认领左键"模式根治。hover/右键 hitTest 返回 nil 透传。
 struct FolderTabsView: View {
+    @EnvironmentObject private var motion: MotionPreferences
     @ObservedObject var model: PanelModel
     let edge: EdgeMetrics
     /// 「+」:弹添加菜单(选择文件夹 / 前往路径,由宿主以 NSMenu+抑制呈现,锚定按钮)。
@@ -50,6 +51,7 @@ struct FolderTabsView: View {
 
     private let coordSpace = "nicheTabBar"
     private let reorderAnim = Animation.spring(response: 0.28, dampingFraction: 0.82)
+    private var effectiveReorderAnim: Animation? { motion.reduceMotion ? nil : reorderAnim }
 
     /// 正式 tab(非临时)的 id 顺序 —— 与 `BindingStore.bindings` 索引对齐(临时 tab 追加在后)。
     private var normalOrder: [FolderBinding.ID] {
@@ -79,12 +81,12 @@ struct FolderTabsView: View {
                 insertionIndex: { point in computeInsertIndex(at: point) },
                 setActive: { active in
                     dropGate.active = active
-                    if !active { withAnimation(reorderAnim) { dropInsertIndex = nil } }
+                    if !active { withAnimation(effectiveReorderAnim) { dropInsertIndex = nil } }
                 },
                 updateIndex: { point in
                     guard dropGate.active else { return }   // 闸关(drop 后的残余 dropUpdated)一律忽略
                     let idx = computeInsertIndex(at: point)
-                    if idx != dropInsertIndex { withAnimation(reorderAnim) { dropInsertIndex = idx } }
+                    if idx != dropInsertIndex { withAnimation(effectiveReorderAnim) { dropInsertIndex = idx } }
                 }
             ))
         }
@@ -123,7 +125,7 @@ struct FolderTabsView: View {
                     if draggingID == nil { draggingID = id }
                     dragOffset = dx
                     let t = computeTarget()
-                    if t != dragTarget { withAnimation(reorderAnim) { dragTarget = t } }
+                    if t != dragTarget { withAnimation(effectiveReorderAnim) { dragTarget = t } }
                 },
                 onDragEnded: { commitReorder() }
             )
@@ -132,7 +134,7 @@ struct FolderTabsView: View {
         // AutoHideCoordinator,菜单开着鼠标移出走廊面板会被收走(与文件右键同一根因)。
         .overlay(RightClickCatcher { _ in onTabMenu(id) })
         // 抬起跟手 + 让位:offset/scale 放在 overlay 之外,使接管层与可见 tab 一起移动。
-        .scaleEffect(isDragging ? 1.04 : 1)
+        .scaleEffect(isDragging && !motion.reduceMotion ? 1.04 : 1)
         .shadow(color: .black.opacity(isDragging ? 0.18 : 0), radius: isDragging ? 6 : 0, y: isDragging ? 2 : 0)
         .offset(x: reorderOffset(id: id) + dropShift(id: id))
         .zIndex(isDragging ? 1 : 0)
@@ -197,7 +199,7 @@ struct FolderTabsView: View {
     private func commitReorder() {
         let from = draggingID.flatMap { normalOrder.firstIndex(of: $0) }
         let target = dragTarget
-        withAnimation(reorderAnim) {
+        withAnimation(effectiveReorderAnim) {
             draggingID = nil
             dragOffset = 0
             dragTarget = nil

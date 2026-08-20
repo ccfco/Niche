@@ -7,15 +7,15 @@ import Combine
 final class MenuBarController {
     private let environment: AppEnvironment
     private let statusItem: NSStatusItem
-    private let onToggle: () -> Void
+    private let onShow: () -> Void
     private let onOpenSettings: () -> Void
     private let onShowOnboarding: () -> Void
     private var updateCancellable: AnyCancellable?
 
-    init(environment: AppEnvironment, onToggle: @escaping () -> Void,
+    init(environment: AppEnvironment, onShow: @escaping () -> Void,
          onOpenSettings: @escaping () -> Void, onShowOnboarding: @escaping () -> Void) {
         self.environment = environment
-        self.onToggle = onToggle
+        self.onShow = onShow
         self.onOpenSettings = onOpenSettings
         self.onShowOnboarding = onShowOnboarding
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -72,7 +72,7 @@ final class MenuBarController {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: String(localized: "呼出 Niche"), action: #selector(togglePanel), keyEquivalent: "")
+        menu.addItem(withTitle: String(localized: "呼出 Niche"), action: #selector(showPanel), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
 
@@ -98,8 +98,8 @@ final class MenuBarController {
         return menu
     }
 
-    @objc private func togglePanel() {
-        onToggle()
+    @objc private func showPanel() {
+        onShow()
     }
 
     /// 打开自管设置窗口。不能再走 `showSettingsWindow:` 私有选择子 —— macOS 14+ 系统已封禁

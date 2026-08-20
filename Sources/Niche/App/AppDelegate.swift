@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UpdateChecker.shared.start()
         menuBarController = MenuBarController(
             environment: environment,
-            onToggle: { [weak controller] in controller?.toggle() },
+            onShow: { [weak controller] in controller?.show() },
             onOpenSettings: { [weak controller] in controller?.openSettings() },
             onShowOnboarding: { [weak controller] in
                 guard let controller else { return }

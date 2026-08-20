@@ -110,11 +110,15 @@ final class NicheController {
 
     /// 打开设置窗口(菜单栏「设置…」、主菜单 ⌘, 与面板内 ⌘, 共用入口)。
     func openSettings() {
+        // 设置是另一个操作上下文。若保留 Quick Look,app 级 key monitor 会在设置窗口里继续吞
+        // Space/Esc/方向键去操纵背后的预览,用户看起来像设置控件失灵。
+        quickLook.close()
         settingsWindow.show()
     }
 
     /// 打开设置窗口并跳转「触发」分区(Onboarding「去设置」用)。
     func openTriggerSettings() {
+        quickLook.close()
         settingsWindow.show(section: .trigger)
     }
 
@@ -188,8 +192,8 @@ final class NicheController {
     private func wire() {
         // 异步文件操作(recycle 完成回调)失败 → 可见提示(throws 上抛不到的路径)。
         ops.onError = { [weak self] title, error in self?.presentFailure(title: title, error: error) }
-        hotZone.onTrigger = { [weak self] kind, _ in
-            self?.present(from: kind)
+        hotZone.onTrigger = { [weak self] kind, draggingFile, screen in
+            self?.present(from: kind, on: screen, draggingFile: draggingFile)
         }
         // 热区跟随鼠标换屏:给定屏 → 主热区(刘海/回退,宽度随设置滑杆,受 hotZoneEnabled 独立控制)
         // + 热角 + 边缘。顺序即命中优先级:角落与边缘重叠处热角赢。
@@ -362,14 +366,32 @@ final class NicheController {
         }
     }
 
-    /// kind = 触发来源:决定面板从哪长出(刘海/热角/边缘;快捷键与菜单栏走默认 .primary = 顶部)。
-    private func present(from kind: HotZoneController.Zone.Kind = .primary) {
-        // 已 Pin:常驻浮窗才是当前 UI,热区/兜底呼出不应把状态机拽回瞬态(防御 hotZone 直连路径)。
-        guard model.windowMode != .pinned else {
-            Log.trigger.info("呼出信号被吞:当前为 Pin 常驻模式")
+    /// 菜单栏等“打开”入口只保证可见,不做 toggle。用户点「呼出 Niche」时若窗口本来可见,
+    /// 结果反而被隐藏属于文案与动作相反;显隐切换只留给全局快捷键。
+    func show() {
+        if model.windowMode == .pinned {
+            guard !panelController.isVisible else { return }
+            panelController.revealPinned()
+            panelPresented.send()
             return
         }
-        guard let screen = screens.activeScreen else {
+        guard !panelController.isTransientShown else { return }
+        present()
+    }
+
+    /// kind = 触发来源;screen 非 nil 时是热区实际命中的屏幕 authority,禁止二次猜屏。
+    /// 快捷键/菜单栏无热区上下文,才由 ScreenObserver 按调用时鼠标位置解析。
+    private func present(from kind: HotZoneController.Zone.Kind = .primary,
+                         on triggerScreen: NSScreen? = nil,
+                         draggingFile: Bool = false) {
+        // Pin 可见时不移动;Pin 隐藏时任何呼出入口都应把常驻窗叫回来,且不能跌回瞬态模式。
+        if model.windowMode == .pinned {
+            guard !panelController.isVisible else { return }
+            panelController.revealPinned()
+            panelPresented.send()
+            return
+        }
+        guard let screen = triggerScreen ?? screens.activeScreen else {
             Log.trigger.error("呼出信号被吞:activeScreen 为 nil")
             return
         }
@@ -395,7 +417,10 @@ final class NicheController {
         Log.trigger.info("present 通过守卫,呼出面板 kind=\(String(describing: kind), privacy: .public)")
         model.windowMode = .transient
         model.armCurrent()   // 打开面板 = 用户动作,可触发当前 tab 的 TCC 探针
-        panelController.presentTransient(anchor: anchor, on: screen, itemCount: model.sortedItems.count)
+        panelController.presentTransient(
+            anchor: anchor, on: screen, itemCount: model.sortedItems.count,
+            source: draggingFile ? .draggingFile : .standard
+        )
         panelPresented.send()
         observeTransientFocus()
     }

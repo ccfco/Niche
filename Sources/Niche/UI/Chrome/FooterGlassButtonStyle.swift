@@ -21,12 +21,15 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
     }
 
     private struct HoverBody: View {
+        @EnvironmentObject private var motion: MotionPreferences
         let configuration: Configuration
         let isActive: Bool
         let compact: Bool
         @State private var isHovered = false
         private let edge = EdgeMetrics.standard
-        private let feedback = Animation.spring(response: 0.22, dampingFraction: 0.82)
+        private var feedback: Animation? {
+            motion.reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82)
+        }
 
         var body: some View {
             let pressed = configuration.isPressed
@@ -44,7 +47,7 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
                 .glassEffect(.regular.interactive(),
                              in: RoundedRectangle(cornerRadius: control, style: .continuous))
                 .glassHighlight(highlight, edge: edge)   // rim-inset 高亮,与分段控件共用同一权威
-                .scaleEffect(pressed ? 0.97 : 1)
+                .scaleEffect(pressed && !motion.reduceMotion ? 0.97 : 1)
                 .contentShape(RoundedRectangle(cornerRadius: control, style: .continuous))
                 .onHover { hovering in
                     withAnimation(feedback) { isHovered = hovering }
