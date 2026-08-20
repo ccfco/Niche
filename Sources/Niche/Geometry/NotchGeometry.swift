@@ -67,10 +67,21 @@ enum NotchGeometry {
         return .fallbackTopCenter(rect)
     }
 
-    /// 由刘海/回退矩形派生"触发热区"矩形:横向略放宽、纵向覆盖到菜单栏底,便于 hover/拖拽命中。
-    /// 热区不能太大以免误触,也不能只贴刘海以致难命中 —— 这里横向各扩 `horizontalPadding`。
-    static func hotZoneRect(from resolution: Resolution, horizontalPadding: CGFloat = 12) -> CGRect {
-        let base = resolution.rect
-        return base.insetBy(dx: -horizontalPadding, dy: 0)
+    /// 空手 hover 的精确命中区。真实刘海只认物理矩形,不向菜单栏两侧扩张；无刘海屏没有
+    /// 可见目标,只保留顶部中央窄边,避免经过菜单栏中央就误触。
+    static func hoverZoneRect(from resolution: Resolution, fallbackEdgeHeight: CGFloat = 6) -> CGRect {
+        switch resolution {
+        case let .notch(rect):
+            return rect
+        case let .fallbackTopCenter(rect):
+            let height = min(max(fallbackEdgeHeight, 1), rect.height)
+            return CGRect(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height)
+        }
+    }
+
+    /// 拖着文件靠近是明确意图,命中区应比空手 hover 宽松：保留整个刘海/回退菜单栏高度，
+    /// 并横向各扩 `horizontalPadding`。HotZoneWindow 只使用此矩形承载 NSDraggingDestination。
+    static func dragZoneRect(from resolution: Resolution, horizontalPadding: CGFloat = 12) -> CGRect {
+        resolution.rect.insetBy(dx: -horizontalPadding, dy: 0)
     }
 }

@@ -55,4 +55,21 @@ final class OnboardingStateTests: XCTestCase {
         prefs.hotZoneEnabled = false
         XCTAssertTrue(prefs.onboardingTriggerDescription.contains("快捷键"))
     }
+
+    func testHoverDelayDefaultsToPointThreeAndPreservesSavedChoice() {
+        let original = UserDefaults.standard.object(forKey: "niche.hoverDelay")
+        defer {
+            if let original {
+                UserDefaults.standard.set(original, forKey: "niche.hoverDelay")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "niche.hoverDelay")
+            }
+        }
+
+        UserDefaults.standard.removeObject(forKey: "niche.hoverDelay")
+        XCTAssertEqual(TriggerPreferences().hoverDelay, 0.3, accuracy: 0.001)
+
+        UserDefaults.standard.set(0.18, forKey: "niche.hoverDelay")
+        XCTAssertEqual(TriggerPreferences().hoverDelay, 0.18, accuracy: 0.001)
+    }
 }

@@ -81,14 +81,32 @@ final class NotchGeometryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(res.rect.height, 1)
     }
 
-    func testHotZoneWidensHorizontallyOnly() {
+    func testNotchHoverZoneUsesPhysicalRectWhileDragZoneStaysGenerous() {
         let res = NotchGeometry.resolve(
             screenFrame: screen, safeAreaTop: 37,
             auxiliaryLeftWidth: 580, auxiliaryRightWidth: 580, menubarHeight: 37
         )
-        let hot = NotchGeometry.hotZoneRect(from: res, horizontalPadding: 12)
-        XCTAssertEqual(hot.width, res.rect.width + 24, accuracy: 0.001)
-        XCTAssertEqual(hot.height, res.rect.height, accuracy: 0.001)
-        XCTAssertEqual(hot.midX, res.rect.midX, accuracy: 0.001)
+        let hover = NotchGeometry.hoverZoneRect(from: res)
+        let drag = NotchGeometry.dragZoneRect(from: res, horizontalPadding: 12)
+
+        XCTAssertEqual(hover, res.rect)
+        XCTAssertEqual(drag.width, res.rect.width + 24, accuracy: 0.001)
+        XCTAssertEqual(drag.height, res.rect.height, accuracy: 0.001)
+        XCTAssertEqual(drag.midX, res.rect.midX, accuracy: 0.001)
+    }
+
+    func testFallbackHoverUsesOnlyTopEdgeWhileDragKeepsMenuBarHeight() {
+        let res = NotchGeometry.resolve(
+            screenFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, menubarHeight: 24
+        )
+        let hover = NotchGeometry.hoverZoneRect(from: res, fallbackEdgeHeight: 6)
+        let drag = NotchGeometry.dragZoneRect(from: res)
+
+        XCTAssertEqual(hover.height, 6, accuracy: 0.001)
+        XCTAssertEqual(hover.maxY, res.rect.maxY, accuracy: 0.001)
+        XCTAssertEqual(hover.width, res.rect.width, accuracy: 0.001)
+        XCTAssertEqual(drag.height, 24, accuracy: 0.001)
+        XCTAssertEqual(drag.width, res.rect.width + 24, accuracy: 0.001)
     }
 }

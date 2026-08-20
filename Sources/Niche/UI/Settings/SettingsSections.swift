@@ -70,7 +70,7 @@ struct TriggerSettings: View {
     var body: some View {
         Section {
             Toggle("刘海热区触发", isOn: $triggerPrefs.hotZoneEnabled)
-            Picker("触发灵敏度", selection: $triggerPrefs.hoverDelay) {
+            Picker("悬停确认", selection: $triggerPrefs.hoverDelay) {
                 ForEach(TriggerPreferences.hoverDelayPresets, id: \.value) { preset in
                     Text(preset.label).tag(preset.value)
                 }
@@ -84,7 +84,7 @@ struct TriggerSettings: View {
                 HotkeyRecorderView(hotkey: $triggerPrefs.hotkey)
             }
         } footer: {
-            Text("关闭热区后仍可用菜单栏图标或快捷键呼出。").settingsCaption()
+            Text("空手悬停使用精确热区和确认延迟；拖着文件靠近仍会立即迎上。关闭热区后仍可用菜单栏图标或快捷键呼出。").settingsCaption()
         }
 
         Section {

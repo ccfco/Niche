@@ -33,6 +33,16 @@ final class HotZoneHitTests: XCTestCase {
         XCTAssertNil(HotZoneController.hitZone(in: [corner, side, primary], mouse: CGPoint(x: 500, y: 500)))
     }
 
+    func testPrimaryCanExposeDifferentHoverAndDragRects() {
+        let hover = CGRect(x: 700, y: 970, width: 200, height: 30)
+        let drag = CGRect(x: 688, y: 963, width: 224, height: 37)
+        let zone = Zone(kind: .primary, rect: hover, dragRect: drag)
+
+        XCTAssertEqual(zone.rect, hover)
+        XCTAssertEqual(zone.dragRect, drag)
+        XCTAssertNil(HotZoneController.hitZone(in: [zone], mouse: CGPoint(x: 690, y: 980)))
+    }
+
     // MARK: - 已跟踪屏包含判定(跨屏快路径)
 
     /// 贴屏幕顶(y == frame.maxY)必须算"仍在已跟踪屏"——CGRect.contains 排除 max 边,

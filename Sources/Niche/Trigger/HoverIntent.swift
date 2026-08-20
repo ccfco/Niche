@@ -22,7 +22,7 @@ final class HoverIntent {
     /// 展开回调。
     var onConfirmed: (() -> Void)?
 
-    init(delay: TimeInterval = 0.18, scheduler: Scheduler = DispatchScheduler()) {
+    init(delay: TimeInterval = 0.3, scheduler: Scheduler = DispatchScheduler()) {
         self.delay = delay
         self.scheduler = scheduler
     }

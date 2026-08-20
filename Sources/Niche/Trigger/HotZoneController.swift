@@ -19,7 +19,10 @@ final class HotZoneController {
             case side(ScreenSide)        // 边缘
         }
         let kind: Kind
+        /// 空手鼠标移动的命中区。
         let rect: CGRect
+        /// 拖拽命中区；仅 `.primary` 提供。nil 时回退 rect，便于热角/边缘与测试构造。
+        var dragRect: CGRect? = nil
     }
 
     private let window = HotZoneWindow()
@@ -51,22 +54,6 @@ final class HotZoneController {
         hoverIntent.delay = delay
     }
 
-    /// 面板收起后由宿主调:复位热区进出状态,消除「一次性 dwell」死区。
-    ///
-    /// dwell 只在鼠标**进入**热区的瞬间起计时;面板在「鼠标仍停在热区里」时被关掉(hover 呼出后
-    /// 按 Esc / 快捷键 toggle / 点顶部菜单栏失焦收回),insideHotZone 仍为 true,区内再怎么移动
-    /// 都不会有第二发——热区成死区,必须把鼠标拉出再回来。修 maxY 边界前这个缺口被「贴顶每事件
-    /// 强制重置」的 bug 歪打正着掩盖(晃一下就重新武装),修掉后首次暴露(实报「更难呼出了」)。
-    /// 复位后**不立即 enter**:下一次区内 mouseMoved 走正常 false→true 转移重新起 dwell——
-    /// 「关掉后原地一晃即可再呼出」,鼠标不动则不会自动重开(尊重用户刚做的关闭动作)。
-    func rearmAfterDismiss() {
-        guard insideHotZone else { return }
-        Log.trigger.info("面板收起时鼠标仍在热区内,复位进出状态等待下一次移动重新武装")
-        insideHotZone = false
-        activeKind = nil
-        hoverIntent.exit()
-    }
-
     private var globalMonitor: Any?
     private var localMonitor: Any?
     /// 当前屏所有生效热区(主热区 + 热角 + 边缘)。鼠标进入任一个即起 hover intent。
@@ -79,7 +66,7 @@ final class HotZoneController {
     private weak var trackedScreen: NSScreen?
     private var insideHotZone = false
 
-    init(hoverDelay: TimeInterval = 0.18) {
+    init(hoverDelay: TimeInterval = 0.3) {
         hoverIntent = HoverIntent(delay: hoverDelay)
         hoverIntent.onConfirmed = { [weak self] in
             guard let self, let screen = self.trackedScreen else { return }
@@ -189,7 +176,7 @@ final class HotZoneController {
         // HotZoneWindow 只承载主热区(刘海/回退)的拖拽落点识别;热角/边缘纯 hover 触发,不需要窗口。
         // 主热区被单独关掉(hotZoneEnabled=false,但热角/边缘仍开)时收起窗口,拖拽路径一并停。
         if let primary = zones.first(where: { $0.kind == .primary }) {
-            window.place(at: primary.rect)
+            window.place(at: primary.dragRect ?? primary.rect)
         } else {
             window.orderOut(nil)
         }

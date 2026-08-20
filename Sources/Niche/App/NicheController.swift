@@ -205,7 +205,11 @@ final class NicheController {
             var zones: [HotZoneController.Zone] = []
             if self.triggerPrefs.hotZoneEnabled {
                 let resolution = self.screens.resolution(for: screen, widthScale: self.triggerPrefs.hotZoneWidthScale)
-                zones.append(.init(kind: .primary, rect: NotchGeometry.hotZoneRect(from: resolution)))
+                zones.append(.init(
+                    kind: .primary,
+                    rect: NotchGeometry.hoverZoneRect(from: resolution),
+                    dragRect: NotchGeometry.dragZoneRect(from: resolution)
+                ))
             }
             // 按 allCases 固定顺序遍历(Set 无序):相邻两边共享的 4pt 角落重叠带命中结果
             // 必须确定,不能随 Set 哈希漂移(Codex review)。
@@ -437,10 +441,8 @@ final class NicheController {
                                            // 防 .iconSizeSlider 跨次泄漏(end 对未配对调用幂等);松手再 end 也短路
         panelController.hide()
         teardownTransientFocusObserver()
-        // 收面板时鼠标可能仍停在热区里(Esc/快捷键关面板、顶部点击失焦收回都如此):复位热区
-        // 进出状态,下一次区内移动即重新起 dwell。不复位则 dwell 一次性语义让热区成死区,
-        // 必须把鼠标拉出再回来才能呼出(修 maxY 边界后该缺口首次暴露,实报「更难呼出了」)。
-        hotZone.rearmAfterDismiss()
+        // 同一次 hover 只消费一次：若鼠标仍停在刘海里，关闭后不因轻微抖动再次呼出；
+        // 离开再进入会自然走 HotZoneController 的 false→true 转移重新武装。
     }
 
     private func observeTransientFocus() {

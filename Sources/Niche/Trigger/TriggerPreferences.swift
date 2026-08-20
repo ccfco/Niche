@@ -10,7 +10,8 @@ final class TriggerPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(hotZoneEnabled, forKey: "niche.hotZoneEnabled") }
     }
 
-    /// hover 意图延迟(秒):鼠标停留多久算"想呼出"。越小越灵敏、也越容易误触。
+    /// hover 意图延迟(秒):鼠标停留多久算"想呼出"。默认 0.3s 对齐成熟刘海工具的稳态手感；
+    /// 已保存的旧灵敏值原样保留，不在升级时静默改写用户选择。
     @Published var hoverDelay: Double {
         didSet { UserDefaults.standard.set(hoverDelay, forKey: "niche.hoverDelay") }
     }
@@ -45,15 +46,17 @@ final class TriggerPreferences: ObservableObject {
 
     /// 触发延迟的预设档(设置页 Picker;自由滑杆对 0.18 这种手感值反而难选准)。
     static let hoverDelayPresets: [(label: String, value: Double)] = [
-        (String(localized: "灵敏(0.1s)"), 0.1),
-        (String(localized: "标准(0.18s)"), 0.18),
+        (String(localized: "极灵敏(0.1s)"), 0.1),
+        (String(localized: "灵敏(0.18s)"), 0.18),
+        (String(localized: "标准(0.3s)"), 0.3),
         (String(localized: "稳重(0.4s)"), 0.4),
+        (String(localized: "最稳(0.5s)"), 0.5),
     ]
 
     init() {
         let defaults = UserDefaults.standard
         hotZoneEnabled = defaults.object(forKey: "niche.hotZoneEnabled") as? Bool ?? true
-        hoverDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.18
+        hoverDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.3
         hotZoneWidthScale = defaults.object(forKey: "niche.hotZoneWidthScale") as? Double ?? 1.0
         let rawCorners = defaults.stringArray(forKey: "niche.enabledHotCorners") ?? []
         enabledHotCorners = Set(rawCorners.compactMap(ScreenCorner.init(rawValue:)))
