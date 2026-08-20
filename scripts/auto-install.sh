@@ -9,12 +9,12 @@ APP="/Applications/Niche.app"
 LOG="$ROOT/build/auto-install.log"
 mkdir -p "$ROOT/build"
 
-# 是否需要重装:bundle 不存在 → 必装;存在 → 仅当 Sources/**/*.swift 或 project.yml
-# 有任一文件比已装 app 新(find -newer 比对 bundle 目录 mtime)。deploy 后 cp 会刷新
-# bundle mtime,故下次源码无改动即跳过。
+# 是否需要重装:bundle 不存在 → 必装;存在 → 仅当 Sources/**/*.swift、project.yml 或
+# deploy.sh 有任一文件比已装 app 新(find -newer 比对 bundle 目录 mtime)。deploy 后 cp 会
+# 刷新 bundle mtime,故下次源码与部署语义均无改动即跳过。
 need_install() {
   [ -d "$APP" ] || return 0
-  [ -n "$(find "$ROOT/Sources" "$ROOT/project.yml" -type f -newer "$APP" 2>/dev/null | head -1)" ]
+  [ -n "$(find "$ROOT/Sources" "$ROOT/project.yml" "$ROOT/scripts/deploy.sh" -type f -newer "$APP" 2>/dev/null | head -1)" ]
 }
 
 if need_install; then
