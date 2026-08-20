@@ -170,14 +170,24 @@ final class FullNamePeekTests: XCTestCase {
 
     func testPlacementOverlaysNameAndStaysInsidePanel() {
         let container = CGSize(width: 400, height: 260)
-        let bubble = CGSize(width: 220, height: 70)
+        let expandedSize = CGSize(width: 220, height: 70)
         let anchor = CGRect(x: 340, y: 220, width: 40, height: 20)
-        let origin = FullNamePeekPlacement.origin(anchor: anchor, bubble: bubble,
+        let origin = FullNamePeekPlacement.origin(anchor: anchor, expandedSize: expandedSize,
                                                   container: container, margin: 12, layout: .grid)
 
         XCTAssertGreaterThanOrEqual(origin.x, 12)
-        XCTAssertLessThanOrEqual(origin.x + bubble.width, container.width - 12)
+        XCTAssertLessThanOrEqual(origin.x + expandedSize.width, container.width - 12)
         XCTAssertGreaterThanOrEqual(origin.y, 12)
-        XCTAssertLessThanOrEqual(origin.y + bubble.height, container.height - 12)
+        XCTAssertLessThanOrEqual(origin.y + expandedSize.height, container.height - 12)
+    }
+
+    func testGridPlacementExpandsUpwardAndKeepsMetadataBelowClear() {
+        let container = CGSize(width: 400, height: 260)
+        let expandedSize = CGSize(width: 120, height: 56)
+        let anchor = CGRect(x: 140, y: 150, width: 100, height: 32)
+        let origin = FullNamePeekPlacement.origin(anchor: anchor, expandedSize: expandedSize,
+                                                  container: container, margin: 12, layout: .grid)
+
+        XCTAssertEqual(origin.y + expandedSize.height, anchor.maxY, accuracy: 0.001)
     }
 }

@@ -15,8 +15,8 @@ final class FullNamePeekCoordinator: ObservableObject {
     }
 
     struct Timing: Equatable {
-        var hoverDelay: TimeInterval = 0.4
-        var selectionDelay: TimeInterval = 0.15
+        var hoverDelay: TimeInterval = 0.35
+        var selectionDelay: TimeInterval = 0
         var exitDelay: TimeInterval = 0.1
     }
 
@@ -219,7 +219,8 @@ struct FullNameAnchorPreferenceKey: PreferenceKey {
     }
 }
 
-/// 面板内的单一速览浮层。不是 popover/辅助窗口，因此不会抢 key、触发 auto-hide 或跨 Space 漂移。
+/// 面板内的单一名称展开层。它只替换原文件名，不再创建材质卡片；仍放在根层以免网格 / Table
+/// 裁掉向下换行的文字，也不会抢 key、触发 auto-hide 或跨 Space 漂移。
 struct FullNamePeekOverlay: View {
     @ObservedObject var coordinator: FullNamePeekCoordinator
     @ObservedObject var motion: MotionPreferences
@@ -230,15 +231,13 @@ struct FullNamePeekOverlay: View {
         GeometryReader { proxy in
             if let presentation = coordinator.presentation,
                let anchor = anchors[presentation.id] {
-                PositionedFullNameBubble(presentation: presentation, anchorRect: proxy[anchor],
-                                         containerSize: proxy.size, edge: edge)
+                PositionedFullNameLabel(presentation: presentation, anchorRect: proxy[anchor],
+                                        containerSize: proxy.size, edge: edge)
                     .id(presentation.id)
-                    .transition(motion.reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: motion.reduceMotion ? 0.1 : 0.15),
+        .animation(.easeOut(duration: motion.reduceMotion ? 0.08 : 0.1),
                    value: coordinator.presentation)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -246,76 +245,69 @@ struct FullNamePeekOverlay: View {
 }
 
 struct FullNamePeekPlacement {
-    static func origin(anchor: CGRect, bubble: CGSize, container: CGSize,
+    static func origin(anchor: CGRect, expandedSize: CGSize, container: CGSize,
                        margin: CGFloat, layout: FilenameTruncation.Layout) -> CGPoint {
-        let maxX = max(margin, container.width - margin - bubble.width)
-        let preferredX = layout == .grid ? anchor.midX - bubble.width / 2 : anchor.minX - margin / 2
+        let maxX = max(margin, container.width - margin - expandedSize.width)
+        let preferredX = layout == .grid ? anchor.midX - expandedSize.width / 2 : anchor.minX - margin / 2
         let x = min(max(preferredX, margin), maxX)
-        // 覆盖原文件名而非另起一条提示：图标模式顶边对齐，列表模式垂直居中。
-        let preferredY = layout == .grid ? anchor.minY - margin / 2 : anchor.midY - bubble.height / 2
-        let maxY = max(margin, container.height - margin - bubble.height)
+        // 覆盖原文件名而非另起一条提示：图标模式底边对齐、多出的行向上展开，
+        // 因此不会覆盖下方固定的大小/项目数；列表模式仍垂直居中。
+        let preferredY = layout == .grid ? anchor.maxY - expandedSize.height : anchor.midY - expandedSize.height / 2
+        let maxY = max(margin, container.height - margin - expandedSize.height)
         let y = min(max(preferredY, margin), maxY)
         return CGPoint(x: x, y: y)
     }
 }
 
-private struct PositionedFullNameBubble: View {
+private struct PositionedFullNameLabel: View {
     let presentation: FullNamePeekCoordinator.Presentation
     let anchorRect: CGRect
     let containerSize: CGSize
     let edge: EdgeMetrics
-    @State private var bubbleSize: CGSize = .zero
+    @State private var expandedSize: CGSize = .zero
 
-    private var bubbleWidth: CGFloat {
-        let font = presentation.layout.font
-        let natural = ceil((presentation.name as NSString).size(withAttributes: [.font: font]).width)
+    private var expandedWidth: CGFloat {
         let available = containerSize.width - edge.panelPadding * 2
         switch presentation.layout {
         case .grid:
-            // 图标模式守住当前列的归属感：宽度只比标准格略宽，长名称向下换行，禁止再横跨数列。
-            let minimum = edge.cellWidth + edge.itemSpacing * 2
-            let cap = min(edge.cellWidth + edge.sectionSpacing * 2, available)
-            return min(max(anchorRect.width + edge.itemSpacing * 2, minimum), cap)
+            // 图标模式严格守在文件名原有宽度内，长名称只向下换行，不侵入相邻列。
+            return min(max(anchorRect.width, edge.cellWidth - edge.itemSpacing), available)
         case .list:
-            // 列表行天然横向阅读，按内容增长更易扫读，但仍限制在紧凑的面板内浮层宽度。
-            let cap = min(edge.base * 32.5, available)
-            return min(natural + edge.itemSpacing * 2, cap)
+            // 列表也守住名称列，不让完整名称横跨大小、种类和日期列。
+            return min(max(anchorRect.width, edge.cellWidth * 2), available)
         }
     }
 
     private var origin: CGPoint {
-        FullNamePeekPlacement.origin(anchor: anchorRect, bubble: bubbleSize, container: containerSize,
+        FullNamePeekPlacement.origin(anchor: anchorRect, expandedSize: expandedSize, container: containerSize,
                                      margin: edge.panelPadding, layout: presentation.layout)
     }
 
     var body: some View {
         Text(presentation.name)
-            .font(.system(size: 12))
+            .font(.system(size: presentation.layout == .grid ? 12 : NSFont.systemFontSize))
             .multilineTextAlignment(presentation.layout == .grid ? .center : .leading)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, edge.itemSpacing)
-            .padding(.vertical, edge.innerSpacing)
-            .frame(width: bubbleWidth,
+            .padding(.horizontal, edge.innerSpacing)
+            .padding(.vertical, edge.badgeInset)
+            .frame(width: expandedWidth,
                    alignment: presentation.layout == .grid ? .center : .leading)
-            .background(.regularMaterial,
-                        in: RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: edge.itemCornerRadius, style: .continuous)
-                    .strokeBorder(presentation.origin == .selection
-                                  ? Color.accentColor.opacity(0.28)
-                                  : Color.primary.opacity(0.08), lineWidth: 0.5)
+            .background {
+                RoundedRectangle(cornerRadius: edge.innerSpacing, style: .continuous)
+                    .fill(presentation.origin == .selection
+                          ? Color.accentColor.opacity(GlassTokens.filenameSelectionFill)
+                          : Color.primary.opacity(GlassTokens.filenameHoverFill))
             }
-            .shadow(color: .black.opacity(0.08), radius: edge.innerSpacing, y: edge.innerSpacing / 2)
             .background {
                 GeometryReader { geometry in
                     Color.clear
-                        .onAppear { bubbleSize = geometry.size }
-                        .onChange(of: geometry.size) { _, size in bubbleSize = size }
+                        .onAppear { expandedSize = geometry.size }
+                        .onChange(of: geometry.size) { _, size in expandedSize = size }
                 }
             }
-            .opacity(bubbleSize == .zero ? 0 : 1)
-            .position(x: origin.x + bubbleSize.width / 2,
-                      y: origin.y + bubbleSize.height / 2)
+            .opacity(expandedSize == .zero ? 0 : 1)
+            .position(x: origin.x + expandedSize.width / 2,
+                      y: origin.y + expandedSize.height / 2)
     }
 }

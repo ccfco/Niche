@@ -78,14 +78,11 @@ struct FileCellView: View {
                                            value: geo.frame(in: .named(Self.cellSpace)))
                 })
             // 项目简介副行(访达图标视图同款):分辨率/时长/项目数/大小。重命名态不显。
-            // 对齐访达项目简介行:强调色蓝(非灰 secondary)+ 10pt regular —— 比文件名(12pt)小 2pt,
-            // 层级与访达一致,副行自然显小而细。
+            // 用系统 Accent Color 把文件名与辅助信息分层；不写死蓝色，跟随 macOS 强调色。
             // 始终占位(itemInfo 为 nil 时空串):异步算好前先占一行高,避免同屏 cell 高度跳动/错落。
             if showItemInfo, !isRenaming {
                 Text(itemInfo ?? " ")
-                    // 字重 light:访达项目简介笔画比文件名(regular)更细 —— "细"是字重不是大小,
-                    // 之前一直用默认 regular 所以对不上。10pt + light 复刻那种纤细感。
-                    .font(.system(size: 10, weight: .light))
+                    .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(Color.accentColor)
                     .lineLimit(1)
             }
@@ -116,6 +113,7 @@ struct FileCellView: View {
             fullNamePeek.hoverChanged(id: item.id, hovering: hovering)
         }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.1), value: isNameExpanded)
         .overlay(alignment: .topTrailing) {
             if isDownloading {
                 ProgressView().controlSize(.small).padding(edge.badgeInset)
@@ -159,12 +157,17 @@ struct FileCellView: View {
         return parts.joined(separator: ",")
     }
 
-    /// 单元底色:拖入悬停(落点提示)> 选中(强调色)> hover(淡灰提示)> 无。强度收口到 GlassTokens(#16)。
+    /// 整格只表达落点和轻 hover。选择聚焦在文件名区域，避免图标、名称、元信息一起变成大卡片。
     private var cellFill: Color {
-        if isDropTarget { return Color.accentColor.opacity(GlassTokens.selectionFill) }
-        if isSelected { return Color.accentColor.opacity(GlassTokens.selectionFill) }
+        if isDropTarget { return Color.accentColor.opacity(GlassTokens.dropTargetFill) }
+        // 名称已经用自身状态底承接 hover 时，撤掉外层整格状态，避免形成卡片套卡片。
+        if isNameExpanded { return Color.clear }
         if isHovered { return Color.primary.opacity(GlassTokens.hoverFill) }
         return Color.clear
+    }
+
+    private var isNameExpanded: Bool {
+        fullNamePeek.presentation?.id == item.id
     }
 
     /// 名称区:静态名(2 行中间截断,占位稳定)。重命名时静态名隐藏但保留占位,改名框走 overlay
@@ -200,8 +203,17 @@ struct FileCellView: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
+            .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, edge.innerSpacing)
+        .padding(.vertical, edge.badgeInset)
         .frame(maxWidth: .infinity)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: edge.innerSpacing, style: .continuous)
+                    .fill(Color.accentColor.opacity(GlassTokens.filenameSelectionFill))
+            }
+        }
     }
 
     @ViewBuilder private var artwork: some View {

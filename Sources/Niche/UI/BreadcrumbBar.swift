@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 下钻路径栏(#7/#8):给纯鼠标用户「我在哪」的可见位置 + 逐级回跳路径(竞品主力是纯鼠标)。
-/// 仅在下钻后(canGoUp)显示;左侧「↑ 上级」玻璃按钮,右侧面包屑各段可点跳转,末段(当前)高亮不可点。
+/// 仅在下钻后(canGoUp)显示;左侧「↑ 上级」工具按钮,右侧面包屑各段可点跳转,末段(当前)高亮不可点。
 struct BreadcrumbBar: View {
     let components: [(name: String, url: URL)]
     let edge: EdgeMetrics

@@ -92,7 +92,7 @@ struct FileListView: View {
     ) -> some View {
         let highlighted = content()
             .background(model.dropTargetID == item.id
-                        ? Color.accentColor.opacity(GlassTokens.selectionFill) : Color.clear)
+                        ? Color.accentColor.opacity(GlassTokens.dropTargetFill) : Color.clear)
         if item.isDirectory {
             highlighted.onDrop(of: [.fileURL], delegate: FileDropDelegate(
                 onDrop: { actions.onDropURLs($0, $1, item.url) },

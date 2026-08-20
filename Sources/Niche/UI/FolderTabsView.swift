@@ -102,8 +102,8 @@ struct FolderTabsView: View {
         let isCurrent = index == model.currentTab
         let title = mirror.binding.displayName
         let isDragging = draggingID == id
-        // 与 +/视图切换/底栏统一玻璃语言:当前 tab 用 isActive 常驻高亮,去掉裸 accent 方块(#15)。
-        // Button 仅作玻璃外壳;点选/拖动由 TabReorderView 接管(它消费左键,Button 的 action 不触发)。
+        // 当前 tab 只用轻量状态底，未选中 tab 保持透明，让书签栏退后于文件内容。
+        // Button 只承载视觉状态；点选/拖动由 TabReorderView 接管(它消费左键,Button 的 action 不触发)。
         return AnyView(Button {} label: {
             Text(title).lineLimit(1)
         }
@@ -243,7 +243,7 @@ struct FolderTabsView: View {
         dropInsertIndex != nil ? dropSlotWidth : 0
     }
 
-    /// 临时 tab(前往根外目录):前往图标点出身份,内联 📌 钉住(转正式绑定)与 ✕ 关闭。
+    /// 临时 tab(前往根外目录):转向图标点出身份,内联 Pin(转正式绑定)与关闭。
     /// 不用 .contextMenu 挂动作:SwiftUI 菜单不接 AutoHideCoordinator 抑制,菜单开着面板
     /// 可能被收走(文件右键走 RightClickCatcher+NSMenu 正是为此)。
     private func temporaryTab(index: Int, mirror: DirectoryMirror) -> some View {
@@ -278,7 +278,7 @@ struct FolderTabsView: View {
         Button { onAddMenu(addAnchor.view) } label: {
             Image(systemName: "plus")
         }
-        .buttonStyle(NicheFooterGlassButtonStyle(compact: true))   // 与视图切换/底栏同一玻璃语言
+        .buttonStyle(NicheFooterGlassButtonStyle(compact: true))
         .background(MenuAnchor(box: addAnchor))
         .offset(x: addButtonDropShift)   // 末尾插入时右让,空槽落在最后一个 tab 之后
         .help(String(localized: "添加文件夹或前往路径"))

@@ -25,6 +25,7 @@ struct ContentPanelView: View {
                                onDropFolders: actions.onDropFolders)
                 viewSwitcher
                     .fixedSize()
+                pinButton
                     .padding(.trailing, edge.panelPadding)
             }
             // 路径输入条(前往):⌘⇧G / 键入 `/`、`~` 弹出,位于 tab 与面包屑之间。
@@ -34,7 +35,7 @@ struct ContentPanelView: View {
             breadcrumb
             content
             BottomBarView(model: model, edge: edge,
-                          onSortMenu: actions.onSortMenu, onTogglePin: actions.onTogglePin,
+                          onSortMenu: actions.onSortMenu,
                           onIconSizeEditing: actions.onIconSizeEditing)
         }
         .frame(minWidth: 360, minHeight: 240)
@@ -111,8 +112,7 @@ struct ContentPanelView: View {
         }
     }
 
-    /// 视图切换 = 一块分段玻璃胶囊(列表/图标),仿 Finder 工具栏视图组:互斥单选挤一个胶囊,
-    /// 选中段浮高亮(不靠刺眼的蓝色原生 segmented)。玻璃/高亮语言与底栏按钮同源。
+    /// 视图切换是安静的互斥工具组，状态底与其他 toolbar 控件同源。
     private var viewSwitcher: some View {
         NicheSegmentedGlass(
             selection: Binding(get: { model.viewMode }, set: { model.viewMode = $0 }),
@@ -123,6 +123,17 @@ struct ContentPanelView: View {
                       help: String(localized: "图标视图"), label: String(localized: "图标视图")),
             ]
         )
+    }
+
+    /// Pin 是窗口模式，不是内容操作；与视图控制并列放在右上角，避免底栏形成孤立控制岛。
+    private var pinButton: some View {
+        let pinned = model.windowMode == .pinned
+        return Button(action: actions.onTogglePin) {
+            Image(systemName: pinned ? "pin.fill" : "pin")
+        }
+        .buttonStyle(NicheFooterGlassButtonStyle(isActive: pinned, compact: true))
+        .help(pinned ? String(localized: "取消钉住") : String(localized: "钉住(常驻浮窗)"))
+        .accessibilityLabel(pinned ? String(localized: "取消钉住") : String(localized: "钉住为常驻浮窗"))
     }
 
 }

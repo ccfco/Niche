@@ -1,16 +1,7 @@
 import SwiftUI
 
-/// 底栏命令按钮样式 = macOS 26 标准 Liquid Glass 按钮(借鉴姊妹项目 Clipin 已验证配方)。
-/// 三件套缺一翻车:
-/// ① 先内边距给按钮「身体」—— glass 只在当前 bounds 内渲染,label 不留 padding 时玻璃缩成
-///    一条发丝、像没有(原生 `.glass` 胶囊 + 图标紧贴就是这毛病)。
-/// ② `.regular.interactive()` 原生交互玻璃 —— 悬停给系统灰高亮、按下给 press。
-/// ③ `RoundedRectangle(cornerControl)` 而非 Capsule —— 只有固定圆角矩形才能与面板外壳
-///    (cornerShell)同心(shell 24 = control 16 + gap 8);Capsule 圆角随高度变,永不同心。
-///    hover 高亮再内缩 `footerHoverRimInset` 露一圈玻璃 rim(Raycast 式「内部小一圈灰块」)。
-///
-/// `isActive`:Pin 等切换态常驻高亮(读作「已钉住/已开」),不靠换 `.glassProminent` 变不透明。
-/// `@State` 必须放在内嵌 View 上 —— ButtonStyle 不是 View,挂不住状态(Clipin 踩过)。
+/// 面板内命令按钮的安静状态层。玻璃只由最外层面板承担；内部控件默认透明，hover / active
+/// 才出现低对比度状态底，避免每个按钮各自成为一块悬浮材质、与文件内容争夺层级。
 struct NicheFooterGlassButtonStyle: ButtonStyle {
     var isActive: Bool = false
     /// 紧凑档:顶部工具条(视图切换 / 加文件夹)用,内边距小一号,圆角仍 = control 保持同心语言。
@@ -33,10 +24,10 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
 
         var body: some View {
             let pressed = configuration.isPressed
-            let control = edge.footerControlCornerRadius
+            let control = edge.controlCornerRadius
             let hPad = compact ? edge.itemSpacing * 1.25 : edge.sectionSpacing   // 10 / 16
             let vPad = compact ? edge.itemSpacing * 0.75 : edge.itemSpacing       //  6 /  8
-            // 三态强度收口到 GlassTokens(chrome 纪律:禁组件硬编码高亮 opacity,#16)。
+            // 三态强度收口到 GlassTokens，所有内部 chrome 共享同一套轻量反馈。
             let highlight: Double = pressed ? GlassTokens.pressed
                 : (isActive ? GlassTokens.active : (isHovered ? GlassTokens.hover : GlassTokens.idle))
             return configuration.label
@@ -44,9 +35,10 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
                 .frame(minWidth: 16)
                 .padding(.horizontal, hPad)
                 .padding(.vertical, vPad)
-                .glassEffect(.regular.interactive(),
-                             in: RoundedRectangle(cornerRadius: control, style: .continuous))
-                .glassHighlight(highlight, edge: edge)   // rim-inset 高亮,与分段控件共用同一权威
+                .background {
+                    RoundedRectangle(cornerRadius: control, style: .continuous)
+                        .fill(Color.primary.opacity(highlight))
+                }
                 .scaleEffect(pressed && !motion.reduceMotion ? 0.97 : 1)
                 .contentShape(RoundedRectangle(cornerRadius: control, style: .continuous))
                 .onHover { hovering in
@@ -54,22 +46,5 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
                 }
                 .animation(feedback, value: pressed)
         }
-    }
-}
-
-extension View {
-    /// 玻璃叠加高亮(rim-inset):高亮层圆角比控件小一圈、四边内缩 `footerHoverRimInset`,
-    /// 露出底层玻璃 rim(Raycast 式「内部小一圈块」)。强度三态从 `GlassTokens` 取(#16)。
-    /// 抽出供底栏按钮(`NicheFooterGlassButtonStyle`)与分段控件(`NicheSegmentedGlass`)
-    /// 共用,杜绝 rim 数学两处漂移 —— 高亮长什么样只有这一处权威。
-    func glassHighlight(_ strength: Double, edge: EdgeMetrics) -> some View {
-        let control = edge.footerControlCornerRadius
-        let inset = edge.footerHoverRimInset
-        return overlay(
-            RoundedRectangle(cornerRadius: control - inset, style: .continuous)
-                .fill(Color.primary.opacity(strength))
-                .padding(inset)            // 内缩一圈,露出外层玻璃边
-                .allowsHitTesting(false)   // 高亮层不抢 Button 命中
-        )
     }
 }

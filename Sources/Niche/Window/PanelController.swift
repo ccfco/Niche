@@ -26,12 +26,12 @@ final class PanelController {
     }
 
     static func presentationAnimation(source: PresentationSource, reduceMotion: Bool) -> AnimationPlan {
-        if reduceMotion { return AnimationPlan(duration: 0.12, animatesFrame: false) }
-        return AnimationPlan(duration: source == .draggingFile ? 0.16 : 0.22, animatesFrame: true)
+        if reduceMotion { return AnimationPlan(duration: 0.1, animatesFrame: false) }
+        return AnimationPlan(duration: source == .draggingFile ? 0.12 : 0.16, animatesFrame: true)
     }
 
     static func dismissalAnimation(reduceMotion: Bool) -> AnimationPlan {
-        AnimationPlan(duration: reduceMotion ? 0.1 : 0.16, animatesFrame: !reduceMotion)
+        AnimationPlan(duration: reduceMotion ? 0.08 : 0.12, animatesFrame: !reduceMotion)
     }
 
     private(set) var panel: NichePanel?
@@ -127,9 +127,12 @@ final class PanelController {
             let rows = max(4, min(12, count))
             return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
         } else {
-            let rowHeight: CGFloat = 98
+            // 图标 + 两行名称 + 可选项目简介 + 格间距的真实占位。旧值 98 会让第三行只露图标，
+            // 文件名被底栏截掉；118 与当前默认图标尺寸及简介开启态对齐。
+            let rowHeight: CGFloat = 118
             let chrome: CGFloat = 96
-            let rows = max(2, min(5, Int(ceil(Double(count) / Double(columns)))))
+            // 瞬态工具优先保持轻量：最多三行（18 项），其余滚动，避免在 MacBook 上长成迷你 Finder。
+            let rows = max(2, min(3, Int(ceil(Double(count) / Double(columns)))))
             return (chrome + breadcrumb + CGFloat(rows) * rowHeight).rounded()
         }
     }
