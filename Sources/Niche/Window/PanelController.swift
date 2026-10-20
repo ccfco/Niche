@@ -206,10 +206,13 @@ final class PanelController {
             if animation.animatesFrame { panel.animator().setFrame(target, display: true) }
             panel.animator().alphaValue = 1
         }, completionHandler: { [weak self] in
-            // 代次守卫(与 hide completion 对称):动画中被新一轮 present 抢占时,过期 completion
-            // 不得提前清掉新回合的 isPresenting,否则 relayout 会在新动画中途改 frame 打架。
-            guard let self, gen == self.showGeneration else { return }
-            self.isPresenting = false
+            // AppKit 在主线程回调动画 completion;assumeIsolated 显式声明这一前提。
+            MainActor.assumeIsolated {
+                // 代次守卫(与 hide completion 对称):动画中被新一轮 present 抢占时,过期 completion
+                // 不得提前清掉新回合的 isPresenting,否则 relayout 会在新动画中途改 frame 打架。
+                guard let self, gen == self.showGeneration else { return }
+                self.isPresenting = false
+            }
         })
         startMouseLeaveMonitor()
     }
@@ -256,10 +259,12 @@ final class PanelController {
             if let collapse { panel.animator().setFrame(collapse, display: true) }
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            guard let self, gen == self.showGeneration else { return }   // 被新一次显示抢占 → 不收
-            panel.orderOut(nil)
-            panel.alphaValue = 1                                         // 复位;下次 present 会重设 frame/glass
-            self.isHiding = false
+            MainActor.assumeIsolated {
+                guard let self, gen == self.showGeneration else { return }   // 被新一次显示抢占 → 不收
+                panel.orderOut(nil)
+                panel.alphaValue = 1                                         // 复位;下次 present 会重设 frame/glass
+                self.isHiding = false
+            }
         })
     }
 

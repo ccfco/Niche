@@ -45,6 +45,7 @@ struct NativePreferenceSlider: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject {
         var parent: NativePreferenceSlider
 

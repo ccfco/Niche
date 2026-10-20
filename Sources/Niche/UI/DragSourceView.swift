@@ -163,14 +163,17 @@ final class DragSourceNSView: NSView, NSDraggingSource {
     private func scheduleRename() {
         scheduledArmToken = armToken()   // 捕获当前代次:面板若在延迟内收起会自增,触发时比对失效
         renameTimer = Timer.scheduledTimer(withTimeInterval: NSEvent.doubleClickInterval, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.renameTimer = nil
-            // 触发时二次确认仍是唯一选中本项:延迟期内若点了别的项,那项是另一个 view、取消不了本
-            // timer(各 view 只取消自己的),靠这里兜住——选中已变 → 放弃重命名。
-            guard self.isSoleSelection() else { return }
-            // 面板已收起(代次自增)→ 放弃:否则会在隐藏后置 renamingItemID,泄漏 .renaming 抑制。
-            guard self.armToken() == self.scheduledArmToken else { return }
-            self.onBeginRename()
+            // Timer 在主 run loop 触发;assumeIsolated 显式声明这一前提。
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.renameTimer = nil
+                // 触发时二次确认仍是唯一选中本项:延迟期内若点了别的项,那项是另一个 view、取消不了本
+                // timer(各 view 只取消自己的),靠这里兜住——选中已变 → 放弃重命名。
+                guard self.isSoleSelection() else { return }
+                // 面板已收起(代次自增)→ 放弃:否则会在隐藏后置 renamingItemID,泄漏 .renaming 抑制。
+                guard self.armToken() == self.scheduledArmToken else { return }
+                self.onBeginRename()
+            }
         }
     }
 

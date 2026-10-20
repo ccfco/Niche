@@ -192,19 +192,18 @@ struct FileDropDelegate: DropDelegate {
         guard !providers.isEmpty else { return false }
         let modifiers = NSEvent.modifierFlags
 
-        // loadObject 回调在任意队列;用串行队列保护汇总数组,避免数据竞争(Codex review)。
-        let lock = DispatchQueue(label: "com.ccfco.Niche.drop")
-        var collected: [URL] = []
+        // loadObject 回调在任意队列;用锁保护汇总数组,避免数据竞争(Codex review)。
+        let collector = DroppedURLColector()
         let group = DispatchGroup()
         for provider in providers {
             group.enter()
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                if let url { lock.sync { collected.append(url) } }
+                if let url { collector.append(url) }
                 group.leave()
             }
         }
         group.notify(queue: .main) {
-            let urls = lock.sync { collected }
+            let urls = collector.snapshot()
             guard !urls.isEmpty else { return }
             onDrop(urls, modifiers)
         }
@@ -236,5 +235,24 @@ struct FileDropDelegate: DropDelegate {
         dirPath = dir.path
         cached = (writable, sameVolume)
         return cached
+    }
+}
+
+/// `NSItemProvider.loadObject` 的并发回调用它汇总 URL:数组可变且跨队列访问,
+/// 锁是必要的;`@unchecked Sendable` 的安全前提就是所有读写都经 `lock`。
+private final class DroppedURLColector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+
+    func append(_ url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        urls.append(url)
+    }
+
+    func snapshot() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urls
     }
 }

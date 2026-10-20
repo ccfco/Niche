@@ -40,7 +40,7 @@ nonisolated struct DirectorySnapshot: Equatable, Sendable {
             ?? directory.path
         let needsRebase = listDir != directory || canonicalDir != directory.path
         let urlsToLoad = urls
-        func load(_ index: Int) -> FileItem {
+        let load: @Sendable (Int) -> FileItem = { index in
             let child = urlsToLoad[index]
             return FileItem.load(url: needsRebase ? directory.appendingPathComponent(child.lastPathComponent) : child)
         }
@@ -48,17 +48,40 @@ nonisolated struct DirectorySnapshot: Equatable, Sendable {
         // 到阈值后并行读。小目录保持串行,避免 concurrentPerform 的调度开销反而变慢。
         let items: [FileItem]
         if urlsToLoad.count >= 64 {
-            var loaded = [FileItem?](repeating: nil, count: urlsToLoad.count)
-            loaded.withUnsafeMutableBufferPointer { buffer in
-                DispatchQueue.concurrentPerform(iterations: buffer.count) { i in
-                    buffer[i] = load(i)
-                }
+            // 按下标写入的锁保护容器:并发闭包只捕获 Sendable 的容器与 load,
+            // 不把 inout buffer / 捕获的 var 带进 @Sendable 闭包。
+            let buffer = ParallelItemBuffer(count: urlsToLoad.count)
+            DispatchQueue.concurrentPerform(iterations: urlsToLoad.count) { i in
+                buffer.set(load(i), at: i)
             }
-            items = loaded.compactMap { $0 }
+            items = buffer.compacted()
         } else {
             items = (0..<urlsToLoad.count).map(load)
         }
         return DirectorySnapshot(items: items)
+    }
+}
+
+/// 并行快照的下标写入容器。`concurrentPerform` 闭包必须 @Sendable,
+/// 锁保证多线程写不同下标时数组本身的独占访问安全。
+private final class ParallelItemBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [FileItem?]
+
+    init(count: Int) {
+        items = Array(repeating: nil, count: count)
+    }
+
+    func set(_ item: FileItem, at index: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        items[index] = item
+    }
+
+    func compacted() -> [FileItem] {
+        lock.lock()
+        defer { lock.unlock() }
+        return items.compactMap { $0 }
     }
 }
 
