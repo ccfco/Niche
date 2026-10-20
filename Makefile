@@ -5,7 +5,7 @@
 check:
 	xcodegen generate
 	xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' \
-		-disableAutomaticPackageResolution test
+		-disableAutomaticPackageResolution -testLanguage zh-Hans -testRegion CN test
 
 install-hooks:
 	ln -sf ../../scripts/git-hooks/pre-commit .git/hooks/pre-commit
