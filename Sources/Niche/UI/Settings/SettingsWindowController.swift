@@ -25,7 +25,7 @@ final class SettingsWindowController {
     }
 
     /// 显示(懒建,关闭后复用同一窗口,保留 tab 选择等窗内状态)。section 非 nil 时跳转到该分区
-    /// (Onboarding「去设置」跳「触发」分区用)。直接写 @Published,SwiftUI 自动重渲染,
+    /// (Onboarding「去设置」跳「触发」分区用)。直接写 @Observable 属性,SwiftUI 自动重渲染,
     /// 不需要重建/替换 rootView。
     func show(section: SettingsSection? = nil) {
         if let section { navigation.selection = section }
@@ -65,7 +65,7 @@ final class SettingsWindowController {
                 model: model, triggerPrefs: triggerPrefs, navigation: navigation,
                 onAddFolder: onAddFolder
             )
-            .environmentObject(environment)
+            .environment(environment)
         )
         host.sceneBridgingOptions = [.toolbars, .title]
         w.contentViewController = host

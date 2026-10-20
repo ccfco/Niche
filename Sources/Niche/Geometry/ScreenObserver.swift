@@ -1,11 +1,11 @@
 import AppKit
-import Combine
 
 /// 活跃屏判定 + 刘海几何解析 + 屏幕参数变化监听(spec §4.2:多屏在鼠标活跃屏触发)。
+/// 无观察状态:几何按需解析,屏幕变化只经 `onChange` 通知宿主重新落位。
 @MainActor
-final class ScreenObserver: ObservableObject {
-    /// 屏幕配置变化(分辨率/接拔显示器/菜单栏隐藏)时自增,供呼出前重新解析几何。
-    @Published private(set) var generation = 0
+final class ScreenObserver {
+    /// 屏幕配置变化(分辨率/接拔显示器/菜单栏隐藏)的旁路回调。
+    var onChange: (() -> Void)?
 
     nonisolated(unsafe) private var observer: NSObjectProtocol?
 
@@ -14,7 +14,7 @@ final class ScreenObserver: ObservableObject {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.generation += 1 }
+            MainActor.assumeIsolated { self?.onChange?() }
         }
     }
 

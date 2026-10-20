@@ -25,7 +25,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupSparkle()
         UpdateChecker.shared.start()
         menuBarController = MenuBarController(
-            environment: environment,
             onShow: { [weak controller] in controller?.show() },
             onOpenSettings: { [weak controller] in controller?.openSettings() },
             onShowOnboarding: { [weak controller] in

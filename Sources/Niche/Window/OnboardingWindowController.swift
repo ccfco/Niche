@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 /// 首次使用引导是否已展示过。独立于 TriggerPreferences 等业务配置的一次性 UI 标位,
-/// 走旁路 UserDefaults(不进 BindingStore 那套 @Published 广播 —— 没有广播的必要)。
+/// 走旁路 UserDefaults(不进 BindingStore 那套变更广播 —— 没有广播的必要)。
 enum OnboardingState {
     private static let key = "niche.onboarding.hasSeen"
 

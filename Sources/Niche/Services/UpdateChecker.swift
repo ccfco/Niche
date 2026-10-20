@@ -1,21 +1,25 @@
 import AppKit
-import Combine
 import Foundation
+import Observation
 
 /// appcast.xml 轮询式更新检查:检测源与 Sparkle 安装用的是同一份数据(raw.githubusercontent.com
 /// 静态 CDN),不打 api.github.com——后者未认证限额 60 次/小时且按 IP 算,共享出口 IP 上
 /// 极易被其它流量打满,一旦打满整个检测层(含菜单栏红点、设置页、Sparkle 安装入口)全部瘫痪。
 /// 启动后 5s 首次检查,之后每 6h 定时;12h 内不重复检查同一版本。
 /// 无浮层提示:菜单栏小红点 + 设置页「关于」区承载更新 UI。
-@MainActor
-final class UpdateChecker: ObservableObject {
+@MainActor @Observable
+final class UpdateChecker {
     static let shared = UpdateChecker()
 
-    @Published private(set) var autoCheckEnabled: Bool
-    @Published private(set) var latestRelease: ReleaseInfo?
-    @Published private(set) var lastCheckedAt: Date?
-    @Published private(set) var isChecking = false
-    @Published private(set) var didLastCheckFail = false
+    private(set) var autoCheckEnabled: Bool
+    private(set) var latestRelease: ReleaseInfo?
+    private(set) var lastCheckedAt: Date?
+    private(set) var isChecking = false
+    private(set) var didLastCheckFail = false
+
+    /// `latestRelease` 变化后的旁路回调:菜单栏要按有没有新版重建 NSMenu。
+    /// 设置页读属性本身即可,不需要它。
+    @ObservationIgnored var onLatestReleaseChange: (() -> Void)?
 
     let currentVersion: String
     /// CFBundleVersion(build number)。Sparkle 自己判断"是否有更新"用这个,不是 marketing
@@ -166,6 +170,7 @@ final class UpdateChecker: ObservableObject {
             } else {
                 latestRelease = nil
             }
+            onLatestReleaseChange?()
 
             lastCheckedAt = fetched
             defaults.set(fetched, forKey: Keys.lastCheckedAt)

@@ -141,22 +141,17 @@ final class NicheController {
     nonisolated(unsafe) private var resignObserver: NSObjectProtocol?
     /// onChange 里可能触发 renamingItemID 变更(清扫)→ 再入 onChange;守卫防递归。
     private var isHandlingModelChange = false
-    private var screenCancellable: AnyCancellable?
-    private var bindingsCancellable: AnyCancellable?
-    private var triggerPrefsCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
         wire()
         hotZone.refreshPlacement()
         rebuildMirrors()
-        FolderIndexer.refresh(environment.bindingStore.bindings)
+        FolderIndexer.shared.refresh(environment.bindingStore.bindings)
         hotkey.onTrigger = { [weak self] in self?.toggle() }
+        // 偏好变化 → 立即应用到触发系统(回调在 didSet 触发,读到的已是新值)。
+        triggerPrefs.onChange = { [weak self] in self?.applyTriggerPreferences() }
         applyTriggerPreferences()   // 热区开关/延迟 + 注册快捷键(默认 ⌃⌥⌘Space 兜底呼出)
-        // objectWillChange 在赋值前发布 → 推迟一拍读新值再应用。
-        triggerPrefsCancellable = triggerPrefs.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.applyTriggerPreferences() }
     }
 
     /// 把触发偏好应用到触发系统。快捷键注册失败(撞系统占用等)→ 可见提示并回退到上一个
@@ -177,7 +172,7 @@ final class NicheController {
         } else {
             presentFailure(title: String(localized: "无法注册快捷键 \(pref.display)"),
                            error: HotkeyRegistrationError(display: pref.display))
-            // 回退上一个可用键(写回偏好,设置页同步显示;sink 再触发时命中 == 守卫不再循环)。
+            // 回退上一个可用键(写回偏好,设置页同步显示;onChange 再触发时命中 == 守卫不再循环)。
             // 启动期第一发就失败(持久化了已被占用的键)→ 回退出厂默认。
             if let lastGoodHotkey, lastGoodHotkey != pref {
                 triggerPrefs.hotkey = lastGoodHotkey
@@ -243,10 +238,7 @@ final class NicheController {
         autoHide.ownedWindows = { [weak self] in
             [self?.panelController.panel, self?.quickLook.previewPanel].compactMap { $0 }
         }
-        screenCancellable = screens.$generation
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.hotZone.refreshPlacement() }
+        screens.onChange = { [weak self] in self?.hotZone.refreshPlacement() }
 
         // 卷卸载/挂载转发给各 mirror(spec §4.1.1:卷消失 → 空态;回来 → 用户回该 tab 自动重连)。
         volumes.onUnmount = { [weak self] url in
@@ -331,18 +323,15 @@ final class NicheController {
         }
         // 重命名残留清扫:编辑期间条目被外部删除/改名(FSEvents 重扫后 id 消失),重命名框随
         // cell 一起卸载但 renamingItemID 还在 → .renaming 抑制源泄漏,面板永不自动收回。
-        // 条目不在当前列表即结束重命名(endRename 触发上方 sink 解除抑制)。
+        // 条目不在当前列表即结束重命名(endRename 触发上方回调解除抑制)。
         // 增删/重排绑定(设置页或添加文件夹)→ 统一在此重建镜像(保持设置与面板一致)。
-        bindingsCancellable = environment.bindingStore.$bindings
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                let select = self.pendingSelectBindingID
-                self.pendingSelectBindingID = nil
-                self.rebuildMirrors(selecting: select)
-                FolderIndexer.refresh(self.environment.bindingStore.bindings)
-            }
+        environment.bindingStore.onChange = { [weak self] bindings in
+            guard let self else { return }
+            let select = self.pendingSelectBindingID
+            self.pendingSelectBindingID = nil
+            self.rebuildMirrors(selecting: select)
+            FolderIndexer.shared.refresh(bindings)
+        }
     }
 
     // MARK: - 呈现/收回(瞬态)

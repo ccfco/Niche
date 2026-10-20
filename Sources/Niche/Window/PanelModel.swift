@@ -178,8 +178,11 @@ final class PanelModel {
     func endDownload(_ id: FileItem.ID) { downloadingIDs.remove(id) }
 
     /// 批量文件操作进度(复制/移动/压缩)。nil = 无操作;底栏据此显示进度行与取消按钮。
+    /// 每项推进只更新视图(Observation 追踪);只有进度行出现/消失才需要宿主重新布局。
     private(set) var operationProgress: FileOperationProgress? {
-        didSet { notifyChange() }
+        didSet {
+            if (operationProgress == nil) != (oldValue == nil) { notifyChange() }
+        }
     }
 
     func setOperationProgress(_ progress: FileOperationProgress?) {

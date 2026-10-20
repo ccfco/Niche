@@ -8,11 +8,10 @@ import AppKit
 /// 整窗玻璃 + 文字层级分组,交给系统原生材质与卡片。
 /// 宿主注入面板同一个 PanelModel/TriggerPreferences:showHidden、热区等偏好只有一个真相源。
 struct SettingsView: View {
-    @EnvironmentObject private var environment: AppEnvironment
     var model: PanelModel
     /// 触发方式偏好(热区/延迟/快捷键)单一真相源,由 NicheController 注入并订阅应用。
-    @ObservedObject var triggerPrefs: TriggerPreferences
-    @ObservedObject var navigation: SettingsNavigationModel
+    var triggerPrefs: TriggerPreferences
+    var navigation: SettingsNavigationModel
     /// 添加文件夹走 NicheController 统一路径(与面板「+」一致:自动选中新 tab)。
     var onAddFolder: () -> Void = {}
 

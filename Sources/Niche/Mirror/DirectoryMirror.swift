@@ -554,7 +554,7 @@ final class DirectoryMirror {
 
     // MARK: - 下钻位置持久化(per-binding 旁路存储,§4.7)
 
-    /// **不走 BindingStore**:那是 @Published,一改即触发 NicheController.rebuildMirrors 重建所有
+    /// **不走 BindingStore**:那是 @Observable,一改即触发 NicheController.rebuildMirrors 重建所有
     /// mirror(丢状态 + 重 arm 可能弹 TCC);下钻是高频动作,必须挂在不广播的旁路存储上。
     /// key 用 binding.id(UUID,不复用),随绑定删除由 BindingStore.remove → clearLastPath 清理。
     private static func lastPathKey(for id: FolderBinding.ID) -> String {

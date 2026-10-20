@@ -1,31 +1,28 @@
 import AppKit
-import Combine
 
 /// 菜单栏图标 + 下拉菜单。提供"呼出 Niche / 设置… / 退出"等入口,并作为全局快捷键兜底
 /// 之外的常驻可见触发点(spec §4.2:菜单栏图标是可选触发位置之一)。
 @MainActor
 final class MenuBarController {
-    private let environment: AppEnvironment
     private let statusItem: NSStatusItem
     private let onShow: () -> Void
     private let onOpenSettings: () -> Void
     private let onShowOnboarding: () -> Void
-    private var updateCancellable: AnyCancellable?
 
-    init(environment: AppEnvironment, onShow: @escaping () -> Void,
+    init(onShow: @escaping () -> Void,
          onOpenSettings: @escaping () -> Void, onShowOnboarding: @escaping () -> Void) {
-        self.environment = environment
         self.onShow = onShow
         self.onOpenSettings = onOpenSettings
         self.onShowOnboarding = onShowOnboarding
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configureButton()
-        statusItem.menu = makeMenu()
 
         // latestRelease 变化时重建菜单(有新版 → 加更新区;已是最新 → 去掉更新区)。
-        updateCancellable = UpdateChecker.shared.$latestRelease
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.statusItem.menu = self?.makeMenu() }
+        // 先挂回调再建菜单:两者之间若恰有一次检查完成,菜单不会停在旧态。
+        UpdateChecker.shared.onLatestReleaseChange = { [weak self] in
+            self?.statusItem.menu = self?.makeMenu()
+        }
+        statusItem.menu = makeMenu()
     }
 
     private func configureButton() {

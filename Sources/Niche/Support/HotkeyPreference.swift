@@ -70,15 +70,15 @@ struct HotkeyPreference: Codable, Equatable {
 
     private static let defaultsKey = "niche.hotkey"
 
-    static func load() -> HotkeyPreference {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+    static func load(from defaults: UserDefaults = .standard) -> HotkeyPreference {
+        guard let data = defaults.data(forKey: defaultsKey),
               let pref = try? JSONDecoder().decode(HotkeyPreference.self, from: data)
         else { return .default }
         return pref
     }
 
-    func save() {
+    func save(to defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(self) else { return }
-        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        defaults.set(data, forKey: Self.defaultsKey)
     }
 }

@@ -6,7 +6,7 @@ import AppKit
 
 /// 文件夹:绑定文件夹的增删与排序。**保留 `ForEach + .onMove`** 拿系统拖拽排序语义(不自研)。
 struct FoldersSettings: View {
-    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment
     var onAddFolder: () -> Void = {}
     /// 待确认移除的绑定(误点删除无 undo,弹确认而非立即删)。
     @State private var pendingRemoval: FolderBinding?
@@ -65,7 +65,7 @@ struct FoldersSettings: View {
 
 /// 触发:刘海热区开关、hover 灵敏度、全局快捷键。从旧 GeneralSettings 拆出独立成页。
 struct TriggerSettings: View {
-    @ObservedObject var triggerPrefs: TriggerPreferences
+    @Bindable var triggerPrefs: TriggerPreferences
 
     var body: some View {
         Section {
@@ -293,7 +293,7 @@ struct GeneralSettings: View {
 
 /// 关于:身份卡(图标+名字+版本,自身即头部,不叠通用 paneHeader)、自动更新、更新状态与下载、项目信息。
 struct AboutSettings: View {
-    @ObservedObject private var checker = UpdateChecker.shared
+    private let checker = UpdateChecker.shared
 
     /// 版权(读 Info.plist NSHumanReadableCopyright,不在 UI 硬编码年份 —— 年份会过时)。
     private var copyright: String? {
