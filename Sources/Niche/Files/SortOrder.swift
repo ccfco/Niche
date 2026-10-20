@@ -20,7 +20,7 @@ struct FileSortOrder: Equatable, Codable {
     /// internal(非 private):测试侧据此快照/还原偏好,避免字面量副本与本键漂移(Codex/review)。
     static let storageKey = "niche.sortOrder"
 
-    /// 持久化(仿 FileViewMode):重启保留排序。解码失败回退默认(让问题显式,不静默)。
+    /// 持久化(仿 FileViewMode):重启保留排序。解码失败回退默认。
     static func load() -> FileSortOrder {
         guard let data = UserDefaults.standard.data(forKey: storageKey),
               let decoded = try? JSONDecoder().decode(FileSortOrder.self, from: data) else {

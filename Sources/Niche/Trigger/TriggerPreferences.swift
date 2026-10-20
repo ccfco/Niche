@@ -6,6 +6,15 @@ import Observation
 /// HotZoneController/GlobalHotkey 由 NicheController 订阅驱动(本类纯偏好状态,不持有触发组件)。
 @MainActor @Observable
 final class TriggerPreferences {
+    private enum Keys {
+        static let hotZoneEnabled = "niche.hotZoneEnabled"
+        static let hoverDelay = "niche.hoverDelay"
+        static let hotZoneWidthScale = "niche.hotZoneWidthScale"
+        static let fallbackHotZoneEnabled = "niche.fallbackHotZoneEnabled"
+        static let enabledHotCorners = "niche.enabledHotCorners"
+        static let enabledSides = "niche.enabledScreenSides"
+    }
+
     /// 任意偏好变化后的旁路回调(宿主据此把偏好应用到触发系统)。
     /// 回调在 didSet(赋值后)触发,读到的已是新值。
     @ObservationIgnored var onChange: (() -> Void)?
@@ -16,7 +25,7 @@ final class TriggerPreferences {
     /// 刘海热区触发开关(关掉后仅剩菜单栏图标 + 全局快捷键呼出)。
     var hotZoneEnabled: Bool {
         didSet {
-            defaults.set(hotZoneEnabled, forKey: "niche.hotZoneEnabled")
+            defaults.set(hotZoneEnabled, forKey: Keys.hotZoneEnabled)
             onChange?()
         }
     }
@@ -28,7 +37,7 @@ final class TriggerPreferences {
     }
 
     func persistHoverDelay() {
-        defaults.set(hoverDelay, forKey: "niche.hoverDelay")
+        defaults.set(hoverDelay, forKey: Keys.hoverDelay)
     }
 
     /// 设置页连续滑杆使用对数映射：0.1–0.5s 的常用区获得足够行程，同时仍可覆盖到 5s。
@@ -57,13 +66,13 @@ final class TriggerPreferences {
     }
 
     func persistHotZoneWidthScale() {
-        defaults.set(hotZoneWidthScale, forKey: "niche.hotZoneWidthScale")
+        defaults.set(hotZoneWidthScale, forKey: Keys.hotZoneWidthScale)
     }
 
     /// 外接显示器/无刘海 Mac 的顶部中央回退热区可独立关闭；真实刘海不受影响。
     var fallbackHotZoneEnabled: Bool {
         didSet {
-            defaults.set(fallbackHotZoneEnabled, forKey: "niche.fallbackHotZoneEnabled")
+            defaults.set(fallbackHotZoneEnabled, forKey: Keys.fallbackHotZoneEnabled)
             onChange?()
         }
     }
@@ -73,7 +82,7 @@ final class TriggerPreferences {
     var enabledHotCorners: Set<ScreenCorner> {
         didSet {
             let raw = enabledHotCorners.map(\.rawValue)
-            defaults.set(raw, forKey: "niche.enabledHotCorners")
+            defaults.set(raw, forKey: Keys.enabledHotCorners)
             onChange?()
         }
     }
@@ -82,7 +91,7 @@ final class TriggerPreferences {
     var enabledSides: Set<ScreenSide> {
         didSet {
             let raw = enabledSides.map(\.rawValue)
-            defaults.set(raw, forKey: "niche.enabledScreenSides")
+            defaults.set(raw, forKey: Keys.enabledSides)
             onChange?()
         }
     }
@@ -97,15 +106,15 @@ final class TriggerPreferences {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        hotZoneEnabled = defaults.object(forKey: "niche.hotZoneEnabled") as? Bool ?? true
-        let savedDelay = defaults.object(forKey: "niche.hoverDelay") as? Double ?? 0.3
+        hotZoneEnabled = defaults.object(forKey: Keys.hotZoneEnabled) as? Bool ?? true
+        let savedDelay = defaults.object(forKey: Keys.hoverDelay) as? Double ?? 0.3
         hoverDelay = min(max(savedDelay, Self.hoverDelayRange.lowerBound), Self.hoverDelayRange.upperBound)
-        let savedWidthScale = defaults.object(forKey: "niche.hotZoneWidthScale") as? Double ?? 1.0
+        let savedWidthScale = defaults.object(forKey: Keys.hotZoneWidthScale) as? Double ?? 1.0
         hotZoneWidthScale = min(max(savedWidthScale, 0.6), 2)
-        fallbackHotZoneEnabled = defaults.object(forKey: "niche.fallbackHotZoneEnabled") as? Bool ?? true
-        let rawCorners = defaults.stringArray(forKey: "niche.enabledHotCorners") ?? []
+        fallbackHotZoneEnabled = defaults.object(forKey: Keys.fallbackHotZoneEnabled) as? Bool ?? true
+        let rawCorners = defaults.stringArray(forKey: Keys.enabledHotCorners) ?? []
         enabledHotCorners = Set(rawCorners.compactMap(ScreenCorner.init(rawValue:)))
-        let rawSides = defaults.stringArray(forKey: "niche.enabledScreenSides") ?? []
+        let rawSides = defaults.stringArray(forKey: Keys.enabledSides) ?? []
         enabledSides = Set(rawSides.compactMap(ScreenSide.init(rawValue:)))
         hotkey = HotkeyPreference.load(from: defaults)
     }
