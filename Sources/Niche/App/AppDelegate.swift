@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 装配 Sparkle：检测交给 UpdateChecker（GitHub API），Sparkle 只做安装器，
+    /// 装配 Sparkle：检测交给 UpdateChecker（appcast.xml），Sparkle 只做安装器，
     /// 故关掉它自己的定时检查；把「触发安装」闭包注入 UpdateChecker。
     private func setupSparkle() {
         let controller = SPUStandardUpdaterController(

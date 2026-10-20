@@ -51,9 +51,10 @@ final class ItemInfoCache {
             // 动作路径 → 这些目录跳过统计(不显项目数),只在用户 arm 进入后其子项才安全计数。
             if TCCAccess.isProtected(item.url) { return (nil, false) }
             // 项目数:跳隐藏项(对齐访达默认计数口径)。失败(无权限/外部删)→ nil,不兜底假数、不缓存。
-            guard let count = try? FileManager.default.contentsOfDirectory(
-                at: item.url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]).count
-            else { return (nil, false) }
+            // 空目录用 directoryEntryCountKey 的 O(1) 元数据短路(空目录里不可能有隐藏项,
+            // 与可见口径一致);非空仍列目录 —— 该键**包含隐藏项**,直接拿来当项目数会与访达
+            // (例如 2 个可见 + .DS_Store 显示 2)不一致,不能为省一次 readdir 牺牲原生正确性。
+            guard let count = Self.visibleItemCount(of: item.url) else { return (nil, false) }
             return (String(localized: "\(count) 个项目"), true)
         }
         // 文件:优先 Spotlight 元数据(访达同源)—— 视频/音频显时长,图片显尺寸。
@@ -74,6 +75,21 @@ final class ItemInfoCache {
             $0.conforms(to: .image) || $0.conforms(to: .audiovisualContent)
         } ?? false
         return (item.sizeLabel, !isMedia)
+    }
+
+    /// 可见项目数(访达口径:排除隐藏项)。空目录走 `directoryEntryCountKey` O(1) 短路;
+    /// 非空才列目录。非目录 / 读取失败 → nil(调用方不显示副行)。
+    /// internal 供测试直接钉住口径(不必经 Spotlight / 本地化文案)。
+    static func visibleItemCount(of url: URL) -> Int? {
+        if let total = directoryEntryCount(of: url), total == 0 { return 0 }
+        return try? FileManager.default.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]).count
+    }
+
+    /// `directoryEntryCountKey`(macOS 14+)的原始条目数,**包含隐藏项**;
+    /// 目录或文件系统不支持低成本计算时返回 nil。
+    static func directoryEntryCount(of url: URL) -> Int? {
+        (try? url.resourceValues(forKeys: [.directoryEntryCountKey]))?.directoryEntryCount
     }
 
     /// 千分位整数(访达图片尺寸 "1,712 × 896")。formatter 每次新建 —— 后台并发调用,避免共享可变态竞争。

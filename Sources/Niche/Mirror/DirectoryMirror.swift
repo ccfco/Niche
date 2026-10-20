@@ -82,7 +82,8 @@ final class DirectoryMirror: ObservableObject {
                 // 异步重扫,不走同步 refresh():该开关经 PanelModel 广播到全部 tab 的 mirror,
                 // 任一目录挂在抽风的云盘/网络卷上,同步列目录就冻死主线程(同步版仅保留给
                 // "新建文件夹→立即重命名"一条路径)。
-                captureAndPublishAsync()
+                // 非活跃 tab 只置脏:切回时 setActive(true) 统一补扫,避免后台 tab 白扫。
+                if isActive { captureAndPublishAsync() } else { needsRescan = true }
             case .loading:
                 // 异步 arm 在途:armAttempt() 调用时已捕获旧 hidden 值,放任其发布开关看似失效
                 // (Codex review)。但不能用 captureAndPublishAsync()——它与 arm 共享 scanTask,
@@ -90,7 +91,7 @@ final class DirectoryMirror: ObservableObject {
                 // 重跑完整 arm:此刻 mirror 本就处于用户动作触发的 arm 中,不新增 TCC 触达面。
                 // 续传在途 arm 的 openSettingsIfDenied(reauthorize 传 true):否则重跑用默认
                 // false 作废前一轮,"探针仍被拒 → 打开隐私设置"的引导被静默丢弃(Codex review)。
-                armAttempt(openSettingsIfDenied: inFlightOpenSettingsIfDenied)
+                if isActive { armAttempt(openSettingsIfDenied: inFlightOpenSettingsIfDenied) } else { needsRescan = true }
             default:
                 break
             }
@@ -102,6 +103,11 @@ final class DirectoryMirror: ObservableObject {
     private var snapshot = DirectorySnapshot(items: [])
     private var datalessOverride: [URL: Bool] = [:]
     private var armed = false
+    /// 是否是「当前展示的 tab」。非活跃 mirror 保留 FSEvents 流用于置脏,但不做快照扫描;
+    /// 切回时若 `needsRescan` 再补扫。后台 tab 的扫描结果没有消费者,持续全量重扫只会白烧 CPU。
+    private(set) var isActive = true
+    /// 非活跃期间收到过变化(或 showHidden 变了):切回时据此补扫。
+    private var needsRescan = false
     /// FSEvents 流是否成功建立(失败 → 无实时同步,需手动 refresh)。
     private(set) var isWatching = false
 
@@ -274,7 +280,14 @@ final class DirectoryMirror: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self, self.scanGeneration == generation else { return }
                 switch result {
-                case .success(let fresh): self.apply(fresh)
+                case .success(let fresh):
+                    self.apply(fresh)
+                    // 非活跃期间(或 arm 在途时)积压的 showHidden/事件变化:arm 完成后补扫,
+                    // 否则「切走时改开关、切回时 arm 尚未完成」会把新开关静默丢掉。
+                    if self.needsRescan, self.isActive {
+                        self.needsRescan = false
+                        self.captureAndPublishAsync()
+                    }
                 case .failure(let error): self.applyCaptureFailure(error)
                 }
             }
@@ -315,12 +328,39 @@ final class DirectoryMirror: ObservableObject {
             }
             startStream()
             icloud.stop()
-            startICloudIfNeeded()
+            if isActive { startICloudIfNeeded() }
+        }
+        // 非活跃 tab:只记脏,不扫描。切回时 setActive(true) 补扫,后台 tab 不再白烧 CPU。
+        guard isActive else {
+            needsRescan = true
+            return
         }
         // 无论 needsFullRescan 还是普通变化,一律重扫快照 + diff(不信任增量,§4.1.1)。
         // FSEvents 路径走后台扫:大目录(数千文件)同步列目录会卡主线程,高频变更(解压/
         // 批量下载)时面板动画反复冻结(性能审计)。
         captureAndPublishAsync()
+    }
+
+    // MARK: - 活跃 tab 切换
+
+    /// 由 `PanelModel` 在切 tab / 重建镜像时调用。非活跃 = 保留 FSEvents 流(用于置脏),
+    /// 但暂停快照扫描与 iCloud 查询;切回时若期间有变化则补扫一次。
+    /// **不 disarm、不重建流**:保持 TCC 探针/流生命周期稳定,切 tab 不触发额外授权路径。
+    func setActive(_ active: Bool) {
+        guard active != isActive else { return }
+        isActive = active
+        if active {
+            startICloudIfNeeded()
+            if needsRescan, armed {
+                needsRescan = false
+                captureAndPublishAsync()
+            }
+        } else {
+            icloud.stop()
+            // 离开期间 FSEvents 可能 coalesce/drop;切回时无条件补扫一次(后台扫,不阻塞 UI),
+            // 保证漏掉的事件不会让 tab 停在旧内容。非 armed 的 mirror 等 arm 时自然扫。
+            if armed { needsRescan = true }
+        }
     }
 
     // MARK: - 快照
@@ -441,7 +481,7 @@ final class DirectoryMirror: ObservableObject {
     // MARK: - iCloud
 
     private func startICloudIfNeeded() {
-        guard ICloudStatus.isUbiquitous(resolvedURL) else { return }
+        guard isActive, ICloudStatus.isUbiquitous(resolvedURL) else { return }
         icloud.startMonitoring(directory: resolvedURL)
     }
 

@@ -240,6 +240,7 @@ final class PanelModel: ObservableObject {
         } else {
             currentTab = min(currentTab, max(0, mirrors.count - 1))
         }
+        updateMirrorActivity()
         subscribeToCurrent()
         // 改名中的 tab 若已被删(Settings 删除等)→ 收口:其 rename field 随 tab 消失,
         // onEndEditing/endRenameTab 不再触发,.renaming 抑制源会残留(面板永不自动收的老坑,Codex review)。
@@ -269,6 +270,7 @@ final class PanelModel: ObservableObject {
             currentTab = mirrors.count - 1
         }
         clearSelection()
+        updateMirrorActivity()
         subscribeToCurrent()
         armCurrent()
     }
@@ -279,6 +281,7 @@ final class PanelModel: ObservableObject {
         mirrors.remove(at: index)
         currentTab = min(currentTab, max(0, mirrors.count - 1))
         clearSelection()
+        updateMirrorActivity()
         subscribeToCurrent()
         if !mirrors.isEmpty { armCurrent() }   // 关闭临时 tab 是用户动作,回落 tab 需要内容
     }
@@ -288,8 +291,17 @@ final class PanelModel: ObservableObject {
         guard mirrors.indices.contains(index) else { return }
         currentTab = index
         clearSelection()
+        updateMirrorActivity()
         subscribeToCurrent()
         armCurrent()
+    }
+
+    /// 只有当前 tab 的 mirror 保持活跃扫描;其余保留 FSEvents 流但暂停快照扫描与 iCloud 查询,
+    /// 切回时若有积压变化再补扫。避免 N 个 tab = N 份后台全量重扫(下载/构建目录尤甚)。
+    private func updateMirrorActivity() {
+        for (index, mirror) in mirrors.enumerated() {
+            mirror.setActive(index == currentTab)
+        }
     }
 
     /// 仅把当前 tab mirror 的变化转发给自身(刷新网格)。

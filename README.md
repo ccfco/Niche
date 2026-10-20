@@ -57,7 +57,7 @@ Niche 偏不做那个。它做的是另一件没人做的事——
 
 ## 技术取舍
 
-- **SwiftUI 为主 + AppKit 桥接** — 触发动画引 [DynamicNotchKit](https://github.com/MrKai77/DynamicNotchKit)；QuickLook / 自拼右键 NSMenu / 拖拽 / 键盘权威这些 SwiftUI 力有不逮处下沉到 AppKit。
+- **SwiftUI 为主 + AppKit 桥接** — 触发与面板动画由自研 `PanelController`（`NSAnimationContext` + `NSGlassEffectView`）承担；QuickLook / 自拼右键 NSMenu / 拖拽 / 键盘权威这些 SwiftUI 力有不逮处下沉到 AppKit。
 - **menu bar accessory**（`LSUIElement`），不进 Dock。
 - **不沙盒** — 换取显示隐藏文件 + 任意路径访问；受保护目录（Desktop / Documents / Downloads / iCloud）走 TCC 授权，**权限按需触发**，绝不在启动时主动弹窗。
 - **不用 security-scoped bookmark** — 那是沙盒专属机制；不沙盒、有完整磁盘访问，无需它。
@@ -84,7 +84,7 @@ xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' test
 
 ## 项目状态
 
-**开发中（MVP / P0 核心闭环）** — 设计先行、定稿后再动手，核心交互正在打磨，暂未发布 Release。欢迎读代码、提 issue、讨论设计。
+**持续迭代** — 核心闭环已发布（当前 0.1.11），正在打磨交互、性能与系统集成；欢迎读代码、提 issue、讨论设计。
 
 ## 许可
 
