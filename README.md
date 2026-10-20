@@ -59,7 +59,7 @@ Niche 偏不做那个。它做的是另一件没人做的事——
 ## 技术取舍
 
 - **SwiftUI 为主 + AppKit 桥接** — 触发与面板动画由自研 `PanelController`（`NSAnimationContext` + `NSGlassEffectView`）承担；QuickLook / 自拼右键 NSMenu / 拖拽 / 键盘权威这些 SwiftUI 力有不逮处下沉到 AppKit。
-- **Observation + Swift 6 严格并发** — `PanelModel` / `DirectoryMirror` / `MotionPreferences` 用 `@Observable` 做属性级失效；应用目标开启 `SWIFT_STRICT_CONCURRENCY=complete` 与 Approachable Concurrency。
+- **Observation + Swift 6 严格并发** — 面板、绑定存储、触发偏好、设置导航、屏幕监听与更新检查全部用 `@Observable` 做属性级失效；应用与测试目标均开启 `SWIFT_STRICT_CONCURRENCY=complete` 与 Approachable Concurrency。
 - **menu bar accessory**（`LSUIElement`），不进 Dock。
 - **不沙盒** — 换取显示隐藏文件 + 任意路径访问；受保护目录（Desktop / Documents / Downloads / iCloud）走 TCC 授权，**权限按需触发**，绝不在启动时主动弹窗。
 - **不用 security-scoped bookmark** — 那是沙盒专属机制；不沙盒、有完整磁盘访问，无需它。
