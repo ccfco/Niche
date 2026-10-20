@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = makeMainMenu()
         let controller = NicheController(environment: environment)
         self.controller = controller
+        // App Intents(Shortcuts/Siri/Spotlight)只经这条窄桥驱动面板,不另建第二套状态。
+        IntentBridge.shared.controller = controller
         // 先注入 Sparkle 安装闭包，再 start 检测层（start 5s 后才首检，顺序保险）。
         setupSparkle()
         UpdateChecker.shared.start()

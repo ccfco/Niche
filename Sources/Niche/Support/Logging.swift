@@ -10,4 +10,6 @@ enum Log {
     /// 触发链路(热区进出/dwell/present 各守卫吞弃):偶现「呼不出」全靠它归因,
     /// 排查口令:log show --last 5m --info --predicate 'subsystem == "com.ccfco.Niche" AND category == "trigger"'
     static let trigger = Logger(subsystem: "com.ccfco.Niche", category: "trigger")
+    /// App Intents / Spotlight 索引(系统扩展面):失败不阻断面板,但索引静默缺失要靠它归因。
+    static let intents = Logger(subsystem: "com.ccfco.Niche", category: "intents")
 }

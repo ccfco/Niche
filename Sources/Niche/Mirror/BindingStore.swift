@@ -20,7 +20,9 @@ final class BindingStore: ObservableObject {
         self.bindings = Self.load(from: defaults)
     }
 
-    private static func load(from defaults: UserDefaults) -> [FolderBinding] {
+    /// 从持久化数据还原绑定列表。`nonisolated` 供 App Intents 的实体查询在任意执行器读取
+    /// (Shortcuts/Spotlight 可能先于 `BindingStore` 实例化)。
+    nonisolated static func load(from defaults: UserDefaults) -> [FolderBinding] {
         guard let data = defaults.data(forKey: Key.bindings),
               let decoded = try? JSONDecoder().decode([FolderBinding].self, from: data)
         else { return [] }

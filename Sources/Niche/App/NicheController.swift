@@ -150,6 +150,7 @@ final class NicheController {
         wire()
         hotZone.refreshPlacement()
         rebuildMirrors()
+        FolderIndexer.refresh(environment.bindingStore.bindings)
         hotkey.onTrigger = { [weak self] in self?.toggle() }
         applyTriggerPreferences()   // 热区开关/延迟 + 注册快捷键(默认 ⌃⌥⌘Space 兜底呼出)
         // objectWillChange 在赋值前发布 → 推迟一拍读新值再应用。
@@ -340,6 +341,7 @@ final class NicheController {
                 let select = self.pendingSelectBindingID
                 self.pendingSelectBindingID = nil
                 self.rebuildMirrors(selecting: select)
+                FolderIndexer.refresh(self.environment.bindingStore.bindings)
             }
     }
 
@@ -377,6 +379,17 @@ final class NicheController {
         }
         guard !panelController.isTransientShown else { return }
         present()
+    }
+
+    /// App Intent 入口:切到指定绑定并确保面板可见。找不到(已在设置里移除)返回 false,
+    /// 由调用方明确报错,不静默停在无关 tab。
+    func showFolder(_ id: FolderBinding.ID) -> Bool {
+        guard let index = model.mirrors.firstIndex(where: { $0.binding.id == id }) else {
+            return false
+        }
+        model.selectTab(index)
+        show()
+        return true
     }
 
     /// kind = 触发来源;screen 非 nil 时是热区实际命中的屏幕 authority,禁止二次猜屏。

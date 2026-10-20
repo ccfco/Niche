@@ -31,12 +31,42 @@
         }
       }
     },
+    "Niche 中固定的文件夹": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A folder pinned in Niche"
+          }
+        }
+      }
+    },
     "Niche 会在访达中选中此文件夹。在访达里右键选择「自定义文件夹」,即可设置符号、emoji 或颜色。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Niche will select this folder in Finder. Right-click it there and choose “Customize Folder” to set a symbol, emoji, or color."
+          }
+        }
+      }
+    },
+    "Niche 尚未就绪，请重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niche isn't ready yet. Try again."
+          }
+        }
+      }
+    },
+    "Niche 文件夹": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niche Folder"
           }
         }
       }
@@ -77,6 +107,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "\"%@\" may already be in use by the system or another app. Please try a different combination."
+          }
+        }
+      }
+    },
+    "「%@」已不在 Niche 中。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is no longer in Niche."
           }
         }
       }
@@ -451,12 +491,32 @@
         }
       }
     },
+    "呼出 ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal ${applicationName}"
+          }
+        }
+      }
+    },
     "呼出 Niche": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show Niche"
+          }
+        }
+      }
+    },
+    "呼出刘海面板。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal the notch panel."
           }
         }
       }
@@ -501,12 +561,52 @@
         }
       }
     },
+    "在 ${applicationName} 中打开 ${folder}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open ${folder} in ${applicationName}"
+          }
+        }
+      }
+    },
     "在 Finder 中显示": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show in Finder"
+          }
+        }
+      }
+    },
+    "在 Niche 中打开 ${folder}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open ${folder} in Niche"
+          }
+        }
+      }
+    },
+    "在 Niche 中打开文件夹": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Folder in Niche"
+          }
+        }
+      }
+    },
+    "在刘海面板中打开固定的文件夹。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a pinned folder in the notch panel."
           }
         }
       }
@@ -677,6 +777,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open"
+          }
+        }
+      }
+    },
+    "打开 ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open ${applicationName}"
+          }
+        }
+      }
+    },
+    "打开 Niche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Niche"
+          }
+        }
+      }
+    },
+    "打开 Niche 面板": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Niche Panel"
+          }
+        }
+      }
+    },
+    "打开固定文件夹": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Pinned Folder"
           }
         }
       }
