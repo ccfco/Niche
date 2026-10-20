@@ -11,7 +11,7 @@ import CoreServices   // MDItem(Spotlight 元数据)
 /// 授权过,列其子文件夹不再弹窗;**绝不**在启动/后台/预取里主动遍历(同 DirectoryMirror.arm 红线)。
 ///
 /// 后台并发计算 + NSCache 缓存(同 ThumbnailCache 纪律:禁 row 同步 I/O,spec §4.4)。
-final class ItemInfoCache {
+final class ItemInfoCache: @unchecked Sendable {
     static let shared = ItemInfoCache()
 
     private let cache = NSCache<NSString, NSString>()

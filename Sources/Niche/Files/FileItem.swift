@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// 字段由一次批量 `resourceValues` 读取填充,避免 row 渲染路径上逐属性 I/O。
 /// `isDataless` 用 `ubiquitousItemDownloadingStatusKey` 判定(spec §4.1.2:**不**靠 .icloud
 /// 后缀),缩略图/预览路径据此跳过未下载文件,绝不为出缩略图触发下载。
-struct FileItem: Identifiable, Equatable {
+nonisolated struct FileItem: Identifiable, Equatable, Sendable {
     let url: URL
     let name: String
     let isDirectory: Bool

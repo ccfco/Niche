@@ -18,7 +18,12 @@ settings:
   base:
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: YES
-    SWIFT_VERSION: "5.0"
+    SWIFT_VERSION: "6.0"
+    # 隔离显式标注:UI/AppKit 类型已标 @MainActor,纯值类型/几何/IO 保持 nonisolated;
+    # 配合 Approachable Concurrency 把数据竞争变成编译错误,而不是运行期偶发。
+    SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: "0.1.11"
     CURRENT_PROJECT_VERSION: 187
     # 本地开发用 ad-hoc 签名;不沙盒,GitHub Release 自分发时再换正式签名/公证
@@ -29,7 +34,6 @@ settings:
     # 「显示简介」经 Apple Events 驱动访达(FinderGetInfo)需 automation entitlement;本地非 hardened
     # 被忽略,公证开 hardened runtime 时生效。放 sources 外(仓库根),不被当资源打包。
     CODE_SIGN_ENTITLEMENTS: Niche.entitlements
-    SWIFT_STRICT_CONCURRENCY: minimal
 
 targets:
   Niche:
@@ -61,6 +65,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.NicheTests
         GENERATE_INFOPLIST_FILE: YES
+        # 分阶段迁移:应用目标已用 Swift 6 + 默认 MainActor 隔离;测试目标里的 XCTestCase
+        # 是 nonisolated init/setUp,与默认 MainActor 冲突。先把测试留在 Swift 5 模式,
+        # 新增测试可继续用 Swift Testing;后续单独一轮去除类级 @MainActor 再切 6。
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
 schemes:
   Niche:

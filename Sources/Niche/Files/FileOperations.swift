@@ -260,7 +260,7 @@ final class FileOperations {
         kind: FileOperationProgress.Kind,
         items: [URL],
         operation: @escaping @Sendable (_ url: URL,
-                                          _ record: @escaping @Sendable (FileOperationRecord) async -> Void) async throws -> Void
+                                          _ record: @escaping @MainActor @Sendable (FileOperationRecord) async -> Void) async throws -> Void
     ) async throws {
         guard !items.isEmpty else { return }
         guard activeTask == nil else { throw FileOperationError.busy }
@@ -276,8 +276,8 @@ final class FileOperations {
                         self?.onProgress?(.init(kind: kind, completed: index, total: total,
                                                 currentName: url.lastPathComponent))
                     }
-                    let record: @Sendable (FileOperationRecord) async -> Void = { record in
-                        await MainActor.run { [weak self] in self?.undo.record(record) }
+                    let record: @MainActor @Sendable (FileOperationRecord) async -> Void = { [weak self] record in
+                        self?.undo.record(record)
                     }
                     try await operation(url, record)
                     await MainActor.run { [weak self] in

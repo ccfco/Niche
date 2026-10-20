@@ -15,8 +15,8 @@ final class ICloudStatus {
         (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem ?? false
     }
 
-    private var query: NSMetadataQuery?
-    private var observers: [NSObjectProtocol] = []
+    nonisolated(unsafe) private var query: NSMetadataQuery?
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
     /// 下载状态变化回调:传出本目录内各 URL 的"是否仍为 dataless"。镜像据此更新云占位图标。
     var onStatusChange: (([URL: Bool]) -> Void)?

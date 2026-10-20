@@ -98,7 +98,7 @@ final class DirectoryMirror: ObservableObject {
         }
     }
 
-    private var stream: FSEventStreamWrapper?
+    nonisolated(unsafe) private var stream: FSEventStreamWrapper?
     private let icloud = ICloudStatus()
     private var snapshot = DirectorySnapshot(items: [])
     private var datalessOverride: [URL: Bool] = [:]
@@ -305,7 +305,7 @@ final class DirectoryMirror: ObservableObject {
     private func startStream() {
         stream?.stop()
         let wrapper = FSEventStreamWrapper(path: currentDirectory.path) { [weak self] batch in
-            self?.handle(batch)
+            MainActor.assumeIsolated { self?.handle(batch) }
         }
         isWatching = wrapper.start()
         stream = wrapper

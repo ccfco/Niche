@@ -17,7 +17,7 @@ import QuickLookThumbnailing
 ///   类型/标签/自定义图标,**与内容 mtime 无关** → 键不含 mtime(编辑文件内容不白白重生成图标)。
 ///   仅"有标签"项才走 QL(无标签项保持即时系统图标,不为零收益做异步开销;突发量天然被"有标签"
 ///   这一闸限制得很小,故不引 in-flight 合并/并发上限,守「不过度工程化」)。
-final class ThumbnailCache {
+final class ThumbnailCache: @unchecked Sendable {
     static let shared = ThumbnailCache()
 
     private let cache = NSCache<NSString, NSImage>()

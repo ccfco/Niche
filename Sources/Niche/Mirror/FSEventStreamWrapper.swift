@@ -4,7 +4,7 @@ import CoreServices
 /// 一批 FSEvents 的聚合结果(spec §4.1.1:FSEvents 不是逐文件强一致流,事件会 coalesce/drop)。
 ///
 /// 我们不信任增量,只用这些信号决定"要不要重扫 + 重新 snapshot diff":
-struct FSEventBatch {
+nonisolated struct FSEventBatch: Sendable {
     /// 必须对相关子树全量重扫(MustScanSubDirs / UserDropped / KernelDropped / event-id wrap)。
     var needsFullRescan: Bool = false
     /// 被监听的根目录自身被移动/重命名(RootChanged)→ 需重解析 bookmark 并重建流。
@@ -20,13 +20,13 @@ struct FSEventBatch {
 ///
 /// 用 WatchRoot 标志以捕获根目录自身改名/移动(RootChanged);用 dispatch queue 驱动,
 /// 回调里解析 flags 后 hop 回主线程。
-final class FSEventStreamWrapper {
+nonisolated final class FSEventStreamWrapper {
     private var stream: FSEventStreamRef?
     private let path: String
     private let queue = DispatchQueue(label: "com.ccfco.Niche.fsevents")
-    private let onBatch: (FSEventBatch) -> Void
+    private let onBatch: @Sendable (FSEventBatch) -> Void
 
-    init(path: String, onBatch: @escaping (FSEventBatch) -> Void) {
+    init(path: String, onBatch: @escaping @Sendable (FSEventBatch) -> Void) {
         self.path = path
         self.onBatch = onBatch
     }
@@ -109,6 +109,6 @@ final class FSEventStreamWrapper {
         }
 
         let onBatch = wrapper.onBatch
-        DispatchQueue.main.async { onBatch(batch) }
+        DispatchQueue.main.async { MainActor.assumeIsolated { onBatch(batch) } }
     }
 }

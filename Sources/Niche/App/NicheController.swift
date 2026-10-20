@@ -138,7 +138,7 @@ final class NicheController {
     /// 这种自我报告可靠——验证的是真实行为而非用户是否读完文字。
     let panelPresented = PassthroughSubject<Void, Never>()
 
-    private var resignObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var resignObserver: NSObjectProtocol?
     private var screenCancellable: AnyCancellable?
     private var renameCancellable: AnyCancellable?
     private var renameTabCancellable: AnyCancellable?

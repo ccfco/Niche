@@ -11,7 +11,7 @@ final class QuickLookController: NSObject {
     private let autoHide: AutoHideCoordinator
     private var urls: [URL] = []
     private var index = 0
-    private var closeObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var closeObserver: NSObjectProtocol?
     /// 监听 QL 内 ←→ 翻页(currentPreviewItemIndex 变化)是否已注册,避免重复 add/remove KVO。
     private var observingIndex = false
     /// 正在为哪个 index 下载 dataless 目标:防同 index 双触发(同步推送 + selectionCancellable 异步)
@@ -19,7 +19,7 @@ final class QuickLookController: NSObject {
     private var pendingDownloadIndex: Int?
     /// 被 KVO 观察的 QL 面板弱引用:供 deinit 移除 observer,避免在 nonisolated deinit 里调
     /// @MainActor 的 QLPreviewPanel.shared()(消除隔离告警 + 守 deinit 红线)。
-    private weak var observedPanel: QLPreviewPanel?
+    nonisolated(unsafe) private weak var observedPanel: QLPreviewPanel?
 
     /// 宿主面板当前层级提供者(由 NicheController 注入):QL present 时抬到「宿主 +1」浮于面板之上。
     /// 返回 nil(宿主面板不存在)则不抬层级,保留 QL 系统默认 —— 不臆造一个可能盖住菜单/通知的高层。

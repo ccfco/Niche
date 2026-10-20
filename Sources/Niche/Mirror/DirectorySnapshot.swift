@@ -5,7 +5,7 @@ import Foundation
 /// FSEvents 不是逐文件强一致流(会 coalesce / drop,见 spec §4.1.1),所以镜像同步**靠快照
 /// 比对而非增量信任**:每次拿到事件就重新列目录得到新 `DirectorySnapshot`,与旧快照 diff,
 /// UI 按 diff 增量更新。
-struct DirectorySnapshot: Equatable {
+nonisolated struct DirectorySnapshot: Equatable, Sendable {
     /// key = 文件 URL(标准化),value = 该项。
     let items: [URL: FileItem]
 
@@ -63,7 +63,7 @@ struct DirectorySnapshot: Equatable {
 }
 
 /// 两快照之间的差异。重命名表现为 removed(旧名)+ added(新名);内容/属性变化为 changed。
-struct SnapshotDiff: Equatable {
+nonisolated struct SnapshotDiff: Equatable, Sendable {
     var added: [FileItem]
     var removed: [FileItem]
     var changed: [FileItem]

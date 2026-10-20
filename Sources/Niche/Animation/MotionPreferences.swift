@@ -16,7 +16,7 @@ final class MotionPreferences: ObservableObject {
     /// 材质是否应降级为不透明(降低透明度或增强对比度任一开启)。
     var prefersOpaque: Bool { reduceTransparency || increaseContrast }
 
-    private var observer: NSObjectProtocol?
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
 
     init() {
         let ws = NSWorkspace.shared

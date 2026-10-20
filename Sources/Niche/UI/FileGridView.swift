@@ -215,7 +215,7 @@ struct FileDropDelegate: DropDelegate {
 /// 拖入角标预判缓存:dropUpdated 随鼠标高频触发,而拖拽来源(剪贴板)与目标目录在整段拖拽里
 /// 通常不变。按「拖拽剪贴板 changeCount + 目标目录路径」缓存(可写性, 同卷判定),命中即免去重复
 /// readObjects + 逐源 resourceValues + access(Codex review)。拖拽串行且事件在主线程,单例够用。
-private final class DropPreflightCache {
+@MainActor private final class DropPreflightCache {
     static let shared = DropPreflightCache()
 
     private var changeCount = Int.min

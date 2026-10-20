@@ -7,7 +7,7 @@ final class ScreenObserver: ObservableObject {
     /// 屏幕配置变化(分辨率/接拔显示器/菜单栏隐藏)时自增,供呼出前重新解析几何。
     @Published private(set) var generation = 0
 
-    private var observer: NSObjectProtocol?
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
 
     init() {
         observer = NotificationCenter.default.addObserver(

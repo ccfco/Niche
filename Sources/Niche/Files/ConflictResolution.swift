@@ -17,7 +17,7 @@ enum ConflictResolution: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum ConflictResolver {
+nonisolated enum ConflictResolver {
     /// 目标目录已存在同名时,为"两者都保留"生成不冲突的新 URL。
     /// 规则与 Finder 一致:`file.txt` → `file 2.txt` → `file 3.txt` …;无扩展名 `dir` → `dir 2`。
     static func uniqueURL(for proposed: URL, in directory: URL,

@@ -46,15 +46,15 @@ final class PanelController {
     /// 瞬态下鼠标离开"面板↔刘海"走廊(宿主据此过 AutoHideCoordinator 抑制判定后收回)。
     var onMouseExitedTransient: (() -> Void)?
 
-    private var mouseMonitors: [Any] = []
+    nonisolated(unsafe) private var mouseMonitors: [Any] = []
     /// 面板键盘权威:本地 keyDown monitor(先于响应链收到事件)。面板可见即装,收回即卸。
     /// 取代旧的 SwiftUI 面板级 `.onKeyPress` —— 后者在「父视图聚焦 vs Table 抢焦点」两态行为不一致
     /// (列表 ↑↓ 跳行 #1、空格被 Table 吞 #2/#22)。monitor 与 SwiftUI 焦点无关,行为确定。
-    private var keyMonitor: Any?
+    nonisolated(unsafe) private var keyMonitor: Any?
     /// 重命名「点外部提交」权威:本地 leftMouseDown monitor(键盘 monitor 的鼠标镜像)。重命名进行
     /// 中点输入框之外 → 先让输入框失焦(makeFirstResponder(nil) → 提交),事件继续走选中。与 keyMonitor
     /// 同生命周期(面板可见即装,收回即卸)。只看 app 本地事件:点真正面板外由窗口 resignKey 自动提交。
-    private var renameClickMonitor: Any?
+    nonisolated(unsafe) private var renameClickMonitor: Any?
     /// type-ahead 键入跳选缓冲(键盘单一权威持有;吃掉可见字符,避免列表态原生 NSTableView
     /// 的 type-select 与之双权威打架)。
     private var typeAhead = TypeAheadBuffer()

@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 
 /// 全局快捷键兜底呼出(spec §4.2:全局快捷键兜底)。用 Carbon RegisterEventHotKey —— 这是
 /// 注册系统级热键的标准且无需辅助功能授权的途径(NSEvent 全局监听需 AX 授权,更重)。
-final class GlobalHotkey {
+final class GlobalHotkey: @unchecked Sendable {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     var onTrigger: (() -> Void)?
@@ -28,7 +28,7 @@ final class GlobalHotkey {
             GetEventParameter(event, EventParamName(kEventParamDirectObject),
                               EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hkID)
-            DispatchQueue.main.async { hotkey.onTrigger?() }
+            DispatchQueue.main.async { MainActor.assumeIsolated { hotkey.onTrigger?() } }
             return noErr
         }, 1, &eventType, selfPtr, &handlerRef)
         guard installStatus == noErr else {
@@ -53,5 +53,6 @@ final class GlobalHotkey {
         if let handlerRef { RemoveEventHandler(handlerRef); self.handlerRef = nil }
     }
 
-    deinit { unregister() }
+    // 不在 deinit 里 unregister:deinit 是 nonisolated,不能调 MainActor 方法(CLAUDE.md 红线)。
+    // register() 每次先 unregister,实例生命周期与应用一致,进程退出由系统回收 Carbon 注册。
 }

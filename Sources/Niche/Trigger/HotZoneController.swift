@@ -54,8 +54,8 @@ final class HotZoneController {
         hoverIntent.delay = delay
     }
 
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    nonisolated(unsafe) private var globalMonitor: Any?
+    nonisolated(unsafe) private var localMonitor: Any?
     /// 当前屏所有生效热区(主热区 + 热角 + 边缘)。鼠标进入任一个即起 hover intent。
     private var zones: [Zone] = []
     /// 鼠标当前所在区的身份(hover intent 确认时回传给宿主;离开置 nil)。

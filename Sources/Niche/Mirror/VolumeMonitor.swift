@@ -9,27 +9,23 @@ final class VolumeMonitor {
     /// 卷挂载(传出新挂载点路径)。
     var onMount: ((URL) -> Void)?
 
-    private var observers: [NSObjectProtocol] = []
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
     init() {
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(
             forName: NSWorkspace.didUnmountNotification, object: nil, queue: .main
         ) { [weak self] note in
-            MainActor.assumeIsolated {
-                if let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL {
-                    self?.onUnmount?(url)
-                }
-            }
+            let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+            guard let url else { return }
+            MainActor.assumeIsolated { self?.onUnmount?(url) }
         })
         observers.append(center.addObserver(
             forName: NSWorkspace.didMountNotification, object: nil, queue: .main
         ) { [weak self] note in
-            MainActor.assumeIsolated {
-                if let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL {
-                    self?.onMount?(url)
-                }
-            }
+            let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+            guard let url else { return }
+            MainActor.assumeIsolated { self?.onMount?(url) }
         })
     }
 
