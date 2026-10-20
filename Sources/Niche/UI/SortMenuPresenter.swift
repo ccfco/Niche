@@ -7,7 +7,7 @@ import AppKit
 /// —— SwiftUI Menu 的 menu window 会抢走 key 焦点,使瞬态面板 didResignKey 即被收走(鼠标
 /// 移到排序按钮上面板就消失的根因,与 tab「+」/ 右键菜单同一根因,见 FolderTabMenus.swift)。
 ///
-/// 每次打开按当前 sortOrder 重建,点选即写回 model.sortOrder(@Published didSet 自动重排 +
+/// 每次打开按当前 sortOrder 重建,点选即写回 model.sortOrder(didSet 自动重排 +
 /// 持久化);菜单项用 representedObject 直挂枚举值,免 tag 簿记。
 @MainActor
 final class SortMenuPresenter: NSObject, NSMenuDelegate {
