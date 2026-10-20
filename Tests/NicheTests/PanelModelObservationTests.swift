@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import Niche
 
@@ -85,4 +86,36 @@ struct PanelModelObservationTests {
         model.endPathInput()
         #expect(events == [true, false])
     }
+
+    /// 回归:`sortedItems` 命中缓存时只读 `itemsVersion`,必须让它参与 Observation,
+    /// 否则视图在目录内容变化后收不到失效通知(缓存命中路径没有任何可观察依赖)。
+    @Test("sortedItems 缓存命中仍随 mirror 内容失效")
+    func sortedItemsTracksMirrorContentThroughCache() async throws {
+        let dir = try TestSupport.makeTempDir()
+        defer { TestSupport.cleanup(dir) }
+        try TestSupport.touch(dir.appendingPathComponent("a.txt"))
+
+        let model = PanelModel()
+        model.rebuildMirrors(from: [FolderBinding(path: dir.path)])
+        let mirror = try #require(model.currentMirror)
+        mirror.arm()
+        await TestSupport.waitUntil { mirror.items.count == 1 }
+
+        _ = model.sortedItems   // 预热排序缓存,后续读取走 cache hit
+        let flag = ObservationFlag()
+        withObservationTracking {
+            _ = model.sortedItems
+        } onChange: {
+            flag.value = true
+        }
+
+        try TestSupport.touch(dir.appendingPathComponent("b.txt"))
+        mirror.refresh()
+        #expect(flag.value, "缓存命中路径也必须登记可观察依赖")
+    }
+}
+
+/// `withObservationTracking` 的 onChange 是 @Sendable,用最小盒子跨执行器记录命中。
+private final class ObservationFlag: @unchecked Sendable {
+    var value = false
 }

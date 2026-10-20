@@ -37,6 +37,8 @@ final class DirectoryMirror {
     /// 内容代次(PanelModel.sortedItems 的缓存键):数组逐元素比较太贵,代次即内容身份。
     /// 全局单调计数,避免"实例释放后新 mirror 复用同地址 + 代次同为初值"的脏缓存。
     private static var contentGeneration = 0
+    /// **必须参与 Observation**:`sortedItems` 命中缓存时只读代次、不再读 `items`;
+    /// 若把代次藏起来,缓存命中路径就不会登记任何依赖,视图在内容变化后收不到失效通知。
     private(set) var itemsVersion = 0
     /// 内容/状态变化的旁路回调(非视图消费)。Observation 没有 `objectWillChange` 这种 catch-all,
     /// 需要驱动 QL 刷新/面板 relayout/重命名清扫的宿主显式挂在这里;视图侧靠属性级追踪。
