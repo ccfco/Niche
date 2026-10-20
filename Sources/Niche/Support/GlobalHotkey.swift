@@ -8,6 +8,9 @@ final class GlobalHotkey: @unchecked Sendable {
     private var handlerRef: EventHandlerRef?
     var onTrigger: (() -> Void)?
 
+    /// 实例通常与应用同生命周期;仍显式注销,避免 Carbon 事件处理器在极端时序下持有已释放的 self。
+    deinit { unregister() }
+
     /// 默认 ⌃⌥⌘Space(具体值/展示文案收口 HotkeyPreference.default)。keyCode 49 = Space。
     /// **不能用 ⌥⌘Space**:那是系统 symbolic hotkey 65「Show Finder search window」(默认启用),
     /// 系统级 symbolic hotkey 优先于 RegisterEventHotKey,会把热键抢走、面板出不来(实测确认)。
@@ -52,7 +55,4 @@ final class GlobalHotkey: @unchecked Sendable {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef); self.hotKeyRef = nil }
         if let handlerRef { RemoveEventHandler(handlerRef); self.handlerRef = nil }
     }
-
-    // 不在 deinit 里 unregister:deinit 是 nonisolated,不能调 MainActor 方法(CLAUDE.md 红线)。
-    // register() 每次先 unregister,实例生命周期与应用一致,进程退出由系统回收 Carbon 注册。
 }

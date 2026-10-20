@@ -41,7 +41,7 @@ struct FolderEntity: AppEntity, IndexedEntity {
 struct FolderEntityQuery: EntityQuery, EnumerableEntityQuery {
     func entities(for identifiers: [FolderEntity.ID]) async throws -> [FolderEntity] {
         let wanted = Set(identifiers)
-        return Self.allEntities().filter { wanted.contains($0.id) }
+        return try await allEntities().filter { wanted.contains($0.id) }
     }
 
     func allEntities() async throws -> [FolderEntity] {
@@ -50,9 +50,5 @@ struct FolderEntityQuery: EntityQuery, EnumerableEntityQuery {
 
     func suggestedEntities() async throws -> [FolderEntity] {
         try await allEntities()
-    }
-
-    private static func allEntities() -> [FolderEntity] {
-        BindingStore.load(from: .standard).map(FolderEntity.init)
     }
 }

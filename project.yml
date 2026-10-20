@@ -65,11 +65,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.NicheTests
         GENERATE_INFOPLIST_FILE: YES
-        # 分阶段迁移:应用目标已用 Swift 6 + 默认 MainActor 隔离;测试目标里的 XCTestCase
-        # 是 nonisolated init/setUp,与默认 MainActor 冲突。先把测试留在 Swift 5 模式,
-        # 新增测试可继续用 Swift Testing;后续单独一轮去除类级 @MainActor 再切 6。
-        SWIFT_VERSION: "5.0"
-        SWIFT_STRICT_CONCURRENCY: minimal
+        # 与应用目标同档:Swift 6 + complete。关键是默认 actor 隔离是 nonisolated,
+        # XCTestCase 的 nonisolated init/setUp 不再与类级 @MainActor 冲突;XCTest 与
+        # Swift Testing 可在同一 bundle 共存。
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
 schemes:
