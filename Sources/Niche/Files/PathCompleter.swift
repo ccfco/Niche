@@ -61,13 +61,40 @@ enum PathCompleter {
 
     /// 展开 + 标准化 + 存在性判定(symlink 不解析:进入链接目录看到的路径应保留用户输入形态,
     /// 与 Finder 前往一致)。非绝对路径视为 missing(不猜相对于谁)。
+    /// 原样查不到时再试 shell 反转义形态:访达「拷贝为路径名称」/终端拖入给的是 `\ `、`\~`
+    /// 转义路径,原样按 POSIX 查必 miss。原样优先 —— 真实文件名可含字面 `\`。
     static func resolve(_ input: String) -> Target {
         let expanded = expand(input.trimmingCharacters(in: .whitespacesAndNewlines))
         guard expanded.hasPrefix("/") else { return .missing }
-        let url = URL(fileURLWithPath: expanded).standardizedFileURL
+        if let target = existingTarget(expanded) { return target }
+        let unescaped = shellUnescaped(expanded)
+        guard unescaped != expanded else { return .missing }
+        return existingTarget(unescaped) ?? .missing
+    }
+
+    /// shell 反转义:`\X` → `X`(`\\` → `\`);末尾孤立 `\` 不是转义,原样保留。
+    private static func shellUnescaped(_ input: String) -> String {
+        var out = ""
+        var iterator = input.unicodeScalars.makeIterator()
+        while let scalar = iterator.next() {
+            guard scalar == "\\" else {
+                out.unicodeScalars.append(scalar)
+                continue
+            }
+            if let escaped = iterator.next() {
+                out.unicodeScalars.append(escaped)
+            } else {
+                out.unicodeScalars.append(scalar)
+            }
+        }
+        return out
+    }
+
+    private static func existingTarget(_ path: String) -> Target? {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
-            return .missing
+            return nil
         }
         return isDir.boolValue ? .directory(url) : .file(url)
     }

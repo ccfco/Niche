@@ -68,4 +68,35 @@ final class PathCompleterTests: XCTestCase {
         XCTAssertEqual(PathCompleter.resolve("  " + dir.path + "/Reports  "), // 粘贴常带空白
                        .directory(dir.appendingPathComponent("Reports").standardizedFileURL))
     }
+
+    // MARK: - resolve:访达「拷贝为路径名称」的 shell 转义形态
+
+    func testResolveFinderEscapedPasteHitsRealName() throws {
+        // 访达拷贝路径输出 shell 转义形态(空格 → `\ `,`~` → `\~`),粘进 Niche 必须命中
+        // 真实文件名 —— 否则含空格/iCloud 容器的路径从访达粘贴必报"路径不存在"。
+        let real = dir.appendingPathComponent("Mobile Documents/iCloud~md~obsidian")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        let escaped = dir.path + "/Mobile\\ Documents/iCloud\\~md\\~obsidian"
+        XCTAssertEqual(PathCompleter.resolve(escaped), .directory(real.standardizedFileURL))
+    }
+
+    func testResolvePrefersLiteralBackslashName() throws {
+        // POSIX 文件名合法含字面 `\`:原样命中时不得反转义,否则真实路径被转义形态抢走。
+        let literal = dir.appendingPathComponent("a\\b")
+        try FileManager.default.createDirectory(at: literal, withIntermediateDirectories: false)
+        XCTAssertEqual(PathCompleter.resolve(dir.path + "/a\\b"),
+                       .directory(literal.standardizedFileURL))
+    }
+
+    func testResolveDoubleBackslashEscapedPaste() throws {
+        // 名字含字面 `\` 的条目,访达拷贝时转义成 `\\`:反转义应还原成真实名字。
+        let literal = dir.appendingPathComponent("c\\d")
+        try FileManager.default.createDirectory(at: literal, withIntermediateDirectories: false)
+        XCTAssertEqual(PathCompleter.resolve(dir.path + "/c\\\\d"),
+                       .directory(literal.standardizedFileURL))
+    }
+
+    func testResolveEscapedMissStillMissing() {
+        XCTAssertEqual(PathCompleter.resolve(dir.path + "/no\\ such"), .missing)
+    }
 }
