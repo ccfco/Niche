@@ -33,6 +33,10 @@ struct ContentPanelView: View {
             }
             breadcrumb
             content
+            if let progress = model.operationProgress {
+                OperationProgressView(progress: progress, edge: edge,
+                                      onCancel: actions.onCancelFileOperation)
+            }
             BottomBarView(model: model, edge: edge,
                           onSortMenu: actions.onSortMenu,
                           onIconSizeEditing: actions.onIconSizeEditing)

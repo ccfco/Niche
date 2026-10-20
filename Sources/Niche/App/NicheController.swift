@@ -27,6 +27,10 @@ final class NicheController {
         presentModal: { [weak self] body in
             guard let self else { body(); return }
             self.withModalContext(body)
+        },
+        presentModalAsync: { [weak self] body in
+            guard let self else { Task { await body() }; return }
+            self.withModalContextAsync(body)
         }
     )
 
@@ -86,6 +90,7 @@ final class NicheController {
         onCopyPath: { [weak self] urls in self?.ops.copyPaths(urls) },
         onTrash: { [weak self] urls in self?.ops.trash(urls) },
         onPaste: { [weak self] in self?.paste() },
+        onCancelFileOperation: { [weak self] in self?.ops.cancelCurrentOperation() },
         onUndo: { [weak self] in self?.undoLast() },
         onRedo: { [weak self] in self?.redoLast() },
         onNewFolder: { [weak self] in self?.newFolderInCurrentDirectory() },
@@ -195,6 +200,8 @@ final class NicheController {
     private func wire() {
         // 异步文件操作(recycle 完成回调)失败 → 可见提示(throws 上抛不到的路径)。
         ops.onError = { [weak self] title, error in self?.presentFailure(title: title, error: error) }
+        // 批量操作进度 → 面板底栏进度行(主线程回调,操作结束置 nil)。
+        ops.onProgress = { [weak self] progress in self?.model.setOperationProgress(progress) }
         hotZone.onTrigger = { [weak self] kind, draggingFile, screen in
             self?.present(from: kind, on: screen, draggingFile: draggingFile)
         }
@@ -537,6 +544,20 @@ final class NicheController {
         body()
     }
 
+    /// `withModalContext` 的异步版本:批量文件操作在后台执行,但整个操作期间保持
+    /// auto-hide 抑制与面板降级,结束后恢复(不能在 await 前用 defer,恢复必须等操作完成)。
+    func withModalContextAsync(_ body: @escaping @MainActor () async -> Void) {
+        autoHide.begin(.modalDialog)
+        NSApp.activate(ignoringOtherApps: true)
+        let saved = panelController.panel?.level
+        if saved != nil { panelController.panel?.level = .floating }
+        Task { @MainActor [weak self] in
+            await body()
+            if let saved { self?.panelController.panel?.level = saved }
+            self?.autoHide.end(.modalDialog)
+        }
+    }
+
     /// 用户动作失败的统一可见提示(下载/拖入/文件操作共用,不靠隐形日志吞错)。
     /// 走 withModalContext:提示期间抑制收回 + 降级面板让 NSAlert 不被遮挡。
     private func presentFailure(title: String, error: Error) {
@@ -603,11 +624,15 @@ final class NicheController {
     /// 失败弹可见提示(此前只记日志,用户视角"按了没反应")。
     private func paste() {
         guard let dir = model.currentMirror?.currentDirectory else { return }
-        withModalContext {
-            do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+        withModalContextAsync { [weak self] in
+            guard let self else { return }
+            do { try await self.ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+            catch is CancellationError {
+                Log.files.info("粘贴已取消")
+            }
             catch {
                 Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: String(localized: "无法粘贴"), error: error)
+                self.presentFailure(title: String(localized: "无法粘贴"), error: error)
             }
         }
     }
@@ -756,17 +781,20 @@ final class NicheController {
         autoHide.begin(.dragging)
         defer { autoHide.end(.dragging) }
         // 冲突弹窗(ConflictPrompt)同走 withModalContext:否则瞬态模式下 NSAlert 被面板遮挡。
-        withModalContext {
+        withModalContextAsync { [weak self] in
+            guard let self else { return }
             do {
                 switch operation {
-                case .copy: try ops.copy(incoming, to: dir, resolve: ConflictPrompt.ask)
-                case .move: try ops.move(incoming, to: dir, resolve: ConflictPrompt.ask)
+                case .copy: try await self.ops.copy(incoming, to: dir, resolve: ConflictPrompt.ask)
+                case .move: try await self.ops.move(incoming, to: dir, resolve: ConflictPrompt.ask)
                 }
+            } catch is CancellationError {
+                Log.files.info("拖入操作已取消")
             } catch {
                 // 不静默吞错(CLAUDE.md):拖入 copy/move 失败(权限/磁盘满/冲突)必须让用户知道,
                 // 与双击下载失败提示对称,而非只记日志后无声消失。
                 Log.files.error("拖入处理失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: String(localized: "无法移入文件"), error: error)
+                self.presentFailure(title: String(localized: "无法移入文件"), error: error)
             }
         }
     }

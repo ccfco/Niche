@@ -127,6 +127,13 @@ final class PanelModel: ObservableObject {
     func beginDownload(_ id: FileItem.ID) { downloadingIDs.insert(id) }
     func endDownload(_ id: FileItem.ID) { downloadingIDs.remove(id) }
 
+    /// 批量文件操作进度(复制/移动/压缩)。nil = 无操作;底栏据此显示进度行与取消按钮。
+    @Published private(set) var operationProgress: FileOperationProgress?
+
+    func setOperationProgress(_ progress: FileOperationProgress?) {
+        operationProgress = progress
+    }
+
     /// 拖入悬停的目录条目(目录格子/行是独立落点,悬停高亮提示"会落进这个文件夹")。
     /// 两模式共用单一真相;列表模式一行四列各是独立 drop region,同 id 计数避免列间切换闪烁。
     @Published private(set) var dropTargetID: FileItem.ID?

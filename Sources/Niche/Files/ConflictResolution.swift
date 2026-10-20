@@ -1,7 +1,7 @@
 import Foundation
 
 /// 同名冲突处理(spec §4.5 注②:drop 同名冲突要自己出"替换/两者都保留/跳过"提示)。
-enum ConflictResolution: String, CaseIterable, Identifiable {
+enum ConflictResolution: String, CaseIterable, Identifiable, Sendable {
     case replace    // 替换
     case keepBoth   // 两者都保留(目标改名)
     case skip       // 跳过

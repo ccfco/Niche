@@ -5,7 +5,7 @@ import Foundation
 /// `NSWorkspace.recycle` 不挂 Finder 的 ⌘Z undo 栈 —— 它只返回"原 URL → 废纸篓 URL"映射。
 /// 所以"⌘Z 撤销删除/移动/重命名"必须 Niche 自建。MVP 至少撤销最近一次;"从废纸篓恢复"
 /// 不依赖本栈(始终可用)。
-struct FileOperationRecord: Equatable {
+struct FileOperationRecord: Equatable, Sendable {
     enum Kind: Equatable {
         case trash(original: URL, trashed: URL)   // recycle 返回的映射
         case move(from: URL, to: URL)
@@ -18,7 +18,7 @@ struct FileOperationRecord: Equatable {
 /// 重做记录(⇧⌘Z)。**不是 FileOperationRecord 的镜像**:撤销「复制」把副本移进了废纸篓,
 /// 重做需要副本在废纸篓里的位置(撤销执行时才得到);重做「移废纸篓」会产生全新的废纸篓
 /// URL(需写回 undo 栈)。所以 redo 栈携带撤销时产生的位置信息,自成一型。
-enum FileOperationRedoRecord: Equatable {
+enum FileOperationRedoRecord: Equatable, Sendable {
     case trash(original: URL)                     // 重做 = 再移废纸篓(新废纸篓 URL 重做时取得)
     case move(from: URL, to: URL)                 // 重做 = 再移动
     case copyRestore(created: URL, trashed: URL)  // 重做 = 把副本从废纸篓挪回原位

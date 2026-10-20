@@ -44,6 +44,8 @@ struct PanelActions {
     var onCopyPath: (_ urls: [URL]) -> Void = { _ in }
     var onTrash: (_ urls: [URL]) -> Void = { _ in }
     var onPaste: () -> Void = {}
+    /// 取消正在进行的批量文件操作(复制/移动/压缩);无操作时 no-op。
+    var onCancelFileOperation: () -> Void = {}
     var onUndo: () -> Void = {}
     /// ⇧⌘Z 重做最近一次撤销。
     var onRedo: () -> Void = {}

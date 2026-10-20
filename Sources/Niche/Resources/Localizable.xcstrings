@@ -391,6 +391,16 @@
         }
       }
     },
+    "另一个文件操作正在进行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another file operation is in progress"
+          }
+        }
+      }
+    },
     "只解除绑定,不会动磁盘上的文件夹。": {
       "localizations": {
         "en": {
@@ -1081,12 +1091,42 @@
         }
       }
     },
+    "正在压缩": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compressing"
+          }
+        }
+      }
+    },
+    "正在复制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copying"
+          }
+        }
+      }
+    },
     "正在检查…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Checking…"
+          }
+        }
+      }
+    },
+    "正在移动": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moving"
           }
         }
       }

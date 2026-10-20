@@ -23,17 +23,21 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     /// (NicheController.withModalContext):抑制 auto-hide + 临时降级 panel.level 防遮挡。
     /// 菜单动作里凡跑 runModal 的都经它,杜绝"只有 addFolder 配对、右键模态被面板盖住"。
     private let presentModal: (() -> Void) -> Void
+    /// 异步版模态 bracket(长操作期间抑制 auto-hide/降级面板,操作完成后恢复)。
+    private let presentModalAsync: (@escaping @MainActor () async -> Void) -> Void
     private var context: Context?
 
     init(ops: FileOperations, autoHide: AutoHideCoordinator,
          onRequestRename: @escaping (URL) -> Void,
          onShowInfo: @escaping ([URL]) -> Void,
-         presentModal: @escaping (() -> Void) -> Void) {
+         presentModal: @escaping (() -> Void) -> Void,
+         presentModalAsync: @escaping (@escaping @MainActor () async -> Void) -> Void) {
         self.ops = ops
         self.autoHide = autoHide
         self.onRequestRename = onRequestRename
         self.onShowInfo = onShowInfo
         self.presentModal = presentModal
+        self.presentModalAsync = presentModalAsync
     }
 
     /// 构建一个配置好(delegate 已设,驱动抑制)的菜单,交给 NSView.menu(for:) 由 AppKit 弹出。
@@ -256,27 +260,35 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     /// 失败弹可见提示(此前 try? 静默吞错:目标只读/磁盘满时文件原地不动、用户无任何反馈)。
     @objc private func doMoveTo() {
         guard let ctx = context else { return }
-        presentModal {
+        presentModalAsync { [weak self] in
+            guard let self else { return }
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
             panel.prompt = String(localized: "移动到此")
             guard panel.runModal() == .OK, let dest = panel.url else { return }
-            do { try ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
+            do { try await self.ops.move(ctx.selection, to: dest, resolve: ConflictPrompt.ask) }
+            catch is CancellationError {
+                Log.files.info("移动操作已取消")
+            }
             catch {
                 Log.files.error("移动到失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: String(localized: "无法移动到所选位置"), error: error)
+                self.presentFailure(title: String(localized: "无法移动到所选位置"), error: error)
             }
         }
     }
 
     @objc private func doCompress() {
         guard let ctx = context else { return }
-        Task {
-            do { try await ops.compress(ctx.selection, in: ctx.directory) }
+        presentModalAsync { [weak self] in
+            guard let self else { return }
+            do { try await self.ops.compress(ctx.selection, in: ctx.directory) }
+            catch is CancellationError {
+                Log.files.info("压缩操作已取消")
+            }
             catch {
                 Log.files.error("压缩失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: String(localized: "无法压缩"), error: error)
+                self.presentFailure(title: String(localized: "无法压缩"), error: error)
             }
         }
     }
@@ -305,11 +317,15 @@ final class ContextMenuBuilder: NSObject, NSMenuDelegate {
     /// 粘贴:同名冲突会弹 ConflictPrompt 模态 → presentModal(抑制收回 + 降级面板防遮挡)。
     @objc private func doPaste() {
         guard let dir = context?.directory else { return }
-        presentModal {
-            do { try ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+        presentModalAsync { [weak self] in
+            guard let self else { return }
+            do { try await self.ops.paste(into: dir, resolve: ConflictPrompt.ask) }
+            catch is CancellationError {
+                Log.files.info("粘贴已取消")
+            }
             catch {
                 Log.files.error("粘贴失败:\(error.localizedDescription, privacy: .public)")
-                presentFailure(title: String(localized: "无法粘贴"), error: error)
+                self.presentFailure(title: String(localized: "无法粘贴"), error: error)
             }
         }
     }
