@@ -1,0 +1,3 @@
+#!/bin/sh
+# Git 提交门禁:跑 make check(xcodegen + 全量测试),失败即拦截提交。
+exec make check
