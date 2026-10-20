@@ -1,0 +1,36 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # 部署目标 macOS 26 / Swift 6 + Approachable Concurrency,需要 Xcode 26+;
+    # macos-15 的 SDK 低于部署目标,不能用来验证本工程。
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # make check 用 -disableAutomaticPackageResolution(本地门禁要求依赖已解析),
+      # CI 是全新环境,先显式解析 Sparkle。
+      - name: Resolve Swift packages
+        run: |
+          xcodegen generate
+          xcodebuild -project Niche.xcodeproj -scheme Niche -resolvePackageDependencies
+
+      - name: Run make check
+        run: make check
