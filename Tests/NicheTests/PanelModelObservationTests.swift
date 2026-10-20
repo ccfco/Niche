@@ -1,10 +1,14 @@
-import XCTest
+import Foundation
+import Testing
 @testable import Niche
 
 /// `@Observable` 迁移后的显式副作用回调契约:视图靠属性级追踪,宿主副作用靠这些回调。
+/// 新测试用 Swift Testing(增量迁移;既有 XCTest 保留,待单独一轮再迁)。
 @MainActor
-final class PanelModelObservationTests: XCTestCase {
-    func testOnChangeFiresForSortOrderAndTabSwitch() async throws {
+@Suite("PanelModel Observation 回调契约")
+struct PanelModelObservationTests {
+    @Test("排序与切 tab 会通知宿主副作用")
+    func sortOrderAndTabSwitchNotifyHost() throws {
         let a = try TestSupport.makeTempDir()
         let b = try TestSupport.makeTempDir()
         defer {
@@ -18,14 +22,15 @@ final class PanelModelObservationTests: XCTestCase {
         model.onChange = { changes += 1 }
 
         model.sortOrder.key = .date
-        XCTAssertGreaterThan(changes, 0, "排序变化必须触发宿主副作用")
+        #expect(changes > 0, "排序变化必须触发宿主副作用")
 
         let before = changes
         model.selectTab(1)
-        XCTAssertGreaterThan(changes, before, "切 tab 必须触发宿主副作用")
+        #expect(changes > before, "切 tab 必须触发宿主副作用")
     }
 
-    func testOnlyCurrentMirrorGetsChangeCallback() async throws {
+    @Test("只有当前 mirror 的变化汇入宿主")
+    func onlyCurrentMirrorNotifiesHost() throws {
         let a = try TestSupport.makeTempDir()
         let b = try TestSupport.makeTempDir()
         defer {
@@ -35,25 +40,27 @@ final class PanelModelObservationTests: XCTestCase {
         let model = PanelModel()
         model.rebuildMirrors(from: [FolderBinding(path: a.path), FolderBinding(path: b.path)])
 
-        XCTAssertNotNil(model.mirrors[0].onChange)
-        XCTAssertNil(model.mirrors[1].onChange, "后台 tab 不应把变化汇入宿主副作用")
+        #expect(model.mirrors[0].onChange != nil)
+        #expect(model.mirrors[1].onChange == nil, "后台 tab 不应把变化汇入宿主副作用")
 
         model.selectTab(1)
-        XCTAssertNil(model.mirrors[0].onChange)
-        XCTAssertNotNil(model.mirrors[1].onChange)
+        #expect(model.mirrors[0].onChange == nil)
+        #expect(model.mirrors[1].onChange != nil)
     }
 
-    func testCursorChangeCallbackReceivesNewID() {
+    @Test("光标回调收到新 id")
+    func cursorChangeReceivesNewID() {
         let model = PanelModel()
         var seen: [FileItem.ID?] = []
         model.onCursorChange = { seen.append($0) }
         let url = URL(fileURLWithPath: "/tmp/niche-observation/a.txt")
 
         model.selectSingle(url)
-        XCTAssertEqual(seen.last ?? nil, url)
+        #expect(seen.last ?? nil == url)
     }
 
-    func testRenamingCallbacksFireOnlyOnBoolTransition() {
+    @Test("重命名回调只在布尔态翻转时触发")
+    func renamingCallbacksOnlyOnTransition() {
         let model = PanelModel()
         var events: [Bool] = []
         model.onRenamingItemChange = { events.append($0) }
@@ -61,20 +68,21 @@ final class PanelModelObservationTests: XCTestCase {
         let b = URL(fileURLWithPath: "/tmp/niche-observation/b.txt")
 
         model.beginRename(a)
-        XCTAssertEqual(events, [true])
+        #expect(events == [true])
         model.beginRename(b)   // A→B 仍是 active,不应重复 begin
-        XCTAssertEqual(events, [true])
+        #expect(events == [true])
         model.endRename()
-        XCTAssertEqual(events, [true, false])
+        #expect(events == [true, false])
     }
 
-    func testPathInputVisibilityCallback() {
+    @Test("路径输入条显隐回调成对触发")
+    func pathInputVisibilityCallback() {
         let model = PanelModel()
         var events: [Bool] = []
         model.onPathInputVisibilityChange = { events.append($0) }
 
         model.beginPathInput()
         model.endPathInput()
-        XCTAssertEqual(events, [true, false])
+        #expect(events == [true, false])
     }
 }
