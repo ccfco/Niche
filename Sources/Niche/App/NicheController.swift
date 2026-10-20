@@ -139,16 +139,11 @@ final class NicheController {
     let panelPresented = PassthroughSubject<Void, Never>()
 
     nonisolated(unsafe) private var resignObserver: NSObjectProtocol?
+    /// onChange 里可能触发 renamingItemID 变更(清扫)→ 再入 onChange;守卫防递归。
+    private var isHandlingModelChange = false
     private var screenCancellable: AnyCancellable?
-    private var renameCancellable: AnyCancellable?
-    private var renameTabCancellable: AnyCancellable?
-    private var pathInputCancellable: AnyCancellable?
-    private var renameSweepCancellable: AnyCancellable?
     private var bindingsCancellable: AnyCancellable?
     private var triggerPrefsCancellable: AnyCancellable?
-    private var selectionCancellable: AnyCancellable?
-    private var quickLookContentCancellable: AnyCancellable?
-    private var relayoutCancellable: AnyCancellable?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -279,74 +274,63 @@ final class NicheController {
             self?.presentFailure(title: String(localized: "无法下载「\(url.lastPathComponent)」"), error: error)
         }
         // 光标变化 → 若 QL active 则跳到该项(syncCurrentIndex 内部判 active/相等,非 active 即 no-op)。
-        // @Published 在 willSet 阶段发布,此刻 cursorID 仍是旧值 → 派生的 cursorIndex 会算出"上一个"
-        // 光标,导致预览慢一拍(预览前一个对象)。故 receive(on:) 推迟到下一 runloop,读到新光标。
-        selectionCancellable = model.$cursorID
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self, let index = self.model.cursorIndex else { return }
-                self.quickLook.syncCurrentIndex(index)
-            }
-        // 内容(排序/目录下钻/FSEvents)变化 → QL active 时刷新预览列表并定位。objectWillChange 在变更
-        // 前触发,故 receive(on:) 推迟到下一 runloop 让 sortedItems 反映新态;updateItems 内 urls 未变跳过。
-        quickLookContentCancellable = model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in
-                guard let self, self.quickLook.isActive else { return }
-                // 光标失效(预览项被外部删除 / 下钻进无选中目录)→ 关预览,而非 ?? 0 跳到第一项
-                // (跳第一项会让用户莫名其妙地预览一个没选中的文件)。
-                guard let index = self.model.cursorIndex else { self.quickLook.close(); return }
-                self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: index)
-            }
+        // 回调在 cursorID 的 didSet 里触发,此刻 cursorIndex 已是新值,无需再推迟一拍
+        // (ObservableObject 时代是 willSet 发布,旧值会让预览慢一拍)。
+        model.onCursorChange = { [weak self] _ in
+            guard let self, let index = self.model.cursorIndex else { return }
+            self.quickLook.syncCurrentIndex(index)
+        }
+        // 内容(排序/目录下钻/FSEvents)变化 → QL active 时刷新预览列表并定位。回调在各属性的
+        // didSet(赋值之后)触发,sortedItems 已是新态;updateItems 内 urls 未变跳过。
+        // 统一副作用入口(替代 ObservableObject 的 catch-all objectWillChange)。
+        // 具体属性失效由 Observation 负责;这里只处理 QL 刷新 / relayout / 重命名清扫。
+        model.onChange = { [weak self] in
+            guard let self, !self.isHandlingModelChange else { return }
+            self.isHandlingModelChange = true
+            defer { self.isHandlingModelChange = false }
 
-        // 面板偏好变化 → 以实际屏幕安全夹取宽高；其余 model 变化虽也发布，relayoutSize 的
-        // 尺寸相等守卫会直接跳过，不触发无意义 frame 更新。
-        relayoutCancellable = model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.panelController.relayoutSize() }
+            if self.quickLook.isActive {
+                // 光标失效(预览项被外部删除 / 下钻进无选中目录)→ 关预览,而非 ?? 0 跳到第一项。
+                if let index = self.model.cursorIndex {
+                    self.quickLook.updateItems(self.model.sortedItems.map(\.url), current: index)
+                } else {
+                    self.quickLook.close()
+                }
+            }
+            // 内容/操作进度/路径条等变化 → 以实际屏幕安全夹取宽高(尺寸相等时内部直接跳过)。
+            self.panelController.relayoutSize()
+            // 重命名残留清扫:条目被外部删除/改名后 id 消失,结束重命名以解除 .renaming 抑制。
+            if let id = self.model.renamingItemID,
+               !self.model.sortedItems.contains(where: { $0.id == id }) {
+                self.model.endRename()
+            }
+        }
 
         // 路径输入条展开中 → .pathInput 抑制(输入路径常要对照别处,鼠标离开不该抽走面板)。
-        pathInputCancellable = model.$pathInputVisible
-            .removeDuplicates()
-            .sink { [weak self] visible in
-                guard let self else { return }
-                if visible { self.autoHide.begin(.pathInput) } else { self.autoHide.end(.pathInput) }
-            }
+        model.onPathInputVisibilityChange = { [weak self] visible in
+            guard let self else { return }
+            if visible { self.autoHide.begin(.pathInput) } else { self.autoHide.end(.pathInput) }
+        }
 
         // 就地重命名进行中 → .renaming 抑制瞬态面板 auto-hide(spec §4.6)。
         // 映射成 bool 活跃态再去重(与下方 tab 改名同款):图标模式下"改名 A 时右键另一条目选重命名"
         // 会让 renamingItemID 直接 A→B 不经 nil(RightClickCatcher 只建菜单、不 resign 旧框),
         // 按 raw id 去重会多走一次 begin 而只 end 一次 → .renaming 计数器卡 ≥1、面板永不自动收(老坑)。
-        renameCancellable = model.$renamingItemID
-            .map { $0 != nil }
-            .removeDuplicates()
-            .sink { [weak self] active in
-                guard let self else { return }
-                if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
-            }
+        model.onRenamingItemChange = { [weak self] active in
+            guard let self else { return }
+            if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+        }
         // tab 标签就地改名同走 .renaming 抑制(引用计数,与文件改名各自平衡配对):编辑标签时
         // 鼠标移出走廊不该把面板抽走。收口在 hideTransient(防抑制源泄漏,面板永不收的老坑)。
         // 映射成 bool 活跃态再去重:改名中右键另一 tab 改名时 renamingTabID 可能 A→B 不经 nil,
         // 直接对 id 去重会多走一次 begin 而只 end 一次,泄漏抑制(Codex review)。
-        renameTabCancellable = model.$renamingTabID
-            .map { $0 != nil }
-            .removeDuplicates()
-            .sink { [weak self] active in
-                guard let self else { return }
-                if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
-            }
+        model.onRenamingTabChange = { [weak self] active in
+            guard let self else { return }
+            if active { self.autoHide.begin(.renaming) } else { self.autoHide.end(.renaming) }
+        }
         // 重命名残留清扫:编辑期间条目被外部删除/改名(FSEvents 重扫后 id 消失),重命名框随
         // cell 一起卸载但 renamingItemID 还在 → .renaming 抑制源泄漏,面板永不自动收回。
         // 条目不在当前列表即结束重命名(endRename 触发上方 sink 解除抑制)。
-        renameSweepCancellable = model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in
-                guard let self, let id = self.model.renamingItemID else { return }
-                if !self.model.sortedItems.contains(where: { $0.id == id }) {
-                    self.model.endRename()
-                }
-            }
-
         // 增删/重排绑定(设置页或添加文件夹)→ 统一在此重建镜像(保持设置与面板一致)。
         bindingsCancellable = environment.bindingStore.$bindings
             .dropFirst()

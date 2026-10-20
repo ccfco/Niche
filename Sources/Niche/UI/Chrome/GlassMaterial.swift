@@ -6,7 +6,7 @@ import SwiftUI
 /// alpha 形状算阴影 → 糊成灰雾。改用 NSGlassEffectView 后内容层必须透明,玻璃才透得出来。
 /// 仅无障碍降透明/增对比时换不透明纯色(此时玻璃本就不该透)。
 struct PanelSurface: View {
-    @EnvironmentObject private var motion: MotionPreferences
+    @Environment(MotionPreferences.self) private var motion
 
     var body: some View {
         if motion.prefersOpaque {

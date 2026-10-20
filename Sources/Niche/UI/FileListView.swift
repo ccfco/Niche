@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// 列表视图(spec:迷你访达列表)。用 SwiftUI `Table` —— 底层即 `NSTableView`,与访达列表同源。
 /// 列:名称(图标+名)/ 大小 / 种类。原生单击选中、双击打开/下钻、拖出即走、右键菜单、就地重命名。
 struct FileListView: View {
-    @ObservedObject var model: PanelModel
+    var model: PanelModel
     let edge: EdgeMetrics
     var actions = PanelActions()
     /// 让 Table 成为第一响应者:PanelController 的 keyDown monitor 把列表方向键**放行**给响应链,

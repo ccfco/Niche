@@ -4,7 +4,7 @@ import SwiftUI
 /// 路径输入条(前往,spec:specs/2026-06-10-niche-path-input-design.md):
 /// 面板顶部滑出的一行,⌘⇧G / 键入 `/`、`~` 弹出。Enter 前往,Esc 关闭,错误红框留条。
 struct PathInputBar: View {
-    @ObservedObject var model: PanelModel
+    var model: PanelModel
     let edge: EdgeMetrics
     /// 提交路径;返回 false = 路径不存在/非法(条上显错,不关)。成功路径由宿主收口
     /// (endPathInput / 收面板),本视图不自作主张。

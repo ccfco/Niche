@@ -1,42 +1,68 @@
 import SwiftUI
-import Combine
+import Observation
 
-/// 面板内容的共享状态(ObservableObject)。瞬态(DNK)与常驻(PinnedPanel)两个呈现宿主
+/// 面板内容的共享状态(@Observable)。瞬态(DNK)与常驻(PinnedPanel)两个呈现宿主
 /// 绑定**同一个** PanelModel —— Pin 切换时内容状态不丢(spec §4.6)。
 ///
 /// 多 tab:每个绑定文件夹一个 DirectoryMirror(镜像数据源)。当前 tab 的 mirror 驱动网格。
-@MainActor
-final class PanelModel: ObservableObject {
-    @Published private(set) var mirrors: [DirectoryMirror] = []
-    @Published var currentTab: Int = 0
+@MainActor @Observable
+final class PanelModel {
+    private(set) var mirrors: [DirectoryMirror] = [] {
+        didSet { notifyChange() }
+    }
+    var currentTab: Int = 0 {
+        didSet {
+            bindMirrorCallbacks()
+            notifyChange()
+        }
+    }
+
+    /// 旁路变化回调(非视图消费)。Observation 没有 `objectWillChange` 这种 catch-all,
+    /// QL 刷新 / 面板 relayout / 重命名清扫由宿主显式挂在这里;视图侧靠属性级追踪。
+    @ObservationIgnored var onChange: (() -> Void)?
+    @ObservationIgnored var onCursorChange: ((FileItem.ID?) -> Void)?
+    @ObservationIgnored var onPathInputVisibilityChange: ((Bool) -> Void)?
+    @ObservationIgnored var onRenamingItemChange: ((Bool) -> Void)?
+    @ObservationIgnored var onRenamingTabChange: ((Bool) -> Void)?
+
+    private func notifyChange() { onChange?() }
     /// 选中条目 id 集合(多选,#5)。UI 据此画选中态;ops/拖出/QuickLook 用 selectionURLs。
-    @Published private(set) var selectedIDs: Set<FileItem.ID> = []
+    private(set) var selectedIDs: Set<FileItem.ID> = []
     /// 最近一次左键按下「之前」的选中集快照(PanelController 的 leftMouseDown monitor 在事件派发前写)。
     /// 列表模式慢速单击重命名据此判定「点击前就已唯一选中本项」—— SwiftUI 手势晚于 Table 原生选中,
     /// 读当前 selectedIDs 会把「首次点击选中」误判成「再次点击已选中项」(图标模式靠 mouseUp 前的旧态天然规避)。
-    var selectionAtMouseDown: Set<FileItem.ID> = []
+    @ObservationIgnored var selectionAtMouseDown: Set<FileItem.ID> = []
     /// 键盘光标 / Quick Look 预览目标 / 激活(回车·双击)目标。单选时 = 该项;多选时 = 最近一次落点。
-    @Published private(set) var cursorID: FileItem.ID?
+    private(set) var cursorID: FileItem.ID? {
+        didSet { onCursorChange?(cursorID) }
+    }
     /// ⇧ 区间选择的锚点(单选/⌘点重置;⇧ 从锚点拉到光标)。
-    private var anchorID: FileItem.ID?
+    @ObservationIgnored private var anchorID: FileItem.ID?
     /// 排序态持久化(底栏菜单 / Table 表头共写此真相源,重启保留)。
-    @Published var sortOrder = FileSortOrder.load() {
-        didSet { sortOrder.save() }
+    var sortOrder = FileSortOrder.load() {
+        didSet {
+            sortOrder.save()
+            notifyChange()
+        }
     }
     /// 隐藏文件偏好的**唯一真相源**:面板 eye 按钮与设置页共绑此属性,didSet 同步镜像并持久化
     /// (此前设置页用 @AppStorage 另存一份:设置页改了面板无感、面板切了重启即丢)。
-    @Published var showHidden: Bool = UserDefaults.standard.bool(forKey: "niche.showHidden") {
+    var showHidden: Bool = UserDefaults.standard.bool(forKey: "niche.showHidden") {
         didSet {
             mirrors.forEach { $0.showHidden = showHidden }
             UserDefaults.standard.set(showHidden, forKey: "niche.showHidden")
+            notifyChange()
         }
     }
     /// 图标视图「显示项目简介」(名称下副行:分辨率/时长/项目数/大小),持久化。纯显示态,不动 mirror。
-    @Published var showItemInfo: Bool = UserDefaults.standard.object(forKey: "niche.showItemInfo") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(showItemInfo, forKey: "niche.showItemInfo") }
+    var showItemInfo: Bool = UserDefaults.standard.object(forKey: "niche.showItemInfo") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(showItemInfo, forKey: "niche.showItemInfo")
+            notifyChange()
+        }
     }
-    @Published var windowMode: WindowMode = .transient
-    @Published var columns = 4
+    var windowMode: WindowMode = .transient
+    var columns = 4
     /// 面板几何偏好直接保存点数，与网格列数/文件数量解耦。列数只由真实宽度与图标大小派生；
     /// 呈现到窄屏时由 PanelGridGeometry 做安全夹取，不回写用户偏好。
     /// 新用户默认宽度是独立点数，不以目标列数编码。680pt 比原 736pt 更轻巧，默认图标下
@@ -44,16 +70,20 @@ final class PanelModel: ObservableObject {
     static let defaultPanelWidth: CGFloat = 680
     static let defaultPanelHeight: CGFloat = 450
 
-    @Published var preferredPanelWidth: CGFloat = {
+    var preferredPanelWidth: CGFloat = {
         let saved = UserDefaults.standard.double(forKey: "niche.panelWidth")
         let value = saved > 0 ? CGFloat(saved) : PanelModel.defaultPanelWidth
         return min(max(value, PanelModel.panelWidthRange.lowerBound), PanelModel.panelWidthRange.upperBound)
-    }()
-    @Published var preferredPanelHeight: CGFloat = {
+    }() {
+        didSet { notifyChange() }
+    }
+    var preferredPanelHeight: CGFloat = {
         let saved = UserDefaults.standard.double(forKey: "niche.panelHeight")
         let value = saved > 0 ? CGFloat(saved) : PanelModel.defaultPanelHeight
         return min(max(value, PanelModel.panelHeightRange.lowerBound), PanelModel.panelHeightRange.upperBound)
-    }()
+    }() {
+        didSet { notifyChange() }
+    }
     static let panelWidthRange: ClosedRange<CGFloat> = 480...1200
     static let panelHeightRange: ClosedRange<CGFloat> = 300...760
 
@@ -63,15 +93,18 @@ final class PanelModel: ObservableObject {
     }
 
     /// 图标视图文件名行数。1–3 行是用户可理解的密度偏好；截断检测与真实 lineLimit 共用此值。
-    @Published var filenameLineLimit: Int = {
+    var filenameLineLimit: Int = {
         let saved = UserDefaults.standard.integer(forKey: "niche.filenameLineLimit")
         return (1...3).contains(saved) ? saved : 3
     }() {
-        didSet { UserDefaults.standard.set(filenameLineLimit, forKey: "niche.filenameLineLimit") }
+        didSet {
+            UserDefaults.standard.set(filenameLineLimit, forKey: "niche.filenameLineLimit")
+            notifyChange()
+        }
     }
 
     /// 鼠标离开面板走廊后的收起等待。Pin 模式不走此路径，故不提供“永不收起”重复语义。
-    @Published var autoHideDelay: Double = {
+    var autoHideDelay: Double = {
         let saved = UserDefaults.standard.object(forKey: "niche.autoHideDelay") as? Double
         guard let saved else { return 0.35 }
         return PanelModel.autoHideDelayOptions.min {
@@ -102,11 +135,13 @@ final class PanelModel: ObservableObject {
     /// 默认 52：保持瞬态面板的内容密度。列宽/列数由 PanelGridGeometry 以「文件名最小可读宽度
     /// + 图标尺寸」共同派生，放大图标会自然减列，不再反向压缩名称。
     /// **不在 didSet 持久化** —— 拖动会逐中间值狂写 UserDefaults;
-    /// 改由 Slider 松手(onEditingChanged)调 persistIconSize 写一次。拖动中 @Published 实时驱动缩放。
-    @Published var iconSize: CGFloat = {
+    /// 改由 Slider 松手(onEditingChanged)调 persistIconSize 写一次。拖动中由 Observation 实时驱动缩放。
+    var iconSize: CGFloat = {
         let saved = UserDefaults.standard.double(forKey: "niche.iconSize")
         return saved > 0 ? CGFloat(saved) : 52
-    }()
+    }() {
+        didSet { notifyChange() }
+    }
     static let iconSizeRange: ClosedRange<CGFloat> = 40...128
 
     /// 持久化当前图标大小(Slider 拖动松手时调)。
@@ -114,21 +149,38 @@ final class PanelModel: ObservableObject {
         UserDefaults.standard.set(Double(iconSize), forKey: "niche.iconSize")
     }
     /// 视图模式(列表/图标),持久化。列表=原生 Table(像访达);图标=网格。
-    @Published var viewMode: FileViewMode = FileViewMode.load() {
-        didSet { viewMode.save() }
+    var viewMode: FileViewMode = FileViewMode.load() {
+        didSet {
+            viewMode.save()
+            notifyChange()
+        }
     }
     /// 正在就地重命名的条目(spec §4.5 就地编辑 UI;§4.6 .renaming 抑制隐藏)。
-    @Published var renamingItemID: FileItem.ID?
+    var renamingItemID: FileItem.ID? {
+        didSet {
+            let active = renamingItemID != nil
+            if active != (oldValue != nil) { onRenamingItemChange?(active) }
+            notifyChange()
+        }
+    }
     /// 正在就地重命名「标签」的 tab(改 displayName 书签别名,不碰磁盘;与文件重命名同走 .renaming 抑制)。
-    @Published var renamingTabID: FolderBinding.ID?
+    var renamingTabID: FolderBinding.ID? {
+        didSet {
+            let active = renamingTabID != nil
+            if active != (oldValue != nil) { onRenamingTabChange?(active) }
+            notifyChange()
+        }
+    }
     /// 正在按需下载(dataless 双击打开)的条目:cell 显 spinner,不把未下载 URL 直接丢系统(#13)。
-    @Published private(set) var downloadingIDs: Set<FileItem.ID> = []
+    private(set) var downloadingIDs: Set<FileItem.ID> = []
 
     func beginDownload(_ id: FileItem.ID) { downloadingIDs.insert(id) }
     func endDownload(_ id: FileItem.ID) { downloadingIDs.remove(id) }
 
     /// 批量文件操作进度(复制/移动/压缩)。nil = 无操作;底栏据此显示进度行与取消按钮。
-    @Published private(set) var operationProgress: FileOperationProgress?
+    private(set) var operationProgress: FileOperationProgress? {
+        didSet { notifyChange() }
+    }
 
     func setOperationProgress(_ progress: FileOperationProgress?) {
         operationProgress = progress
@@ -136,8 +188,8 @@ final class PanelModel: ObservableObject {
 
     /// 拖入悬停的目录条目(目录格子/行是独立落点,悬停高亮提示"会落进这个文件夹")。
     /// 两模式共用单一真相;列表模式一行四列各是独立 drop region,同 id 计数避免列间切换闪烁。
-    @Published private(set) var dropTargetID: FileItem.ID?
-    private var dropTargetCount = 0
+    private(set) var dropTargetID: FileItem.ID?
+    @ObservationIgnored private var dropTargetCount = 0
 
     /// 拖入悬停进/出某目录条目。同一条目可被多个 region 报告(列表的名称/大小/种类/日期列),
     /// 进出顺序不保证配对有序,计数归零才清除高亮。
@@ -160,7 +212,12 @@ final class PanelModel: ObservableObject {
     // MARK: - 路径输入(前往,spec:specs/2026-06-10-niche-path-input-design.md)
 
     /// 路径输入条是否展开(⌘⇧G / 键入 `/`、`~` 弹出;Esc/前往成功收起)。
-    @Published private(set) var pathInputVisible = false
+    private(set) var pathInputVisible = false {
+        didSet {
+            onPathInputVisibilityChange?(pathInputVisible)
+            notifyChange()
+        }
+    }
     /// 弹出时带入的首字符:`/` 是纯唤起快捷键、保持空;`~` 是 Home 路径起手式、予以保留。
     private(set) var pathInputInitial = ""
     /// 聚焦代次:条已开但焦点回到列表后再次 ⌘⇧G/键入 `/` → 自增让输入框重新夺焦
@@ -178,9 +235,6 @@ final class PanelModel: ObservableObject {
         pathInputInitial = ""
     }
 
-    /// 只订阅当前 tab 的 mirror,避免后台 tab 的 FSEvents 触发无效面板刷新。
-    private var currentMirrorCancellable: AnyCancellable?
-
     var currentMirror: DirectoryMirror? {
         mirrors.indices.contains(currentTab) ? mirrors[currentTab] : nil
     }
@@ -191,7 +245,7 @@ final class PanelModel: ObservableObject {
     /// 排序结果缓存:sortedItems 是高频派生属性(一次按键/重渲染内 body、光标、键盘权威
     /// 会各取数次),localizedStandard 比较昂贵,大目录下每次全排序可感卡顿(性能审计)。
     /// 键 =(mirror 身份, 内容代次, 排序规则),任一变化才重排。
-    private var sortedCache: (mirror: ObjectIdentifier, version: Int, order: FileSortOrder, value: [FileItem])?
+    @ObservationIgnored private var sortedCache: (mirror: ObjectIdentifier, version: Int, order: FileSortOrder, value: [FileItem])?
 
     /// 当前 tab 经排序的可见条目。
     var sortedItems: [FileItem] {
@@ -248,7 +302,7 @@ final class PanelModel: ObservableObject {
             currentTab = min(currentTab, max(0, mirrors.count - 1))
         }
         updateMirrorActivity()
-        subscribeToCurrent()
+        bindMirrorCallbacks()
         // 改名中的 tab 若已被删(Settings 删除等)→ 收口:其 rename field 随 tab 消失,
         // onEndEditing/endRenameTab 不再触发,.renaming 抑制源会残留(面板永不自动收的老坑,Codex review)。
         if let id = renamingTabID,
@@ -278,7 +332,7 @@ final class PanelModel: ObservableObject {
         }
         clearSelection()
         updateMirrorActivity()
-        subscribeToCurrent()
+        bindMirrorCallbacks()
         armCurrent()
     }
 
@@ -289,7 +343,7 @@ final class PanelModel: ObservableObject {
         currentTab = min(currentTab, max(0, mirrors.count - 1))
         clearSelection()
         updateMirrorActivity()
-        subscribeToCurrent()
+        bindMirrorCallbacks()
         if !mirrors.isEmpty { armCurrent() }   // 关闭临时 tab 是用户动作,回落 tab 需要内容
     }
 
@@ -299,7 +353,7 @@ final class PanelModel: ObservableObject {
         currentTab = index
         clearSelection()
         updateMirrorActivity()
-        subscribeToCurrent()
+        bindMirrorCallbacks()
         armCurrent()
     }
 
@@ -311,10 +365,12 @@ final class PanelModel: ObservableObject {
         }
     }
 
-    /// 仅把当前 tab mirror 的变化转发给自身(刷新网格)。
-    private func subscribeToCurrent() {
-        currentMirrorCancellable = currentMirror?.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+    /// 只让当前 mirror 把内容/状态变化汇入宿主副作用(QL/relayout/rename sweep);
+    /// 视图侧由 Observation 直接追踪 mirror 的属性,不再需要手工转发。
+    private func bindMirrorCallbacks() {
+        for mirror in mirrors {
+            mirror.onChange = mirror === currentMirror ? { [weak self] in self?.notifyChange() } : nil
+        }
     }
 
     /// arm 当前 tab 的 mirror(只在用户动作路径上调用,不在后台/启动偷偷 arm 受保护目录)。

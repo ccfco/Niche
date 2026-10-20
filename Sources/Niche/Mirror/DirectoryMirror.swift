@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import Observation
 
 /// 一个绑定文件夹的镜像数据源(spec §4.1):指向磁盘真实状态,实时同步,容忍外部改/删/移。
 ///
@@ -10,8 +10,8 @@ import Combine
 /// - RootChanged → 重解析 bookmark + 重建流
 /// - 卷卸载 → volumeUnmounted 空态,重挂载自动重连
 /// - iCloud dataless 状态(NSMetadataQuery,§4.1.2)
-@MainActor
-final class DirectoryMirror: ObservableObject {
+@MainActor @Observable
+final class DirectoryMirror {
     enum State: Equatable {
         case idle               // 未 arm(tab 尚未打开 —— 不偷偷列受保护目录)
         case loading
@@ -24,17 +24,23 @@ final class DirectoryMirror: ObservableObject {
                                 // 不伪装成 TCC 被拒(引导授权无意义),暴露真实错误 + 留重试入口
     }
 
-    @Published private(set) var state: State = .idle
-    @Published private(set) var items: [FileItem] = [] {
+    private(set) var state: State = .idle {
+        didSet { if state != oldValue { onChange?() } }
+    }
+    private(set) var items: [FileItem] = [] {
         didSet {
             Self.contentGeneration &+= 1
             itemsVersion = Self.contentGeneration
+            onChange?()
         }
     }
     /// 内容代次(PanelModel.sortedItems 的缓存键):数组逐元素比较太贵,代次即内容身份。
     /// 全局单调计数,避免"实例释放后新 mirror 复用同地址 + 代次同为初值"的脏缓存。
     private static var contentGeneration = 0
     private(set) var itemsVersion = 0
+    /// 内容/状态变化的旁路回调(非视图消费)。Observation 没有 `objectWillChange` 这种 catch-all,
+    /// 需要驱动 QL 刷新/面板 relayout/重命名清扫的宿主显式挂在这里;视图侧靠属性级追踪。
+    @ObservationIgnored var onChange: (() -> Void)?
 
     let binding: FolderBinding
     /// 临时 tab(路径输入「前往」根外目录):不入 BindingStore、不持久化,单槽替换;
@@ -42,7 +48,7 @@ final class DirectoryMirror: ObservableObject {
     let isTemporary: Bool
     /// 下钻位置持久化的存储后端(默认 .standard;测试注入独立 suite,不污染真实偏好)。
     /// 对齐 BindingStore 的 init(defaults:) 范式 —— 二者须用同一后端,clearLastPath 才能清到对的键。
-    private let defaults: UserDefaults
+    @ObservationIgnored private let defaults: UserDefaults
     /// 绑定根目录(bookmark 解析所得,不随下钻变化)。
     private(set) var rootURL: URL
     /// 当前展示的目录(spec §4.7 ⌘↓ 进子目录 / ⌘↑ 回上级;下钻不越过 rootURL)。
@@ -74,7 +80,7 @@ final class DirectoryMirror: ObservableObject {
         return result
     }
 
-    var showHidden: Bool {
+    @ObservationIgnored var showHidden: Bool {
         didSet {
             guard showHidden != oldValue else { return }
             switch state {
@@ -98,18 +104,18 @@ final class DirectoryMirror: ObservableObject {
         }
     }
 
-    nonisolated(unsafe) private var stream: FSEventStreamWrapper?
-    private let icloud = ICloudStatus()
-    private var snapshot = DirectorySnapshot(items: [])
-    private var datalessOverride: [URL: Bool] = [:]
-    private var armed = false
+    @ObservationIgnored nonisolated(unsafe) private var stream: FSEventStreamWrapper?
+    @ObservationIgnored private let icloud = ICloudStatus()
+    @ObservationIgnored private var snapshot = DirectorySnapshot(items: [])
+    @ObservationIgnored private var datalessOverride: [URL: Bool] = [:]
+    @ObservationIgnored private var armed = false
     /// 是否是「当前展示的 tab」。非活跃 mirror 保留 FSEvents 流用于置脏,但不做快照扫描;
     /// 切回时若 `needsRescan` 再补扫。后台 tab 的扫描结果没有消费者,持续全量重扫只会白烧 CPU。
-    private(set) var isActive = true
+    @ObservationIgnored private(set) var isActive = true
     /// 非活跃期间收到过变化(或 showHidden 变了):切回时据此补扫。
-    private var needsRescan = false
+    @ObservationIgnored private var needsRescan = false
     /// FSEvents 流是否成功建立(失败 → 无实时同步,需手动 refresh)。
-    private(set) var isWatching = false
+    @ObservationIgnored private(set) var isWatching = false
 
     init(binding: FolderBinding, showHidden: Bool, isTemporary: Bool = false,
          defaults: UserDefaults = .standard) {
@@ -213,7 +219,7 @@ final class DirectoryMirror: ObservableObject {
     /// (实测踩过)。主线程只做:置 loading、建流(先建流再快照,§4.1.1)、发布状态/快照。
     /// 过期保护沿用 scanGeneration 代次:每步回主线程都校验,旧任务的任何回写作废。
     /// 在途 arm 的"探针失败即打开隐私设置"意图(见 showHidden `.loading` 分支的续传)。
-    private var inFlightOpenSettingsIfDenied = false
+    @ObservationIgnored private var inFlightOpenSettingsIfDenied = false
 
     private func armAttempt(openSettingsIfDenied: Bool = false) {
         inFlightOpenSettingsIfDenied = openSettingsIfDenied
@@ -368,10 +374,10 @@ final class DirectoryMirror: ObservableObject {
     /// 扫描代次:作废在途的后台扫描结果。任何一次扫描(同步或异步)都推进代次;
     /// 异步结果回主线程时代次已变(期间有过更新的扫描/下钻换了目录)即丢弃,防旧结果
     /// 覆盖新状态。@MainActor 串行,无锁。
-    private var scanGeneration = 0
+    @ObservationIgnored private var scanGeneration = 0
     /// 在途后台扫描(FSEvents 风暴合并:新事件取消未开扫的旧任务,已在扫的扫完被代次丢弃,
     /// 并发扫描数有界,不随事件频率堆积)。
-    private var scanTask: Task<Void, Never>?
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
 
     /// 任何"绕过扫描直接定状态"的路径(armAttempt 早退 / 卷卸载通知)必须先调:
     /// 否则迟到的后台扫描结果会把刚设的错误态覆盖回 ready(Codex review)。

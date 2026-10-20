@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 /// 网格视图(spec §4.4)。展示 + 选中 + 双击打开/下钻 + 拖出 + 右键 + 就地重命名 + 拖入落地。
 struct FileGridView: View {
-    @ObservedObject var model: PanelModel
-    @EnvironmentObject private var motion: MotionPreferences
+    var model: PanelModel
+    @Environment(MotionPreferences.self) private var motion
     let edge: EdgeMetrics
     var actions = PanelActions()
 

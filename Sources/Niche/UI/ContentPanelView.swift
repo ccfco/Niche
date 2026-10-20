@@ -5,8 +5,8 @@ import SwiftUI
 /// 键盘导航(spec §4.7)在此统一处理:↑↓←→ 选择 / Space Quick Look / Return 重命名(对齐 Finder) /
 /// ⌘O / ⌘↓ 打开(目录下钻) / ⌘↑ 回上级。竞品几乎纯鼠标,这是差异化优势。
 struct ContentPanelView: View {
-    @ObservedObject var model: PanelModel
-    @ObservedObject var motion: MotionPreferences
+    var model: PanelModel
+    var motion: MotionPreferences
     private let edge = EdgeMetrics.standard
 
     /// 宿主注入的动作集合(解耦 UI 与 AppKit 控制器)。
@@ -44,7 +44,7 @@ struct ContentPanelView: View {
         .frame(minWidth: 360, minHeight: 240)
         .panelBackground()
         .clipShape(RoundedRectangle(cornerRadius: edge.panelCornerRadius, style: .continuous))
-        .environmentObject(motion)
+        .environment(motion)
         // Reduce Motion:交错/展开动画降级为淡入(spec §4.3)。
         .animation(motion.reduceMotion ? .none : .smooth, value: model.currentTab)
         // 键盘导航统一由 PanelController 的 keyDown monitor 处理(面板键盘权威),

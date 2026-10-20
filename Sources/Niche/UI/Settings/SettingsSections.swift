@@ -169,7 +169,7 @@ struct TriggerSettings: View {
 
 /// 面板:尺寸直接保存为点数，与列/行数解耦；内容密度与现场底栏共用 PanelModel 单一真相源。
 struct PanelSettings: View {
-    @ObservedObject var model: PanelModel
+    @Bindable var model: PanelModel
 
     var body: some View {
         Section {

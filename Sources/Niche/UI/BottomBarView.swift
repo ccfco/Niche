@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 安静的内容工具栏：排序 / 隐藏文件在左，图标大小在右。窗口模式 Pin 已归入顶栏。
 struct BottomBarView: View {
-    @ObservedObject var model: PanelModel
+    @Bindable var model: PanelModel
     let edge: EdgeMetrics
     /// 排序按钮:弹排序菜单(由宿主以 NSMenu+抑制呈现,锚定按钮)。不用 SwiftUI Menu——
     /// 那会抢 key 焦点让瞬态面板 didResignKey 即收回(鼠标移到排序按钮上面板就消失的根因)。

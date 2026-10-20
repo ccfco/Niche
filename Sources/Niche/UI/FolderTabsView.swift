@@ -10,8 +10,8 @@ import AppKit
 /// 这是 SwiftUI `DragGesture` 解决不了的:左键事件穿透到 NSHostingView,窗口在 SwiftUI 手势之前
 /// 就发起了移动。沿用 `DragSourceView` 同款"认领左键"模式根治。hover/右键 hitTest 返回 nil 透传。
 struct FolderTabsView: View {
-    @EnvironmentObject private var motion: MotionPreferences
-    @ObservedObject var model: PanelModel
+    @Environment(MotionPreferences.self) private var motion
+    var model: PanelModel
     let edge: EdgeMetrics
     /// 「+」:弹添加菜单(选择文件夹 / 前往路径,由宿主以 NSMenu+抑制呈现,锚定按钮)。
     var onAddMenu: (_ anchor: NSView?) -> Void = { _ in }

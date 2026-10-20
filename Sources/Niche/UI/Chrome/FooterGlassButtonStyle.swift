@@ -12,7 +12,7 @@ struct NicheFooterGlassButtonStyle: ButtonStyle {
     }
 
     private struct HoverBody: View {
-        @EnvironmentObject private var motion: MotionPreferences
+        @Environment(MotionPreferences.self) private var motion
         let configuration: Configuration
         let isActive: Bool
         let compact: Bool

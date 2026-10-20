@@ -6,7 +6,7 @@ import SwiftUI
 /// 键盘仍由 `PanelController` 的 `keyDown` monitor 单一权威接管(面板键盘纪律);
 /// 本控件只接鼠标点选,不加 `.onKeyPress`/`.focusable` 抢键。
 struct NicheSegmentedGlass<Value: Hashable>: View {
-    @EnvironmentObject private var motion: MotionPreferences
+    @Environment(MotionPreferences.self) private var motion
     struct Segment: Identifiable {
         let value: Value
         let systemImage: String
