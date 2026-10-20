@@ -53,11 +53,13 @@ Niche 偏不做那个。它做的是另一件没人做的事——
 - **Finder 语义拖拽** — 拖入按 Finder 规则（同卷移动、跨卷复制，⌥强制复制、⌘强制移动），实时 copy/move 角标 + 同名冲突提示；拖出用真实 file URL。
 - **窗口状态机** — `Pin` 在瞬态面板 ↔ 常驻 always-on-top 浮窗之间切换，可拖离刘海，记忆尺寸与位置。面板高度随内容自适应。
 - **iCloud 占位文件** — dataless 文件不主动下载，预览 / 打开时按需下载并显进度；状态走 NSMetadataQuery，不靠 FSEvents 误判。
+- **系统搜索与自动化** — 固定文件夹作为 App Entity 进入 Spotlight 索引；Shortcuts / Siri 可直接「在 Niche 中打开某个固定文件夹」。
 - **无障碍降级** — 尊重「减弱动态效果」（降为淡入）与「降低透明度 / 增强对比度」（材质降级为不透明纯色 + 实色描边）。
 
 ## 技术取舍
 
 - **SwiftUI 为主 + AppKit 桥接** — 触发与面板动画由自研 `PanelController`（`NSAnimationContext` + `NSGlassEffectView`）承担；QuickLook / 自拼右键 NSMenu / 拖拽 / 键盘权威这些 SwiftUI 力有不逮处下沉到 AppKit。
+- **Observation + Swift 6 严格并发** — `PanelModel` / `DirectoryMirror` / `MotionPreferences` 用 `@Observable` 做属性级失效；应用目标开启 `SWIFT_STRICT_CONCURRENCY=complete` 与 Approachable Concurrency。
 - **menu bar accessory**（`LSUIElement`），不进 Dock。
 - **不沙盒** — 换取显示隐藏文件 + 任意路径访问；受保护目录（Desktop / Documents / Downloads / iCloud）走 TCC 授权，**权限按需触发**，绝不在启动时主动弹窗。
 - **不用 security-scoped bookmark** — 那是沙盒专属机制；不沙盒、有完整磁盘访问，无需它。
@@ -72,9 +74,12 @@ xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' build
 
 # 运行单测
 xcodebuild -scheme Niche -destination 'platform=macOS,arch=arm64' test
+
+# 提交门禁(生成工程 + 全量测试,pre-commit 也跑这个)
+make check
 ```
 
-`Niche.xcodeproj` 由 `project.yml` 经 XcodeGen 生成，**不进版本库**；改工程配置 / 加依赖改 `project.yml`，新增或删源文件后重跑 `xcodegen generate`。
+`Niche.xcodeproj` 由 `project.yml` 经 XcodeGen 生成，**不进版本库**；改工程配置 / 加依赖改 `project.yml`，新增或删源文件后重跑 `xcodegen generate`。CI 在 `macos-26` 上执行同一套 `make check`。
 
 ## 要求
 
