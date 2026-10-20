@@ -211,6 +211,16 @@
         }
       }
     },
+    "从容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relaxed"
+          }
+        }
+      }
+    },
     "从屏幕顶部(刘海所在位置)滑出——把鼠标移到那里就能唤出 Niche。": {
       "localizations": {
         "en": {
@@ -631,6 +641,16 @@
         }
       }
     },
+    "大": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Large"
+          }
+        }
+      }
+    },
     "大小": {
       "localizations": {
         "en": {
@@ -657,6 +677,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Install Update"
+          }
+        }
+      }
+    },
+    "宽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wide"
+          }
+        }
+      }
+    },
+    "小": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Small"
           }
         }
       }
@@ -771,6 +811,16 @@
         }
       }
     },
+    "悬停确认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hover Confirmation"
+          }
+        }
+      }
+    },
     "打开": {
       "localizations": {
         "en": {
@@ -847,6 +897,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Finder"
+          }
+        }
+      }
+    },
+    "把鼠标移到屏幕顶部(刘海所在位置)就能唤出 Niche——这个热区目前是关闭的,可以点下面「去设置」打开;当前也能用快捷键「%@」呼出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move the pointer to the top of the screen (where the notch is) to reveal Niche — this hot zone is currently off. You can turn it on with “Go to Settings” below; for now you can also use the shortcut “%@”."
           }
         }
       }
@@ -1171,6 +1231,16 @@
         }
       }
     },
+    "最稳 5 秒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steadiest at 5s"
+          }
+        }
+      }
+    },
     "未下载": {
       "localizations": {
         "en": {
@@ -1197,6 +1267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "View Release"
+          }
+        }
+      }
+    },
+    "标准": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
           }
         }
       }
@@ -1331,6 +1411,16 @@
         }
       }
     },
+    "灵敏 0.1 秒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensitive at 0.1s"
+          }
+        }
+      }
+    },
     "灵敏(0.1s)": {
       "localizations": {
         "en": {
@@ -1377,6 +1467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hot Corners"
+          }
+        }
+      }
+    },
+    "版本、自动更新、开源仓库与许可信息。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version, automatic updates, open-source repository, and license information."
           }
         }
       }
@@ -1521,12 +1621,52 @@
         }
       }
     },
+    "窄": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narrow"
+          }
+        }
+      }
+    },
+    "立即": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Immediately"
+          }
+        }
+      }
+    },
     "立即检查": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Check Now"
+          }
+        }
+      }
+    },
+    "管理从刘海滑出的绑定文件夹(增删/排序)。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage the folders mirrored from the notch (add, remove, reorder)."
+          }
+        }
+      }
+    },
+    "管理开机自启等应用级行为。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage app-level behavior such as launch at login."
           }
         }
       }
@@ -1547,6 +1687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste"
+          }
+        }
+      }
+    },
+    "紧凑": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compact"
           }
         }
       }
@@ -1627,6 +1777,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Finder failed to show Get Info"
+          }
+        }
+      }
+    },
+    "调整窗口尺寸、内容密度与自动收起手感。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust window size, content density, and auto-hide behavior."
+          }
+        }
+      }
+    },
+    "调整顶部悬停、备用热区与全局呼出快捷键。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust top hover, fallback hot zones, and the global shortcut."
           }
         }
       }
@@ -1831,6 +2001,46 @@
         }
       }
     },
+    "面板": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel"
+          }
+        }
+      }
+    },
+    "面板宽度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel Width"
+          }
+        }
+      }
+    },
+    "面板高度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel Height"
+          }
+        }
+      }
+    },
+    "顶部热区宽度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top Hot Zone Width"
+          }
+        }
+      }
+    },
     "项目": {
       "localizations": {
         "en": {
@@ -1847,6 +2057,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The system will ask for permission the first time you access protected folders like Desktop/Documents/Downloads; once allowed, mirroring stays in sync."
+          }
+        }
+      }
+    },
+    "高": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tall"
           }
         }
       }
