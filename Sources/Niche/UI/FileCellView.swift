@@ -45,6 +45,8 @@ struct FileCellView: View {
     var armToken: () -> Int = { 0 }
 
     @State private var thumbnail: NSImage?
+    /// 文件专属系统图标(后台取,替代渲染路径同步 `NSWorkspace.icon(forFile:)`)。
+    @State private var fallbackIcon: NSImage?
     /// 项目简介副行文本(后台异步算,见 ItemInfoCache)。开关关时恒为 nil。
     @State private var itemInfo: String?
     @State private var isHovered = false
@@ -70,7 +72,16 @@ struct FileCellView: View {
                 // 拖滑块改的是 frame 不是 maxPixel,缓存键不变 → 不重取缩略图,缩放丝滑(同访达拖缩放条)。
                 .task(id: "\(ThumbnailCache.iconCacheKey(for: item, maxPixel: Self.thumbnailPixel))|\(item.modificationDate.timeIntervalSince1970)") {
                     let img = await ThumbnailCache.shared.thumbnail(for: item, maxPixel: Self.thumbnailPixel)
-                    if !Task.isCancelled { thumbnail = img }
+                    if Task.isCancelled { return }
+                    thumbnail = img
+                    // 无内容缩略图(视频/PDF 生成失败、普通文档等)才补文件专属系统图标;
+                    // 仍走后台,避免 NSWorkspace 查图标落在 SwiftUI body 上。
+                    if img == nil {
+                        let fallback = await ThumbnailCache.shared.systemIcon(for: item, maxPixel: Self.thumbnailPixel)
+                        if !Task.isCancelled { fallbackIcon = fallback }
+                    } else {
+                        fallbackIcon = nil
+                    }
                 }
             nameArea
                 // 量文字标签 frame(本格坐标系)→ 慢速单击重命名命中判定。
@@ -213,7 +224,8 @@ struct FileCellView: View {
                 .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: edge.innerSpacing, style: .continuous))
         } else {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+            // 首帧先用类型图标占位(纯类型查询,不碰具体文件 I/O),后台再换成文件专属图标。
+            Image(nsImage: fallbackIcon ?? NSWorkspace.shared.icon(for: item.contentType ?? .data))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
         }

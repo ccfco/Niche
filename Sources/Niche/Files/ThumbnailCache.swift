@@ -6,8 +6,10 @@ import QuickLookThumbnailing
 /// 缩略图/图标缓存(spec §4.4:后台解码 + 缓存上限,**禁止 row 渲染路径同步解码**;
 /// 解码前先判 iCloud dataless 跳过,避免无意触发下载 §4.1.2)。
 ///
-/// 两类产出,各自独立缓存键(不共键,防静默返回错误产物):
+/// 三类产出,各自独立缓存键(不共键,防静默返回错误产物):
 /// - **图片内容缩略图**(`img:` 键,含 mtime):ImageIO 降采样,内容变即失效。
+/// - **视频/PDF 等内容缩略图**(`ql:` 键,含 mtime):`QLThumbnailGenerator .thumbnail`
+///   —— Finder 图标视图同源(视频首帧 / PDF 首页),补上 ImageIO 覆盖不到的媒体类型。
 /// - **Finder 彩色图标**(`icon:` 键,含 tags、**不含 mtime**):`QLThumbnailGenerator .icon`
 ///   —— Finder 给文件/文件夹画图标的同一渲染器,原生带**标签色**(文件夹整体染色 / 文件右下角
 ///   圆点)、自定义图标、角标。公开的 `NSWorkspace.icon(forFile:)` / `effectiveIconKey` 都
@@ -37,17 +39,40 @@ final class ThumbnailCache {
         "img:\(item.url.path)\u{1F}\(item.modificationDate.timeIntervalSince1970)\u{1F}\(Int(maxPixel))"
     }
 
+    /// QL 内容缩略图键(视频首帧 / PDF 首页):路径 + **mtime** + 尺寸;与 img/icon 前缀隔离。
+    static func quickLookCacheKey(for item: FileItem, maxPixel: CGFloat) -> String {
+        "ql:\(item.url.path)\u{1F}\(item.modificationDate.timeIntervalSince1970)\u{1F}\(Int(maxPixel))"
+    }
+
+    /// 文件专属系统图标键(自定义图标 / 标签色之外的文件本身图标)。不含 mtime:图标不随内容编辑变;
+    /// 含文件夹外观指纹,换 emoji/颜色后重取。
+    static func systemIconCacheKey(for item: FileItem, maxPixel: CGFloat) -> String {
+        "sys:\(item.url.path)\u{1F}\(item.folderIconSignature)\u{1F}\(Int(maxPixel))"
+    }
+
+    /// 哪些类型走 QL `.thumbnail`:ImageIO 不覆盖、但 Finder 图标视图会渲染内容预览的媒体类型。
+    /// 图片仍走 ImageIO(更快);文档类按需扩展(Office/Pages 的 QL 生成可能依赖第三方插件,先不引入)。
+    static func supportsQuickLookThumbnail(_ type: UTType?) -> Bool {
+        guard let type else { return false }
+        return type.conforms(to: .movie)
+            || type.conforms(to: .pdf)
+            || type.conforms(to: .audiovisualContent)
+    }
+
     /// 网格单元美术:有标签 → QL `.icon`(访达彩色:文件夹染色 / 图片带圆点 / 文档带圆点);
-    /// 无标签图片 → ImageIO 内容缩略图;其余 → nil(调用方退系统图标)。dataless 一律 nil。
+    /// 无标签图片 → ImageIO 内容缩略图;无标签视频/PDF → QL `.thumbnail`(首帧/首页);
+    /// 其余 → nil(调用方退系统图标)。dataless 一律 nil。
     func thumbnail(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
         guard !item.isDataless else { return nil }
         // 有标签或有文件夹自定义外观:整项交给 Finder 渲染器。QL `.icon` 是唯一渲染 macOS 26
         // 文件夹外观(emoji/符号/颜色)的途径(NSWorkspace.icon 对纯 xattr 外观出普通文件夹);
         // 有标签的图片也走它 → 缩略图自带圆点,与 Finder 一致。
         if !item.tags.isEmpty || !item.folderIconSignature.isEmpty { return await finderIcon(for: item, maxPixel: maxPixel) }
-        // 无标签:仅图片走 ImageIO 内容缩略图,其余退系统图标。
-        guard item.contentType?.conforms(to: .image) == true else { return nil }
-        return await imageThumbnail(for: item, maxPixel: maxPixel)
+        if item.contentType?.conforms(to: .image) == true {
+            return await imageThumbnail(for: item, maxPixel: maxPixel)
+        }
+        guard Self.supportsQuickLookThumbnail(item.contentType) else { return nil }
+        return await quickLookThumbnail(for: item, maxPixel: maxPixel)
     }
 
     /// 小图标 / 列表用:仅"有标签"返回 QL `.icon`(访达彩色图标);否则 nil(退系统类型图标,
@@ -55,6 +80,24 @@ final class ThumbnailCache {
     func taggedIcon(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
         guard !item.isDataless, !item.tags.isEmpty || !item.folderIconSignature.isEmpty else { return nil }
         return await finderIcon(for: item, maxPixel: maxPixel)
+    }
+
+    /// 文件专属系统图标(自定义图标等):后台取,避免 cell 渲染路径同步调 `NSWorkspace.icon(forFile:)`
+    /// 在网络卷/首次访问时卡住 SwiftUI body。字体/尺寸按 maxPixel 缩放。
+    func systemIcon(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
+        let cacheKey = Self.systemIconCacheKey(for: item, maxPixel: maxPixel) as NSString
+        if let cached = cache.object(forKey: cacheKey) { return cached }
+        let url = item.url
+        let points = max(1, maxPixel / 2)
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            queue.async {
+                let icon = NSWorkspace.shared.icon(forFile: url.path)
+                icon.size = NSSize(width: points, height: points)
+                continuation.resume(returning: icon)
+            }
+        }
+        if let image { cache.setObject(image, forKey: cacheKey) }
+        return image
     }
 
     // MARK: - 私有
@@ -83,6 +126,27 @@ final class ThumbnailCache {
             size: CGSize(width: points, height: points),
             scale: 2,
             representationTypes: .icon
+        )
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in
+                continuation.resume(returning: rep?.nsImage)
+            }
+        }
+        if let image { cache.setObject(image, forKey: cacheKey) }
+        return image
+    }
+
+    /// QL `.thumbnail` = Finder 图标视图的内容预览(视频首帧 / PDF 首页)。仅无标签媒体走这里;
+    /// 结果按 ql 键(含 mtime)缓存。失败返回 nil → 调用方退系统图标。
+    private func quickLookThumbnail(for item: FileItem, maxPixel: CGFloat) async -> NSImage? {
+        let cacheKey = Self.quickLookCacheKey(for: item, maxPixel: maxPixel) as NSString
+        if let cached = cache.object(forKey: cacheKey) { return cached }
+        let points = max(1, maxPixel / 2)
+        let request = QLThumbnailGenerator.Request(
+            fileAt: item.url,
+            size: CGSize(width: points, height: points),
+            scale: 2,
+            representationTypes: .thumbnail
         )
         let image: NSImage? = await withCheckedContinuation { continuation in
             QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, _ in

@@ -39,8 +39,24 @@ struct DirectorySnapshot: Equatable {
         let canonicalDir = (try? directory.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath)
             ?? directory.path
         let needsRebase = listDir != directory || canonicalDir != directory.path
-        let items = urls.map { child -> FileItem in
-            FileItem.load(url: needsRebase ? directory.appendingPathComponent(child.lastPathComponent) : child)
+        let urlsToLoad = urls
+        func load(_ index: Int) -> FileItem {
+            let child = urlsToLoad[index]
+            return FileItem.load(url: needsRebase ? directory.appendingPathComponent(child.lastPathComponent) : child)
+        }
+        // 万级目录的 FileItem.load(每项 tags 清缓存重读 + 目录 xattr)是串行热点;项与项互不依赖,
+        // 到阈值后并行读。小目录保持串行,避免 concurrentPerform 的调度开销反而变慢。
+        let items: [FileItem]
+        if urlsToLoad.count >= 64 {
+            var loaded = [FileItem?](repeating: nil, count: urlsToLoad.count)
+            loaded.withUnsafeMutableBufferPointer { buffer in
+                DispatchQueue.concurrentPerform(iterations: buffer.count) { i in
+                    buffer[i] = load(i)
+                }
+            }
+            items = loaded.compactMap { $0 }
+        } else {
+            items = (0..<urlsToLoad.count).map(load)
         }
         return DirectorySnapshot(items: items)
     }

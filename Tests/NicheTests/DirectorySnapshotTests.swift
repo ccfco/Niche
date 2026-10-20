@@ -56,6 +56,19 @@ final class DirectorySnapshotTests: XCTestCase {
         XCTAssertEqual(all.fileItems.map(\.name).sorted(), [".hidden", "visible.txt"])
     }
 
+    /// 超阈值目录走 concurrentPerform 并行 load:结果数量/名称必须与串行一致。
+    func testCaptureParallelPathLoadsAllItems() throws {
+        let dir = try TestSupport.makeTempDir()
+        defer { TestSupport.cleanup(dir) }
+        for i in 0..<100 {
+            try TestSupport.touch(dir.appendingPathComponent("f\(i).txt"))
+        }
+
+        let snap = try DirectorySnapshot.capture(directory: dir, showHidden: false)
+        XCTAssertEqual(snap.fileItems.count, 100)
+        XCTAssertEqual(Set(snap.fileItems.map(\.name)).count, 100)
+    }
+
     /// 指向目录的软链:URL 版 contentsOfDirectory 不跟随(报 256,非权限错),capture 须解析真实
     /// 目录列举、子项 URL 重建回软链路径体系 —— 否则软链文件夹进去就「列目录失败」被误判 TCC。
     func testCaptureFollowsDirectorySymlink() throws {

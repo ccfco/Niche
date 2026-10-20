@@ -1,4 +1,5 @@
 import XCTest
+import UniformTypeIdentifiers
 @testable import Niche
 
 /// 缩略图/图标缓存键的不变量。两类产出各自独立键,且各只对相关变化敏感。
@@ -62,5 +63,32 @@ final class ThumbnailCacheKeyTests: XCTestCase {
             ThumbnailCache.iconCacheKey(for: i, maxPixel: 96),
             ThumbnailCache.imageCacheKey(for: i, maxPixel: 96)
         )
+    }
+
+    // MARK: QL 内容缩略图键(视频/PDF)
+
+    func testQuickLookKeyVariesWithMtime() {
+        let early = TestSupport.item("f.mp4", date: Date(timeIntervalSince1970: 0), type: .movie)
+        let late = TestSupport.item("f.mp4", date: Date(timeIntervalSince1970: 9999), type: .movie)
+        XCTAssertNotEqual(
+            ThumbnailCache.quickLookCacheKey(for: early, maxPixel: 96),
+            ThumbnailCache.quickLookCacheKey(for: late, maxPixel: 96)
+        )
+    }
+
+    func testQuickLookKeyNeverCollidesWithOtherKinds() {
+        let i = TestSupport.item("f.mp4", date: Date(timeIntervalSince1970: 1), type: .movie)
+        let ql = ThumbnailCache.quickLookCacheKey(for: i, maxPixel: 96)
+        XCTAssertNotEqual(ql, ThumbnailCache.imageCacheKey(for: i, maxPixel: 96))
+        XCTAssertNotEqual(ql, ThumbnailCache.iconCacheKey(for: i, maxPixel: 96))
+    }
+
+    func testSupportsQuickLookThumbnailForMediaTypes() {
+        XCTAssertTrue(ThumbnailCache.supportsQuickLookThumbnail(.movie))
+        XCTAssertTrue(ThumbnailCache.supportsQuickLookThumbnail(.pdf))
+        XCTAssertTrue(ThumbnailCache.supportsQuickLookThumbnail(.audiovisualContent))
+        XCTAssertFalse(ThumbnailCache.supportsQuickLookThumbnail(.image), "图片走更快的 ImageIO")
+        XCTAssertFalse(ThumbnailCache.supportsQuickLookThumbnail(.plainText))
+        XCTAssertFalse(ThumbnailCache.supportsQuickLookThumbnail(nil))
     }
 }

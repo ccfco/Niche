@@ -244,17 +244,23 @@ struct FileListView: View {
 /// 否则即时系统类型图标。task 用整个 item:打标签不改 url/mtime,只 keyed on url 会刷不出色。
 private struct ListRowIcon: View {
     let item: FileItem
-    @State private var tagged: NSImage?
+    @State private var icon: NSImage?
 
     var body: some View {
-        Image(nsImage: tagged ?? NSWorkspace.shared.icon(forFile: item.url.path))
+        // 首帧类型图标占位(不碰具体文件),后台补彩标/文件专属图标。
+        Image(nsImage: icon ?? NSWorkspace.shared.icon(for: item.contentType ?? .data))
             .resizable().frame(width: 16, height: 16)
             .accessibilityHidden(true)   // 装饰性类型图标,种类列已承载语义
             // id 用图标键(路径+标签+dataless,不含 mtime):仅标签变才重取,内容编辑不白白重生成。
             // isCancelled 守:防旧 QL 回调晚返回盖掉新态(异步缓存竞态)。
             .task(id: ThumbnailCache.iconCacheKey(for: item, maxPixel: 32)) {
-                let img = await ThumbnailCache.shared.taggedIcon(for: item, maxPixel: 32)
-                if !Task.isCancelled { tagged = img }
+                let tagged = await ThumbnailCache.shared.taggedIcon(for: item, maxPixel: 32)
+                if Task.isCancelled { return }
+                if let tagged {
+                    icon = tagged
+                } else {
+                    icon = await ThumbnailCache.shared.systemIcon(for: item, maxPixel: 32)
+                }
             }
     }
 }
